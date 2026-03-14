@@ -10,11 +10,14 @@ This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.000
 ![All cbGRB classes across cosmic time](Plots/rate_figure2_unified.png)
 *All five Gottlieb et al. (2023) cbGRB classes across cosmic time (BNS + BHNS, Model A)*
 
+![BNS formation efficiency vs metallicity](Plots/bns_formation_efficiency.png)
+*BNS merger formation efficiency vs metallicity, split by GRB class*
+
 ![BNS mass plane colored by GRB class](Plots/bns_mass_plane.png)
 *M1 vs M2 for merging BNS systems colored by GRB class*
 
-![GRB class fraction vs redshift](Plots/bns_grb_fraction_vs_redshift.png)
-*Rate-weighted short and long cbGRB fraction as a function of redshift*
+![BNS mass distributions at redshift slices](Plots/bns_mass_dist_redshift_slices.png)
+*Rate-weighted BNS mass plane and M_tot distributions at z = 0, 0.5, 1.0, 2.0*
 
 ---
 
