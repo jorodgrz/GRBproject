@@ -1,0 +1,24 @@
+# Large data files
+*.h5
+*.hdf5
+*.fits
+
+# Python environments
+grb-env/
+venv/
+env/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
