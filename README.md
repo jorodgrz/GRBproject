@@ -1,21 +1,31 @@
 # GRB Classification from Compact Binary Mergers
 ### Using COMPAS Population Synthesis to Predict Short and Long cbGRB Rates
 
-This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.00038) GRB classification scheme to COMPAS binary population synthesis simulations. The analysis predicts the rates, mass distributions, and redshift evolution of short and long compact binary GRBs (cbGRBs) produced by BNS and BHNS mergers, including uncertainty estimates across binary physics models, NS equation of state, and BH spin.
+This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.00038) GRB classification scheme to COMPAS binary population synthesis simulations. The analysis predicts the rates, mass distributions, and redshift evolution of all compact binary GRB types produced by BNS and BHNS mergers, including uncertainty estimates across binary physics models, NS equation of state, and BH spin.
 
 ---
 
 ## Scientific Background
 
-Gravitational wave detections (GW170817, GW211211A) suggest that both short and long GRBs can be produced by compact binary mergers. Gottlieb et al. (2023) propose a unified hybrid scenario where the GRB class is determined by the merger remnant:
+Gravitational wave detections (GW170817, GW211211A) suggest that both short and long GRBs can be produced by compact binary mergers. Gottlieb et al. (2023) propose a unified hybrid scenario where the GRB class is determined by the merger remnant. Five physically distinct outcomes are identified (Figure 2 of the paper):
 
-| Outcome | GRB Class | Condition (BNS) |
+**BNS mergers:**
+
+| Type | GRB Class | Condition | Engine |
+|---|---|---|---|
+| Type I sGRB | Short cbGRB | M_tot < M_crit (~2.8 M_sun) | HMNS remnant powers jet before collapse |
+| Type II sGRB | Short cbGRB | M_tot >= M_crit, q < 1.2 | Immediate BH + light accretion disk |
+| lGRB | Long cbGRB | M_tot >= M_crit, q >= 1.2 | BH + massive disk from asymmetric merger |
+
+**BHNS mergers** (outcome depends on NS tidal disruption via Foucart 2012):
+
+| Type | GRB Class | Condition |
 |---|---|---|
-| HMNS collapse + jet | Short cbGRB | M_tot < M_crit (~2.8 M_sun) |
-| BH + light disk + jet | Short cbGRB | M_tot >= M_crit, q < 1.2 |
-| BH + massive disk + extended jet | Long cbGRB | M_tot >= M_crit, q >= 1.2 |
+| No disruption | No GRB | NS plunges into BH without disk formation |
+| sGRB | Short cbGRB | NS disrupted, small disk (M_disk < 0.1 M_sun) |
+| lGRB | Long cbGRB | NS disrupted, massive disk (M_disk >= 0.1 M_sun) |
 
-For BHNS, the class depends on whether the NS is tidally disrupted (via the Foucart 2012 fitting formula) and the resulting disk mass. A pre-disruption check (Roche lobe vs ISCO radius) is applied before evaluating the disk mass formula.
+A physical disruption pre-check (Roche lobe radius vs ISCO radius) is applied to the Foucart formula before computing disk mass.
 
 ---
 
@@ -24,53 +34,65 @@ For BHNS, the class depends on whether the NS is tidally disrupted (via the Fouc
 ### Phase 1 - Data and Validation
 
 - **Data source:** COMPAS BNS fiducial simulation from [Zenodo 5189849](https://zenodo.org/records/5189849); BHNS from [Zenodo 5178777](https://zenodo.org/records/5178777)
-- **Validation:** Formation efficiency vs metallicity for BNS (roughly flat, as expected) and BHNS
-- **Mass plane:** M_1 vs M_2 scatter plot for all merging systems
+- **Validation:** Formation efficiency vs metallicity (roughly flat for BNS, as expected)
+- **Mass plane:** M_1 vs M_2 scatter plot for all merging systems, colored by GRB class
 - **Notebooks:** `GRB_BNS.ipynb`, `GRB_BHNS.ipynb`
 
 ### Phase 2 - GRB Classification
 
-**BNS** (`GRB_BNS.ipynb`): Gottlieb et al. (2023) hybrid scenario applied to each merging system:
+**BNS** (`GRB_BNS.ipynb`): Gottlieb et al. (2023) Figure 2 applied to each merging system:
 
 ```
-M_tot < 2.8 M_sun                   -> short cbGRB  (HMNS-powered)
-M_tot >= 2.8 M_sun  and  q < 1.2   -> short cbGRB  (BH + light disk)
-M_tot >= 2.8 M_sun  and  q >= 1.2  -> long cbGRB   (BH + massive disk)
+M_tot < 2.8 M_sun                   -> Type I sGRB   (HMNS-powered)
+M_tot >= 2.8 M_sun  and  q < 1.2   -> Type II sGRB  (BH + light disk)
+M_tot >= 2.8 M_sun  and  q >= 1.2  -> lGRB           (BH + massive disk)
 ```
 
-**BHNS** (`GRB_BHNS.ipynb`): Foucart (2012) disk mass formula with physical disruption pre-check:
+**BHNS** (`GRB_BHNS.ipynb`): Foucart (2012) disk mass formula with disruption pre-check:
 
 ```
-No tidal disruption (NS plunges)    -> no GRB
-M_disk >= 0.1 M_sun (massive disk) -> long cbGRB
-M_disk < 0.1 M_sun  (light disk)   -> short cbGRB
+No tidal disruption (NS plunges)      -> no GRB
+0 < M_disk < 0.1 M_sun (small disk)  -> sGRB
+M_disk >= 0.1 M_sun    (large disk)  -> lGRB
 ```
 
-Spin is treated as a free parameter: `a = 0.0`, `0.5`, `0.7`.
+BH spin is a free parameter: `a = 0.0`, `0.5`, `0.7` (three separate classifications).
 
 ### Phase 3 - Formation Efficiency and Class Fractions
 
 For each metallicity grid point (weighted by STROOPWAFEL sampling):
 
-- Total formation efficiency vs metallicity
-- Formation efficiency split by GRB class
-- Class fraction vs metallicity
+- Total formation efficiency vs metallicity (matches demo notebook baseline)
+- Formation efficiency split by all GRB classes
+- GRB class fraction vs metallicity
 
-Sensitivity analyses included in the BNS notebook:
-- M_crit sweep from 2.6 to 3.0 M_sun
-- Mass ratio threshold sweep
+Sensitivity analyses in `GRB_BNS.ipynb`:
+- M_crit sweep from 2.6 to 3.0 M_sun (NS EOS uncertainty)
+- Mass ratio threshold sweep around q = 1.2
+- Model A vs Model K binary physics comparison (efficiency)
+
+Sensitivity analyses in `GRB_BHNS.ipynb`:
+- Spin sensitivity: long cbGRB efficiency for a = 0.0, 0.5, 0.7
+- EOS sensitivity: classification fraction vs NS radius (9 to 13 km, a = 0)
 
 ### Phase 4 - Cosmic Integration
 
 **Notebook:** `GRB_CosmicRate.ipynb`
 
-Convolves formation efficiencies and delay-time distributions with the Neijssel et al. (2019) metallicity-specific star formation rate density. A custom `compute_merger_rate` function accumulates merger rates in O(n_z) memory to avoid kernel crashes from the full 2D allocation.
+Convolves formation efficiencies and delay-time distributions with the Neijssel et al. (2019) metallicity-specific star formation rate density. A custom `compute_merger_rate` function accumulates contributions in O(n_z) memory rather than allocating a full (n_binaries x n_redshifts) array.
 
-Key outputs:
-- Merger rate density vs redshift for each GRB class (short cbGRB, long cbGRB, all mergers)
-- Separate curves for BNS and BHNS
-- Combined BNS + BHNS rate plot
-- Exported arrays: `results/rates_BNS.npy`, `results/rates_BHNS.npy`
+Rate curves computed for all five Figure 2 classes:
+- BNS: Type I sGRB, Type II sGRB, lGRB, All BNS
+- BHNS: sGRB (a=0.5), lGRB (a=0.5), All BHNS
+
+Key plots:
+- Merger rate density vs redshift for each BNS class
+- Combined two-panel BNS + BHNS comparison
+- Unified single-axis Figure 2 plot: all five cbGRB classes on one axis
+- BNS mass plane and M_tot histograms at redshift slices z = 0, 0.5, 1.0, 2.0 (rate-weighted)
+- GRB class fraction vs continuous redshift (z = 0 to 5)
+
+Exported arrays: `results/rates_BNS.npy`, `results/rates_BHNS.npy`
 
 ### Phase 5 - Uncertainties
 
@@ -80,7 +102,7 @@ Three uncertainty axes explored in `GRB_CosmicRate.ipynb`:
 |---|---|---|
 | BH spin (BHNS) | a = 0.0, 0.5, 0.7 | Long cbGRB rate vs redshift for each spin |
 | NS EOS (BNS) | M_crit = 2.6, 2.8, 3.0 M_sun | Short and long cbGRB rates vs redshift |
-| Binary physics (BNS) | Model A (fiducial) vs Model K | Rate comparison with uncertainty band |
+| Binary physics (BNS) | Model A (fiducial) vs Model K | Rate comparison with shaded uncertainty band |
 
 ---
 
@@ -90,13 +112,14 @@ Three uncertainty axes explored in `GRB_CosmicRate.ipynb`:
 GRBproject/
 ├── GRB_BNS.ipynb            # BNS classification, efficiency, and sensitivity analysis
 ├── GRB_BHNS.ipynb           # BHNS classification, spin and EOS sensitivity
-├── GRB_CosmicRate.ipynb     # Cosmic integration and uncertainty analysis (Phase 4-5)
+├── GRB_CosmicRate.ipynb     # Cosmic integration, Figure 2 rates, redshift distributions
 ├── GRB_comparsion.ipynb     # Summary comparison: BNS vs BHNS class fractions and rates
 ├── results/
-│   ├── eff_BNS.npy          # Formation efficiency arrays (BNS)
-│   ├── eff_BHNS.npy         # Formation efficiency arrays (BHNS)
-│   ├── rates_BNS.npy        # Merger rate density arrays (BNS)
-│   └── rates_BHNS.npy       # Merger rate density arrays (BHNS)
+│   ├── eff_BNS.npy          # Formation efficiency arrays (BNS, by metallicity)
+│   ├── eff_BHNS.npy         # Formation efficiency arrays (BHNS, by metallicity)
+│   ├── rates_BNS.npy        # Merger rate density vs redshift (BNS)
+│   └── rates_BHNS.npy       # Merger rate density vs redshift (BHNS)
+├── plots/                   # All figures saved automatically on notebook execution
 ├── Demos/                   # Reference notebooks from Broekgaarden et al.
 ├── Papers/                  # Gottlieb et al. 2023 and related literature
 ├── requirements.txt         # Python dependencies
@@ -119,16 +142,16 @@ python -m pip install -r requirements.txt
 python -m ipykernel install --user --name grb-env --display-name "GRB (grb-env)"
 ```
 
-Run notebooks in order: `GRB_BNS.ipynb` -> `GRB_BHNS.ipynb` -> `GRB_CosmicRate.ipynb` -> `GRB_comparsion.ipynb`. The comparison and cosmic rate notebooks depend on `.npy` files exported by the first two.
+Run notebooks in order: `GRB_BNS.ipynb` -> `GRB_BHNS.ipynb` -> `GRB_CosmicRate.ipynb` -> `GRB_comparsion.ipynb`. The cosmic rate and comparison notebooks depend on `.npy` files exported by the first two. All plots are saved to `plots/` automatically when cells are executed.
 
 ---
 
 ## Key References
 
-- Gottlieb et al. (2023) - GRB classification scheme: [arXiv:2309.00038](https://arxiv.org/abs/2309.00038)
-- Broekgaarden et al. (2021) - COMPAS BHNS population: [arXiv:2112.05763](https://arxiv.org/abs/2112.05763)
+- Gottlieb et al. (2023) - Full GRB classification scheme: [arXiv:2309.00038](https://arxiv.org/abs/2309.00038)
+- Broekgaarden et al. (2021) - COMPAS BHNS population synthesis: [arXiv:2112.05763](https://arxiv.org/abs/2112.05763)
 - Foucart (2012) - NS tidal disruption fitting formula for BHNS remnant disk mass
-- Neijssel et al. (2019) - Metallicity-specific star formation rate density model
+- Neijssel et al. (2019) - Metallicity-specific star formation rate density model used in cosmic integration
 
 ---
 
@@ -139,11 +162,14 @@ Run notebooks in order: `GRB_BNS.ipynb` -> `GRB_BHNS.ipynb` -> `GRB_CosmicRate.i
 | BNS | Binary Neutron Star |
 | BHNS | Black Hole - Neutron Star binary |
 | cbGRB | Compact Binary Gamma-Ray Burst |
+| sGRB | Short GRB (duration < 2 s) |
+| lGRB | Long GRB (duration > 2 s) |
 | HMNS | Hypermassive Neutron Star |
 | DCO | Double Compact Object |
 | ZAMS | Zero Age Main Sequence |
 | SFRD | Star Formation Rate Density |
 | LVK | LIGO-Virgo-KAGRA collaboration |
-| M_crit | Critical total mass threshold for HMNS collapse |
+| M_crit | Critical total mass threshold for HMNS collapse (~2.8 M_sun) |
 | q | Mass ratio = max(M1, M2) / min(M1, M2) |
 | ISCO | Innermost Stable Circular Orbit |
+| M_disk | Remnant accretion disk mass (Foucart 2012 formula) |
