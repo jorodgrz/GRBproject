@@ -5,6 +5,19 @@ This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.000
 
 ---
 
+## Results
+
+![All cbGRB classes across cosmic time](Plots/rate_figure2_unified.png)
+*All five Gottlieb et al. (2023) cbGRB classes across cosmic time (BNS + BHNS, Model A)*
+
+![BNS mass plane colored by GRB class](Plots/bns_mass_plane.png)
+*M1 vs M2 for merging BNS systems colored by GRB class*
+
+![GRB class fraction vs redshift](Plots/bns_grb_fraction_vs_redshift.png)
+*Rate-weighted short and long cbGRB fraction as a function of redshift*
+
+---
+
 ## Scientific Background
 
 Gravitational wave detections (GW170817, GW211211A) suggest that both short and long GRBs can be produced by compact binary mergers. Gottlieb et al. (2023) propose a unified hybrid scenario where the GRB class is determined by the merger remnant. Five physically distinct outcomes are identified (Figure 2 of the paper):
@@ -173,3 +186,9 @@ Run notebooks in order: `GRB_BNS.ipynb` -> `GRB_BHNS.ipynb` -> `GRB_CosmicRate.i
 | q | Mass ratio = max(M1, M2) / min(M1, M2) |
 | ISCO | Innermost Stable Circular Orbit |
 | M_disk | Remnant accretion disk mass (Foucart 2012 formula) |
+
+---
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
