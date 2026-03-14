@@ -7,17 +7,30 @@ This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.000
 
 ## Results
 
-![All cbGRB classes across cosmic time](Plots/rate_figure2_unified.png)
-*All five Gottlieb et al. (2023) cbGRB classes across cosmic time (BNS + BHNS, Model A)*
+### GRB Class Fractions: BNS vs BHNS
 
-![BNS formation efficiency vs metallicity](Plots/bns_formation_efficiency.png)
-*BNS merger formation efficiency vs metallicity, split by GRB class*
+![GRB class fractions BNS vs BHNS](Plots/comparison_grb_fractions.png)
+*~92% of BHNS mergers produce no GRB (NS plunges without tidal disruption), while BNS mergers are predominantly GRB-capable. The dominant result of the analysis.*
 
-![BNS mass plane colored by GRB class](Plots/bns_mass_plane.png)
-*M1 vs M2 for merging BNS systems colored by GRB class*
+### BHNS GRB Classification by BH Spin
 
-![BNS mass distributions at redshift slices](Plots/bns_mass_dist_redshift_slices.png)
-*Rate-weighted BNS mass plane and M_tot distributions at z = 0, 0.5, 1.0, 2.0*
+![BHNS mass plane by spin](Plots/bhns_mass_plane_spin.png)
+*M_BH vs M_NS colored by GRB class for a = 0.0, 0.5, 0.7. Higher spin dramatically expands the tidally-disrupted region, shifting systems from GRB-dark to long cbGRB.*
+
+### BNS vs BHNS Formation Efficiency vs Metallicity
+
+![BNS vs BHNS formation efficiency](Plots/comparison_efficiency.png)
+*BHNS mergers dominate total formation efficiency but contribute minimally to GRBs. BNS mergers, despite lower total rates, drive the cbGRB signal.*
+
+### Progenitor Stars of Each GRB Class
+
+![Progenitor ZAMS mass plane](Plots/bns_progenitor_zams_plane.png)
+*ZAMS primary vs secondary mass for each GRB class. Long cbGRB progenitors are highly asymmetric (scattered at high mass ratios); short cbGRB progenitors cluster tightly on the equal-mass diagonal.*
+
+### Sensitivity to Mass Ratio Classification Boundary
+
+![q threshold sensitivity](Plots/bns_q_threshold_sensitivity.png)
+*GRB class fractions as a function of the q = 1.2 threshold. Results are robust across a wide range of threshold values, confirming the classification is not sensitive to the exact boundary.*
 
 ---
 
