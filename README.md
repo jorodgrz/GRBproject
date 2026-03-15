@@ -19,15 +19,15 @@ About 92% of BHNS mergers are GRB-dark: the neutron star plunges directly into t
 
 ![BHNS mass plane by spin](Plots/bhns_mass_plane_spin.png)
 
-BH mass vs NS mass colored by GRB class at three spin values (a = 0.0, 0.5, 0.7). Higher spin dramatically expands the tidally-disrupted region, converting GRB-dark systems into long cbGRB producers. NS EOS sensitivity is negligible compared to spin.
+BH mass vs NS mass colored by GRB class at spin values a = 0.0, 0.5, 0.7. Higher spin dramatically expands the tidally-disrupted region, converting GRB-dark systems into long cbGRB producers. The NS remnant mass gap from the rapid supernova engine is visible as a horizontal gap across all panels.
 
 ---
 
-### 3. BNS vs BHNS Formation Efficiency vs Metallicity
+### 3. EOS Sensitivity: Short/Long Fraction vs M_crit
 
-![Formation efficiency comparison](Plots/comparison_efficiency.png)
+![BNS M_crit sensitivity](Plots/bns_mcrit_sensitivity.png)
 
-BHNS mergers dominate total formation efficiency across all metallicities but contribute minimally to the GRB signal. BNS mergers, despite lower absolute merger rates, drive the cbGRB output. The gap between the two total lines and the GRB sub-population lines quantifies how GRB-dark BHNS systems are.
+GRB class fractions as a function of the prompt-collapse threshold M_crit, mapped to NS radius R_1.4 on the upper axis. As the EOS stiffens (higher M_crit), more mergers produce HMNS remnants (Short cbGRB Type I) rather than prompt collapse. Vertical lines mark four published EOS models; the green dashed line is the GW170817-consistent fiducial at 2.8 M_sun.
 
 ---
 
@@ -39,11 +39,19 @@ ZAMS primary vs secondary mass for each BNS GRB class. Long cbGRB progenitors or
 
 ---
 
-### 5. Sensitivity to Mass Ratio Classification Boundary
+### 5. All Five cbGRB Classes: Rate Density vs Redshift
 
-![q threshold sensitivity](Plots/bns_q_threshold_sensitivity.png)
+![Unified rate figure](Plots/rate_figure2_unified.png)
 
-GRB class fractions as the q = 1.2 classification threshold is varied continuously. Both short and long cbGRB fractions are stable over a wide range, confirming the results are not sensitive to the exact value of the boundary chosen.
+Merger rate density vs redshift for all five Figure 2 classes from Gottlieb et al. (2023), computed via cosmic integration with the Neijssel et al. (2019) metallicity-specific SFRD. BHNS long cbGRBs dominate at low redshift; BNS channels take over at z > 1-2. The BHNS short cbGRB channel is suppressed at a = 0.5 because all disrupting systems form massive disks.
+
+---
+
+### 6. BNS Mass Plane and M_tot Distribution at Redshift Slices
+
+![Mass distribution at redshift slices](Plots/bns_mass_dist_redshift_slices.png)
+
+Rate-weighted M1 vs M2 scatter (top) and M_tot histograms (bottom) at z = 0, 0.5, 1.0, 2.0. Only the top 40% rate contributors are shown in the scatter panels. The M_tot distribution shifts toward lower masses at higher redshift as lower-metallicity, lower-mass progenitors begin to dominate the merger rate.
 
 ---
 
