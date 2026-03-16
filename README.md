@@ -31,27 +31,27 @@ GRB class fractions as a function of the prompt-collapse threshold M_crit, mappe
 
 ---
 
-### 4. Progenitor Stars of Each GRB Class (ZAMS Masses)
+### 4. BNS + BHNS Gottlieb Classification Plane at Redshift Slices
 
-![ZAMS progenitor plane](Plots/bns_progenitor_zams_plane.png)
+![Gottlieb classification plane](Plots/bns_bhns_gottlieb_plane_redshift_slices.png)
 
-ZAMS primary vs secondary mass for each BNS GRB class. Long cbGRB progenitors originate from highly asymmetric binaries scattered at high mass ratios. Short cbGRB progenitors cluster tightly on the equal-mass diagonal, reflecting the different tidal history required for massive disk formation.
-
----
-
-### 5. All Five cbGRB Classes: Rate Density vs Redshift
-
-![Unified rate figure](Plots/rate_figure2_unified.png)
-
-Merger rate density vs redshift for all five Figure 2 classes from Gottlieb et al. (2023), computed via cosmic integration with the Neijssel et al. (2019) metallicity-specific SFRD. BHNS long cbGRBs dominate at low redshift; BNS channels take over at z > 1-2. The BHNS short cbGRB channel is suppressed at a = 0.5 because all disrupting systems form massive disks.
+Rate-weighted q vs M_tot scatter at z = 0, 0.5, 1.0, 2.0 for both BNS (circles) and BHNS (triangles). The top row shows the full BNS + BHNS view on log-log axes; the bottom row zooms into the BNS region on linear axes where the Short Type I / Type II / Long cbGRB boundary lines are visible. As redshift increases, metallicity selection shifts the BNS population toward lower total masses, reducing the long cbGRB fraction at high z.
 
 ---
 
-### 6. BNS Mass Plane and M_tot Distribution at Redshift Slices
+### 5. cbGRB Channel Fraction vs Redshift
 
-![Mass distribution at redshift slices](Plots/bns_mass_dist_redshift_slices.png)
+![GRB channel fraction vs redshift](Plots/grb_channel_fraction_vs_redshift.png)
 
-Rate-weighted M1 vs M2 scatter (top) and M_tot histograms (bottom) at z = 0, 0.5, 1.0, 2.0. Only the top 40% rate contributors are shown in the scatter panels. The M_tot distribution shifts toward lower masses at higher redshift as lower-metallicity, lower-mass progenitors begin to dominate the merger rate.
+Stacked area chart showing what fraction of the total cbGRB rate comes from BNS Short, BNS Long, and BHNS Long channels as a function of redshift (z = 0–8). BNS Short cbGRBs dominate at all epochs (~55–65%). BNS Long cbGRBs grow toward z ~ 5–6 as shorter-delay-time massive BNS pairs contribute more at higher star formation rates. The shaded band on the BHNS Long region shows the spin uncertainty range (a = 0.0 to a = 0.7), which is the dominant systematic in the BHNS channel.
+
+---
+
+### 6. Metallicity vs Delay Time by GRB Class
+
+![Metallicity vs delay time](Plots/metallicity_vs_delaytime.png)
+
+Scatter plot of progenitor birth metallicity vs total delay time (t_form + t_c) for all five GRB / merger classes across both BNS and BHNS populations. BNS systems (circles) and BHNS systems (triangles) are shown with weighted downsampling. Dashed horizontal lines with diamond markers indicate the weighted median delay time per class. The broad overlap of all classes confirms that metallicity and delay time alone do not discriminate GRB type — the Gottlieb classification is driven by merger mass and mass ratio rather than progenitor birth environment.
 
 ---
 
@@ -85,8 +85,8 @@ Run notebooks in order: `GRB_BNS.ipynb` -> `GRB_BHNS.ipynb` -> `GRB_CosmicRate.i
 |---|---|
 | `GRB_BNS.ipynb` | BNS classification, efficiency, M_crit and q sensitivity, Model A vs K |
 | `GRB_BHNS.ipynb` | BHNS classification, spin sensitivity, EOS sensitivity |
-| `GRB_CosmicRate.ipynb` | Cosmic integration, rate vs redshift for all five classes, uncertainty bands |
-| `GRB_comparsion.ipynb` | Summary: BNS vs BHNS class fractions and formation efficiency |
+| `GRB_CosmicRate.ipynb` | Cosmic integration, rate vs redshift, cbGRB channel fractions, Gottlieb classification plane at redshift slices |
+| `GRB_comparsion.ipynb` | BNS vs BHNS class fractions, formation efficiency, metallicity vs delay time scatter |
 
 **Data sources:**
 - BNS: [Zenodo 5189849](https://zenodo.org/records/5189849)
