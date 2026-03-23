@@ -1,0 +1,755 @@
+
+--- Page 1 ---
+Remnant baryon mass outside of the black hole after a neutron star-black hole merger
+Francois Foucart, 1 Tanja Hinderer,2 and Samaya Nissanke 3, 4, 2
+1Department of Physics, University of New Hampshire, 9 Library Way, Durham NH 03824, USA
+2Department of Astrophysics/IMAPP , Radboud University Nijmegen, P .O. Box 9010, 6500 GL Nijmegen, The Netherlands
+3GRAPPA, Anton Pannekoek Institute for Astronomy and Institute of High-Energy Physics,
+University of Amsterdam, Science Park 904, 1098 XH Amsterdam, The Netherlands
+4Nikhef, Science Park 105, 1098 XG Amsterdam, The Netherlands
+Gravitational-wave (GW) and electromagnetic (EM) signals from the merger of a Neutron Star (NS) and a
+Black Hole (BH) are a highly anticipated discovery in extreme gravity, nuclear-, and astrophysics. We develop
+a simple formula that distinguishes between merger outcomes and predicts the post-merger remnant mass, vali-
+dated with 75 simulations. Our formula improves on existing results by describing critical unexplored regimes:
+comparable masses and higher BH spins. These are important to differentiate NSNS from NSBH mergers, and
+to infer source physics from EM signals.
+PACS numbers: 04.25.dg, 04.40.Dg, 26.30.Hj, 98.70.-f
+Introduction In this new era of gravitational wave (GW) as-
+tronomy, the observation of the merger of a neutron star (NS)
+and black hole (BH) binary in GWs and/or electromagnetic
+(EM) emission remains amongst the most anticipated discov-
+eries yet to happen [1]. NSBH mergers simultaneously in-
+volve strong-ﬁeld gravity, supradense nuclear matter, com-
+plex microphysics, and powerful EM phenomena due to the
+delayed matter outﬂows at different timescales and frequen-
+cies. Understanding the detailed merger processes and multi-
+messenger signatures involved has been a longstanding chal-
+lenge at the forefront of nuclear physics and astrophysics.
+In addition, the recent wealth of GW and EM measurements
+of GW170817 ([2–4] and references therein) indicated that
+the event was a binary neutron star (NSNS) merger. However,
+observations only allowed us to conclude deﬁnitively that: i)
+at least one NS was involved in the merger from ultraviolet-
+optical-infrared observations (e.g., [5–16]), and ii) the other
+object in the progenitor binary had a comparable mass from
+GW measurements [2, 17]. This highlights the urgent need
+to model both GW and EM observables of NSBH mergers,
+in particular in the equal-mass regime, and to identify their
+distinguishing features.
+Progress on modelling the rich non-linear physics of NSBH
+mergers can only be obtained through numerical simulations
+within a general-relativistic framework. Simulations show
+that the NS is either torn apart by the BH’s tidal forces or
+plunges into the BH, depending on the mass ratio, spins, and
+the NS Equation-of-State (EoS). If the NS is disrupted, most
+of the matter is accreted onto the BH within a few millisec-
+onds. Part of the remaining material can form a disk that
+equilibrates after∼ 10ms, and bound matter in the tidal tail,
+illustrated in Fig. 1, takes ≳ 0.1s to fall back. The merger can
+also eject unbound tail material. Nuclear reactions in the de-
+bris disk and ejecta, neutrino winds, and relativistic outﬂows
+are examples of processes that power EM transients such as
+kilonovae (e.g., [18–22]) and short gamma-ray bursts (e.g.,
+[23, 24]). The central engine powering the latter remains a
+mystery.
+The baryon mass outside the BH at ∼ 10 ms after merger,
+which we refer to as the remnant mass Mrem, is therefore an
+important quantitative diagnostic, as shown in Foucart 2012
+FIG. 1. Baryon density 1.5 ms after a nonspinning NSBH merger
+with mass ratioQ = 1.2, in the equatorial plane. The white contour
+encloses the small amount of unbound materialMej ∼ 5×10−4M⊙.
+The remnant mass for such a system is signiﬁcantly overestimated by
+the previous prediction of FF12 [25] but well-described by the new
+model developed here.
+(hereafter FF12) [25]. Critically, Mrem impacts the observ-
+ables of the plethora of possible EM counterparts, and their
+detectability by current EM facilities. For instance, Mrem,
+as introduced by FF12, is currently used when triggering EM
+follow-up searches by alerts sent by the LIGO and Virgo de-
+tectors (see the method outlined in [26]). Another application
+is GW measurements: tidal disruption (i.e. Mrem̸= 0) leads
+to a distinct shutoff in the signal [27] that depends on the long-
+sought after EoS of NS matter.
+Previous work on modelling NSBH mergers has focused
+arXiv:1807.00011v1  [astro-ph.HE]  29 Jun 2018
+
+--- Page 2 ---
+2
+on mass ratios Q = MBH/MNS ≳ 3, with MBH and MNS
+the gravitational masses of the compact objects in isolation
+(see [28–32] and references therein). This range corresponds
+to astrophysical formation scenarios through supernova explo-
+sions in a progenitor binary that predict a gap between NS and
+BH masses [33, 34]. Comparable-mass binaries with a sin-
+gle NS could involve a primordial BH [35], a BH born in a
+prior NSNS merger that formed a binary through dynamical
+interactions in a dense cluster or galactic core (see the review
+in [36]), or an exotic BH-like object (see [36, 37] for possible
+BH mimickers).
+In this paper we develop a simple, ready-to-use expres-
+sion that predicts the range of masses, NS radii, and BH
+spins leading to tidal disruption, as well as Mrem for NSBH
+mergers. Our results cover previously unmodelled regions of
+the parameter space including comparable masses and high
+BH spins. The former are critical to distinguish NSBH from
+NSNS mergers. The latter are of particular interest for as-
+trophysics and for constraining fundamental axion-like parti-
+cles [38]. We develop our model by deriving the dependence
+on the binary parameters from physical considerations about
+the tidal disruption process and calibrating a few added nu-
+merical coefﬁcients to results from numerical-relativity (NR)
+simulations. The NR data include two novel simulations
+of comparable-mass binaries ( Q = 1, 1.2), to be described
+in [39], a case with high BH spin [40], and systems with a
+composition- and temperature-dependent EoS for the NS mat-
+ter [31, 32].
+The extreme regions in parameter space covered here are
+essential: we show that the model of FF12, while continuing
+to work well within its expected range of validity, leads to a
+substantially inaccurate estimate for tidal disruption and the
+amount of remnant mass for binary parameters outside of that
+range. Speciﬁcally, the remnant mass is shown to be signiﬁ-
+cantly lower for nearly equal-mass NSBH mergers and higher
+for large BH spins than previously predicted by FF12. We also
+discuss two important applications of our results as examples
+of their utility: (i) verifying the reliability of disk mass pre-
+dictions by comparing different NR codes, which is a pressing
+open problem that has not yet been addressed for NSBH merg-
+ers, and (ii) deriving the range of binary parameters that lead
+to tidal disruption, which determines if the binary is likely to
+have a shutoff GW signature and an EM counterpart.
+Numerical simulations We consider results from 75 NR
+simulations performed with three different evolution codes
+compiled from [29, 31, 32, 40–45] (see also supplementary
+material Table I and II). Each simulation is parameterized
+by three dimensionless quantities: the mass ratio Q ≥ 1,
+the dimensionless BH spin χBH = c|S|/(GM2
+BH), where
+S is the spin angular momentum, and the NS’s compaction
+CNS =GMNS/(RNSc2), whereRNS is the NS’s areal radius
+that depends on the EoS. Effects of precession, NS spin, or-
+bital eccentricity, and magnetic ﬁelds are not considered here.
+The simulations range over Q∈ [1, 7], χBH∈ [−0.5, 0.97],
+andCNS∈ [0.13, 0.182] and include 44 systems not used in
+FF12, with 11 cases having aQ orMrem outside the range of
+validity of FF12, and 12 systems with tabulated composition-
+and temperature-dependent EoS. We focus on the normalized
+remnant mass
+ˆMrem =Mrem/Mb
+NS, (1)
+whereMb
+NS is the baryonic mass of the initial NS. Since most
+of the simulation results do not have error bars, we estimate
+the errors σNR in ˆMrem based on a few simulations where
+well-determined errors were computed (see FF12 for details).
+The resulting error estimate combines a10% relative error and
+a 1% absolute error in the mass measurements:
+σNR =
+
+
+( ˆMrem,NR
+10
+)2
++
+( 1
+100
+)2
+
+
+1/2
+. (2)
+Model for the remnant baryon mass We begin construct-
+ing our model for ˆMrem with physical insights about tidal
+disruption. For Q → ∞, the NS is tidally disrupted if it
+overﬂows its Roche lobe at a binary separation greater than
+the radius of the innermost stable circular orbit (ISCO) of
+the BH, where its motion transitions from an inspiral to a
+rapid plunge. In Newtonian gravity, the disruption separa-
+tion is ddis = (3Q)1/3RNS. The normalized ISCO radius
+ˆRISCO =RISCO/MBH is, forQ→∞ ,
+ˆRISCO = 3+Z2−sgn(χBH)
+√
+(3−Z1)(3 +Z1 + 2Z2),
+(3)
+withZ1 = 1 + (1−χ2
+BH)1/3[(1 +χBH)1/3 + (1−χBH)1/3]
+and Z2 =
+√
+3χ2
+BH +Z2
+1 [46]. The ratio of RISCO to the
+NS radius can be expressed asRISCO/RNS = ˆRISCOQC NS.
+However, we note that Q is not an ideal parameter to use
+when extrapolating results obtained in the high- Q regime to
+the Q∼ 1 regime. This is because the Q→ ∞limit ob-
+scures a symmetry of many observables in the general rela-
+tivistic two-body problem: invariance under exchanging the
+bodies’ labels. In post-Newtonian expansions this property
+becomes explicit: many quantities depend on the symmetric
+mass ratio η = Q/(1 +Q)2, which is equivalent to Q−1 for
+Q→∞ . When restoring this symmetry by replacing Q by
+η−1, results derived in the large-Q limit can often be surpris-
+ingly accurate when compared to NR data for Q ∼ 1 (see
+e.g. [47, 48]). Hence, we replace Q−1 byη in our considera-
+tions of tidal disruption and propose the model
+ˆMrem
+model =
+[
+Max
+(
+α1− 2CNS
+η1/3 −β ˆRISCO
+CNS
+η +γ, 0
+)]δ
+(4)
+with free parameters(α,β,γ,δ ). The ﬁrst term is proportional
+to ddis/RNS, multiplied by (1− 2CNS) to account for the
+fact that a BH (having an effective CBH = 1/2 when non-
+spinning) cannot be tidally disrupted. The second term scales
+as RISCO/RNS as Q → ∞. The parameters (γ,δ ) repre-
+sent nonlinear effects not accounted for by the simple phys-
+ical considerations. A zero ˆMrem
+model corresponds to no tidal
+disruption.
+To determine the free parameters in (4), we ﬁrst deﬁne a
+normalized error∆norm as the difference between ˆMrem com-
+
+--- Page 3 ---
+3
+FIG. 2. Differences between NR results and the model (4) weighted
+by the estimated NR error as a function of the mass ratio, NS com-
+paction, and BH spin. Magenta (cyan) color corresponds to an over-
+(under-) estimate of ˆMrem.
+FIG. 3. Normalized errors in the remnant mass predictions ver-
+sus NR results. Blue crosses indicate results for FF12 used within
+its range of validity, red squares for FF12 extrapolated outside that
+range, and grey circles for all cases, using our new model (4).
+puted from a model and the NR result, relative to the NR error:
+∆norm =
+ˆMrem
+model− ˆMrem
+NR
+σNR
+. (5)
+Minimizing the root-mean-square of ∆norm leads to
+α = 0.406, β = 0.139, γ = 0.255, δ = 1.761. (6)
+The root-mean-square error in the model is ∆norm∼ 1.4, and
+Figure 2 illustrates that it performs well across the 3D binary
+parameter space covered by simulations.
+Our model will critically help differentiate NSNS from low-
+mass NSBH mergers, requiring our prediction remains robust
+FIG. 4. Remnant baryon masses for all simulations used in this work,
+split by evolution code: SACRA (red squares), SpEC (black circles),
+and the UIUC code (blue crosses). Different codes measure remnant
+baryon masses to within the model’s accuracy.
+forQ∼ 1 binaries. Figure 3 shows that this is not the case for
+the model of FF12, which was derived for a narrower range
+of parameters (Q≥ 3, ˆMrem≤ 0.2). FF12 continues to work
+well within that range, but substantially overestimates Mrem
+for Q∼ 1. Experimenting with our model we ﬁnd that the
+vast improvement over FF12 forQ∼ 1 comes from the sub-
+stitution of η for Q−1 in (4), which was not done in FF12.
+As a result, for Q∼ 1, the ISCO-term trends to larger val-
+ues here than in FF12 and we predict that more material falls
+into the BH. A larger ISCO for small Q than computed for
+Q→∞ is expected on physical grounds: (i) the NS’s plunge,
+although not well-deﬁned in this limit, would begin at an ef-
+fective ISCO of the two-body spacetime, and (ii) the NS mat-
+ter accreted at merger causes the BH to grow, which moves
+the ISCO for the remaining material outwards [49]. The lat-
+ter leads to a larger fractional change in the ISCO location for
+smallerQ. We verify that our result is not overly dependent
+on the 2 simulations with Q < 2 by re-ﬁtting (4) but ignor-
+ing simulations with Q < 2. We ﬁnd that this modiﬁed ﬁt
+is as consistent with the low-Q NR simulations as (4,6), ob-
+tained using all NR results. Conversely, re-ﬁtting FF12 using
+all simulations still provides poor predictions forQ∼ 1.
+Cases with large remnant masses or, equivalently, large BH
+spins are another interesting regime for multimessenger obser-
+vations and fundamental physics that are not well-modelled
+by FF12. For capturing the merger outcomes in this limit, it
+is necessary to introduce the nonlinearity parameter δ, which
+was not included in FF12.
+We also verify that different NR codes predict broadly con-
+sistent Mrem. Figure 4 summarizes our ﬁndings: over the
+
+--- Page 4 ---
+4
+range of binary parameters for which data from multiple col-
+laborations is available, there is no systematic bias associated
+with the NR code used. While this comparison is not as direct
+as one based on identical initial data, it advantageously uses a
+large number of numerical results rather than comparing iso-
+lated examples, and increases our conﬁdence in the reliability
+of NR simulations to within the accuracy of our model.
+We further study an alternative model that depends on the
+properties of NS matter through the dimensionless quadrupo-
+lar tidal deformability of the NS, Λ = (2/3)k2C −5
+NS (withk2
+the tidal Love number), which is the best-measured EoS pa-
+rameter of a slowly-spinning NS from GW data [2, 17, 50].
+Deﬁningρ = (15Λ)−1/5, so thatρ≈CNS, we use
+ˆMrem
+Λ =
+[
+Max
+(
+α1− 2ρ
+η−1/3 −β ˆRISCO
+ρ
+η +γ, 0
+)]δ
+, (7)
+with the best-ﬁt parameters α = 0.308, β = 0.124, γ =
+0.283, and δ = 1.536. This prediction performs as well as
+the compaction-based model (4) forMrem≤ 0.2M⊙, but has
+larger errors for simulations using single-polytrope equations
+of state and producing more massive remnants. We ﬁnd that
+using approximately universal relations for C(Λ) [51, 52]
+in (4) performs similarly to (7). Larger errors for single poly-
+tropes are then expected, as the properties of NSs for single-
+polytrope EoSs are not well-described by universal relations.
+While (4) is a priori preferable, the Λ-based model captures
+well the limit between disrupting and non-disrupting systems,
+is advantageous for rapid GW analysis, and may only be less
+accurate for unphysical EoSs.
+Discussion A key application of the new model for the rem-
+nant mass outside the BH, (4) and (6), is to derive limits on
+the range of binary parameters leading to the disruption of a
+NS, as shown in Fig. 5. For the previously unexploredQ∼ 1
+systems, the disk masses are signiﬁcantly lower than predicted
+by FF12, and some compact neutron stars can entirely avoid
+disruption. Accordingly, FF12 should not be used to assess
+whether an observed NSNS merger could instead be a NSBH
+merger. We discuss the implications of our results for the
+pressing question of whether GW170817 could have been a
+NSBH system in a companion paper. For largeQ, our updated
+model is mildly more favorable to disruption than FF12.
+This paper provides a simple formula for computationally
+inexpensive yet reliable estimates of Mrem for NSBH merg-
+ers across a wide range of parameters, including interesting
+regimes not previously considered. The average relative er-
+ror in the remnant mass prediction is∼ 15% for binaries with
+Q∈ [1, 7], χBH∈ [−0.5, 0.9], and Mrem ≲ 0.3Mb
+NS. Our
+work can guide the future choice of progenitor parameters for
+NR simulations, and detailed models of EM counterparts and
+GW emission, a requisite for identifying and characterizing
+NSBH mergers.
+Acknowledgments We thank Kenta Hotokezaka, Koutarou
+Kyutoku, Kyohei Kawaguchi, Shaon Ghosh, David Nichols,
+Patricia Schmidt, Andrew Williamson, and the members of
+the SxS collaboration for useful discussions and comments.
+FF gratefully acknowledges support from NASA through
+grant 80NSSC18K0565. TH is grateful for ﬁnancial sup-
+port through the Radboud University Excellence fellowship
+scheme. SMN is grateful for support from NWO VIDI and
+TOP Grants of the Innovational Research Incentives Scheme
+(Vernieuwingsimpuls) ﬁnanced by the Netherlands Organiza-
+tion for Scientiﬁc Research (NWO).
+[1] Abadie J, Abbott B P, Abbott R, Abernathy M, Accadia T, Ac-
+ernese F, Adams C, Adhikari R, Ajith P, Allen B and et al
+2010 Classical and Quantum Gravity 27 173001 ( Preprint
+1003.2480)
+[2] Abbott B P et al. (Virgo, LIGO Scientiﬁc) 2017Phys. Rev. Lett.
+119 161101 (Preprint 1710.05832)
+[3] Abbott B P et al. (GROND, SALT Group, OzGrav, DFN,
+INTEGRAL, Virgo, Insight-Hxmt, MAXI Team, Fermi-
+LAT, J-GEM, RATIR, IceCube, CAASTRO, LW A, ePESSTO,
+GRAWITA, RIMAS, SKA South Africa/MeerKAT, H.E.S.S.,
+1M2H Team, IKI-GW Follow-up, Fermi GBM, Pi of Sky,
+DWF (Deeper Wider Faster Program), Dark Energy Survey,
+MASTER, AstroSat Cadmium Zinc Telluride Imager Team,
+Swift, Pierre Auger, ASKAP, VINROUGE, JAGW AR, Chandra
+Team at McGill University, TTU-NRAO, GROWTH, AGILE
+Team, MW A, ATCA, AST3, TOROS, Pan-STARRS, NuSTAR,
+ATLAS Telescopes, BOOTES, CaltechNRAO, LIGO Scien-
+tiﬁc, High Time Resolution Universe Survey, Nordic Optical
+Telescope, Las Cumbres Observatory Group, TZAC Consor-
+tium, LOFAR, IPN, DLT40, Texas Tech University, HAWC,
+ANTARES, KU, Dark Energy Camera GW-EM, CALET, Euro
+VLBI Team, ALMA) 2017 Astrophys. J. 848 L12 ( Preprint
+1710.05833)
+[4] Abbott B P, Abbott R, Abbott T D, Acernese F, Ackley K,
+Adams C, Adams T, Addesso P, Adhikari R X, Adya V B and
+et al 2017 ”Astrophys. J. Lett. ”848 L13 (Preprint 1710.05834)
+[5] Kasliwal M M, Nakar E, Singer L P, Kaplan D L, Cook D O,
+Van Sistine A, Lau R M, Fremling C, Gottlieb O, Jencson J E,
+Adams S M, Feindt U, Hotokezaka K, Ghosh S, Perley D A, Yu
+P C, Piran T, Allison J R, Anupama G C, Balasubramanian A,
+Bannister K W, Bally J, Barnes J, Barway S, Bellm E, Bhalerao
+V , Bhattacharya D, Blagorodnova N, Bloom J S, Brady P R,
+Cannella C, Chatterjee D, Cenko S B, Cobb B E, Copperwheat
+C, Corsi A, De K, Dobie D, Emery S W K, Evans P A, Fox
+O D, Frail D A, Frohmaier C, Goobar A, Hallinan G, Harrison
+F, Helou G, Hinderer T, Ho A Y Q, Horesh A, Ip W H, Itoh R,
+Kasen D, Kim H, Kuin N P M, Kupfer T, Lynch C, Madsen K,
+Mazzali P A, Miller A A, Mooley K, Murphy T, Ngeow C C,
+Nichols D, Nissanke S, Nugent P, Ofek E O, Qi H, Quimby
+R M, Rosswog S, Rusu F, Sadler E M, Schmidt P, Sollerman J,
+Steele I, Williamson A R, Xu Y , Yan L, Yatsu Y , Zhang C and
+Zhao W 2017 Science 358 1559–1565 (Preprint 1710.05436)
+[6] Chornock R, Berger E, Kasen D, Cowperthwaite P S, Nicholl
+M, Villar V A, Alexander K D, Blanchard P K, Eftekhari T,
+Fong W, Margutti R, Williams P K G, Annis J, Brout D, Brown
+D A, Chen H Y , Drout M R, Farr B, Foley R J, Frieman J A,
+Fryer C L, Herner K, Holz D E, Kessler R, Matheson T, Metzger
+B D, Quataert E, Rest A, Sako M, Scolnic D M, Smith N and
+
+--- Page 5 ---
+5
+FIG. 5. Minimum aligned component of the BH spin required for a 1.35M⊙ NS to disrupt, as a function of NS radius and BH mass. We show
+results for the ﬁt from FF12 (left), and the updated formula presented here (right). Solid black curves are contours of constant χBH,min =
+0, 0.5, 0.7, 0.9, while dashed black curves are forχBH,min = 0.25, 0.6, 0.8. The updated results are less favorable to disruption for near-equal
+mass systems, and more favorable for large mass ratios.
+Soares-Santos M 2017 ”Astrophys. J. Lett. ” 848 L19 (Preprint
+1710.05454)
+[7] Cowperthwaite P S, Berger E, Villar V A, Metzger B D, Nicholl
+M, Chornock R, Blanchard P K, Fong W, Margutti R, Soares-
+Santos M, Alexander K D, Allam S, Annis J, Brout D, Brown
+D A, Butler R E, Chen H Y , Diehl H T, Doctor Z, Drout M R,
+Eftekhari T, Farr B, Finley D A, Foley R J, Frieman J A, Fryer
+C L, Garc´ıa-Bellido J, Gill M S S, Guillochon J, Herner K, Holz
+D E, Kasen D, Kessler R, Marriner J, Matheson T, Neilsen Jr
+E H, Quataert E, Palmese A, Rest A, Sako M, Scolnic D M,
+Smith N, Tucker D L, Williams P K G, Balbinot E, Carlin J L,
+Cook E R, Durret F, Li T S, Lopes P A A, Lourenc ¸o A C C,
+Marshall J L, Medina G E, Muir J, Mu ˜noz R R, Sauseda M,
+Schlegel D J, Secco L F, Vivas A K, Wester W, Zenteno A,
+Zhang Y , Abbott T M C, Banerji M, Bechtol K, Benoit-L ´evy
+A, Bertin E, Buckley-Geer E, Burke D L, Capozzi D, Carnero
+Rosell A, Carrasco Kind M, Castander F J, Crocce M, Cunha
+C E, D’Andrea C B, da Costa L N, Davis C, DePoy D L, Desai
+S, Dietrich J P, Drlica-Wagner A, Eiﬂer T F, Evrard A E, Fer-
+nandez E, Flaugher B, Fosalba P, Gaztanaga E, Gerdes D W, Gi-
+annantonio T, Goldstein D A, Gruen D, Gruendl R A, Gutierrez
+G, Honscheid K, Jain B, James D J, Jeltema T, Johnson M W G,
+Johnson M D, Kent S, Krause E, Kron R, Kuehn K, Nuropatkin
+N, Lahav O, Lima M, Lin H, Maia M A G, March M, Martini
+P, McMahon R G, Menanteau F, Miller C J, Miquel R, Mohr
+J J, Neilsen E, Nichol R C, Ogando R L C, Plazas A A, Roe
+N, Romer A K, Roodman A, Rykoff E S, Sanchez E, Scarpine
+V , Schindler R, Schubnell M, Sevilla-Noarbe I, Smith M, Smith
+R C, Sobreira F, Suchyta E, Swanson M E C, Tarle G, Thomas
+D, Thomas R C, Troxel M A, Vikram V , Walker A R, Wechsler
+R H, Weller J, Yanny B and Zuntz J 2017”Astrophys. J. Lett. ”
+848 L17 (Preprint 1710.05840)
+[8] Kasen D, Metzger B, Barnes J, Quataert E and Ramirez-Ruiz E
+2017 ”Nature” 551 80–84 (Preprint 1710.05463)
+[9] Kilpatrick C D, Foley R J, Kasen D, Murguia-Berthier A,
+Ramirez-Ruiz E, Coulter D A, Drout M R, Piro A L, Shappee
+B J, Boutsia K, Contreras C, Di Mille F, Madore B F, Morrell
+N, Pan Y C, Prochaska J X, Rest A, Rojas-Bravo C, Siebert
+M R, Simon J D and Ulloa N 2017 ”Science” 358 1583–1587
+(Preprint 1710.05434)
+[10] McCully C, Hiramatsu D, Howell D A, Hosseinzadeh G, Ar-
+cavi I, Kasen D, Barnes J, Shara M M, Williams T B, V¨ais¨anen
+P, Potter S B, Romero-Colmenero E, Crawford S M, Buckley
+D A H, Cooke J, Andreoni I, Pritchard T A, Mao J, Gromadzki
+M and Burke J 2017 ”Astrophys. J. Lett. ” 848 L32 (Preprint
+1710.05853)
+[11] Nicholl M, Berger E, Kasen D, Metzger B D, Elias J, Brice ˜no
+C, Alexander K D, Blanchard P K, Chornock R, Cowperthwaite
+P S, Eftekhari T, Fong W, Margutti R, Villar V A, Williams
+P K G, Brown W, Annis J, Bahramian A, Brout D, Brown
+D A, Chen H Y , Clemens J C, Dennihy E, Dunlap B, Holz
+D E, Marchesini E, Massaro F, Moskowitz N, Pelisoli I, Rest
+A, Ricci F, Sako M, Soares-Santos M and Strader J 2017 ”As-
+trophys. J. Lett. ” 848 L18 (Preprint 1710.05456)
+[12] Pian E, D’Avanzo P, Benetti S, Branchesi M, Brocato E, Cam-
+pana S, Cappellaro E, Covino S, D’Elia V , Fynbo J P U, Get-
+man F, Ghirlanda G, Ghisellini G, Grado A, Greco G, Hjorth
+J, Kouveliotou C, Levan A, Limatola L, Malesani D, Mazzali
+P A, Melandri A, Møller P, Nicastro L, Palazzi E, Piranomonte
+S, Rossi A, Salaﬁa O S, Selsing J, Stratta G, Tanaka M, Tanvir
+N R, Tomasella L, Watson D, Yang S, Amati L, Antonelli L A,
+Ascenzi S, Bernardini M G, Bo ¨er M, Bufano F, Bulgarelli A,
+Capaccioli M, Casella P, Castro-Tirado A J, Chassande-Mottin
+E, Ciolﬁ R, Copperwheat C M, Dadina M, De Cesare G, di
+Paola A, Fan Y Z, Gendre B, Giuffrida G, Giunta A, Hunt L K,
+Israel G L, Jin Z P, Kasliwal M M, Klose S, Lisi M, Longo F,
+
+--- Page 6 ---
+6
+Maiorano E, Mapelli M, Masetti N, Nava L, Patricelli B, Per-
+ley D, Pescalli A, Piran T, Possenti A, Pulone L, Razzano M,
+Salvaterra R, Schipani P, Spera M, Stamerra A, Stella L, Tagli-
+aferri G, Testa V , Troja E, Turatto M, Vergani S D and Vergani
+D 2017 ”Nature” 551 67–70 (Preprint 1710.05858)
+[13] Smartt S J, Chen T W, Jerkstrand A, Coughlin M, Kankare E,
+Sim S A, Fraser M, Inserra C, Maguire K, Chambers K C, Hu-
+ber M E, Kr¨uhler T, Leloudas G, Magee M, Shingles L J, Smith
+K W, Young D R, Tonry J, Kotak R, Gal-Yam A, Lyman J D,
+Homan D S, Agliozzo C, Anderson J P, Angus C R, Ashall C,
+Barbarino C, Bauer F E, Berton M, Botticella M T, Bulla M,
+Bulger J, Cannizzaro G, Cano Z, Cartier R, Cikota A, Clark P,
+De Cia A, Della Valle M, Denneau L, Dennefeld M, Dessart
+L, Dimitriadis G, Elias-Rosa N, Firth R E, Flewelling H, Fl ¨ors
+A, Franckowiak A, Frohmaier C, Galbany L, Gonz ´alez-Gait´an
+S, Greiner J, Gromadzki M, Guelbenzu A N, Guti ´errez C P,
+Hamanowicz A, Hanlon L, Harmanen J, Heintz K E, Heinze A,
+Hernandez M S, Hodgkin S T, Hook I M, Izzo L, James P A,
+Jonker P G, Kerzendorf W E, Klose S, Kostrzewa-Rutkowska
+Z, Kowalski M, Kromer M, Kuncarayakti H, Lawrence A, Lowe
+T B, Magnier E A, Manulis I, Martin-Carrillo A, Mattila S,
+McBrien O, M ¨uller A, Nordin J, O’Neill D, Onori F, Palme-
+rio J T, Pastorello A, Patat F, Pignata G, Podsiadlowski P, Pumo
+M L, Prentice S J, Rau A, Razza A, Rest A, Reynolds T, Roy R,
+Ruiter A J, Rybicki K A, Salmon L, Schady P, Schultz A S B,
+Schweyer T, Seitenzahl I R, Smith M, Sollerman J, Stalder B,
+Stubbs C W, Sullivan M, Szegedi H, Taddia F, Taubenberger
+S, Terreran G, van Soelen B, V os J, Wainscoat R J, Walton
+N A, Waters C, Weiland H, Willman M, Wiseman P, Wright
+D E, Wyrzykowski Ł and Yaron O 2017 ”Nature” 551 75–79
+(Preprint 1710.05841)
+[14] Soares-Santos M, Holz D E, Annis J, Chornock R, Herner K,
+Berger E, Brout D, Chen H Y , Kessler R, Sako M, Allam S,
+Tucker D L, Butler R E, Palmese A, Doctor Z, Diehl H T, Frie-
+man J, Yanny B, Lin H, Scolnic D, Cowperthwaite P, Neilsen
+E, Marriner J, Kuropatkin N, Hartley W G, Paz-Chinch ´on F,
+Alexander K D, Balbinot E, Blanchard P, Brown D A, Carlin
+J L, Conselice C, Cook E R, Drlica-Wagner A, Drout M R,
+Durret F, Eftekhari T, Farr B, Finley D A, Foley R J, Fong
+W, Fryer C L, Garc ´ıa-Bellido J, Gill M S S, Gruendl R A,
+Hanna C, Kasen D, Li T S, Lopes P A A, Lourenc ¸o A C C,
+Margutti R, Marshall J L, Matheson T, Medina G E, Metzger
+B D, Mu ˜noz R R, Muir J, Nicholl M, Quataert E, Rest A,
+Sauseda M, Schlegel D J, Secco L F, Sobreira F, Stebbins A,
+Villar V A, Vivas K, Walker A R, Wester W, Williams P K G,
+Zenteno A, Zhang Y , Abbott T M C, Abdalla F B, Banerji M,
+Bechtol K, Benoit-L ´evy A, Bertin E, Brooks D, Buckley-Geer
+E, Burke D L, Carnero Rosell A, Carrasco Kind M, Carretero J,
+Castander F J, Crocce M, Cunha C E, D’Andrea C B, da Costa
+L N, Davis C, Desai S, Dietrich J P, Doel P, Eiﬂer T F, Fer-
+nandez E, Flaugher B, Fosalba P, Gaztanaga E, Gerdes D W,
+Giannantonio T, Goldstein D A, Gruen D, Gschwend J, Gutier-
+rez G, Honscheid K, Jain B, James D J, Jeltema T, Johnson
+M W G, Johnson M D, Kent S, Krause E, Kron R, Kuehn
+K, Kuhlmann S, Lahav O, Lima M, Maia M A G, March M,
+McMahon R G, Menanteau F, Miquel R, Mohr J J, Nichol R C,
+Nord B, Ogando R L C, Petravick D, Plazas A A, Romer A K,
+Roodman A, Rykoff E S, Sanchez E, Scarpine V , Schubnell M,
+Sevilla-Noarbe I, Smith M, Smith R C, Suchyta E, Swanson
+M E C, Tarle G, Thomas D, Thomas R C, Troxel M A, Vikram
+V , Wechsler R H, Weller J, Dark Energy Survey and Dark En-
+ergy Camera GW-EM Collaboration 2017”Astrophys. J. Lett. ”
+848 L16 (Preprint 1710.05459)
+[15] Tanvir N R, Levan A J, Gonz ´alez-Fern´andez C, Korobkin O,
+Mandel I, Rosswog S, Hjorth J, D’Avanzo P, Fruchter A S,
+Fryer C L, Kangas T, Milvang-Jensen B, Rosetti S, Steeghs D,
+Wollaeger R T, Cano Z, Copperwheat C M, Covino S, D’Elia
+V , de Ugarte Postigo A, Evans P A, Even W P, Fairhurst S,
+Figuera Jaimes R, Fontes C J, Fujii Y I, Fynbo J P U, Gompertz
+B P, Greiner J, Hodosan G, Irwin M J, Jakobsson P, Jørgensen
+U G, Kann D A, Lyman J D, Malesani D, McMahon R G, Me-
+landri A, O’Brien P T, Osborne J P, Palazzi E, Perley D A, Pian
+E, Piranomonte S, Rabus M, Rol E, Rowlinson A, Schulze S,
+Sutton P, Th¨one C C, Ulaczyk K, Watson D, Wiersema K and
+Wijers R A M J 2017 ”Astrophys. J. Lett. ” 848 L27 (Preprint
+1710.05455)
+[16] Evans P A, Cenko S B, Kennea J A, Emery S W K, Kuin N P M,
+Korobkin O, Wollaeger R T, Fryer C L, Madsen K K, Harri-
+son F A, Xu Y , Nakar E, Hotokezaka K, Lien A, Campana S,
+Oates S R, Troja E, Breeveld A A, Marshall F E, Barthelmy
+S D, Beardmore A P, Burrows D N, Cusumano G, DA`ı A, DA-
+vanzo P, D Elia V , de Pasquale M, Even W P, Fontes C J, Forster
+K, Garcia J, Giommi P, Grefenstette B, Gronwall C, Hartmann
+D H, Heida M, Hungerford A L, Kasliwal M M, Krimm H A,
+Levan A J, Malesani D, Melandri A, Miyasaka H, Nousek J A,
+OBrien P T, Osborne J P, Pagani C, Page K L, Palmer D M, Perri
+M, Pike S, Racusin J L, Rosswog S, Siegel M H, Sakamoto T,
+Sbarufatti B, Tagliaferri G, Tanvir N R and Tohuvavohu A 2017
+”Science” 358 1565–1570 (Preprint 1710.05437)
+[17] The LIGO Scientiﬁc Collaboration, the Virgo Collaboration,
+Abbott B P, Abbott R, Abbott T D, Acernese F, Ackley K,
+Adams C, Adams T, Addesso P and et al 2018 ArXiv e-prints
+(Preprint 1805.11579)
+[18] Li L X and Paczy ´nski B 1998 ”Astrophys. J. Lett. ” 507 L59–
+L62 (Preprint astro-ph/9807272)
+[19] Lattimer J M and Schramm D N 1976 ”Astrophys. J. ”210 549–
+567
+[20] Kulkarni S R 2005 ArXiv Astrophysics e-prints (Preprint astro-
+ph/0510256)
+[21] Metzger B D, Mart ´ınez-Pinedo G, Darbha S, Quataert E, Ar-
+cones A, Kasen D, Thomas R, Nugent P, Panov I V and Zinner
+N T 2010 ”Monthly Notices Royal Astron. Society” 406 2650–
+2662 (Preprint 1001.5029)
+[22] Rosswog S, Thielemann F K, Davies M B, Benz W and Piran
+T 1998 103 (Preprint astro-ph/9804332)
+[23] Paczynski B 1986 ”Astrophys. J. Lett. ” 308 L43–L46
+[24] Eichler D, Livio M, Piran T and Schramm D N 1989 ”Nature”
+340 126–128
+[25] Foucart F 2012 Phys. Rev. D 86 124007 (Preprint 1207.6304)
+[26] Pannarale F and Ohme F 2014 Astrophys. J. 791 L7 (Preprint
+1406.6057)
+[27] Shibata M and Taniguchi K 2008 Phys. Rev. D 77(8)
+084015 URL https://link.aps.org/doi/10.1103/
+PhysRevD.77.084015
+[28] Etienne Z B, Liu Y T and Shapiro S L 2010 Phys. Rev.
+D 82 084031 ISSN 1550-7998 ( Preprint 1007.2848) URL
+http://link.aps.org/doi/10.1103/PhysRevD.
+82.084031
+[29] Kyutoku K, Ioka K, Okawa H, Shibata M and Taniguchi K 2015
+Phys.Rev.D 92 044028 (Preprint 1502.05402)
+[30] Kawaguchi K, Kyutoku K, Nakano H, Okawa H, Shibata M
+and Taniguchi K 2015 Phys. Rev. D 92 024014 ( Preprint
+1506.05473)
+[31] Foucart F, Deaton M B, Duez M D, O’Connor E, Ott C D, Haas
+R, Kidder L E, Pfeiffer H P, Scheel M A and Szil ´agyi B 2014
+Phys. Rev. D 90 024026 (Preprint 1405.1121)
+[32] Brege W, Duez M D, Foucart F, Deaton M B, Caro J, Hem-
+berger D A, Kidder L E, O’Connor E, Pfeiffer H P and Scheel
+
+--- Page 7 ---
+7
+M A 2018 ArXiv e-prints (Preprint 1804.09823)
+[33] Bailyn C D, Jain R K, Coppi P and Orosz J A 1998 Astrophys.
+J. 499 367 (Preprint astro-ph/9708032)
+[34] ¨Ozel F, Psaltis D, Narayan R and McClintock J E 2010 Atro-
+phys.J. 725 1918 (Preprint 1006.2834)
+[35] Garcia-Bellido J, Linde A D and Wands D 1996Phys. Rev. D54
+6040–6058 (Preprint astro-ph/9605094)
+[36] Barack L et al. 2018 (Preprint 1806.05195)
+[37] Cardoso V and Pani P 2017 ( Preprint 1707.03021)
+[38] Arvanitaki A and Dubovsky S 2011 Phys. Rev. D83 044026
+(Preprint 1004.3558)
+[39] Foucart F et al. 2018 in prep
+[40] Lovelace G, Duez M D, Foucart F, Kidder L E, Pfeiffer H P,
+Scheel M A and Szil ´agyi B 2013 Class. Quantum Grav. 30
+135004 (Preprint 1302.6297)
+[41] Foucart F, Duez M D, Kidder L E, Scheel M A, Szil ´agyi B
+and Teukolsky S A 2012 Phys. Rev. D 85 044015 ( Preprint
+1111.1677)
+[42] Foucart F, Duez M D, Kidder L E and Teukolsky S A 2011
+Phys. Rev. D 83 024005 ( Preprint arXiv:1007.4203 [astro-
+ph.HE])
+[43] Kyutoku K, Okawa H, Shibata M and Taniguchi K 2011 Phys.
+Rev. D 84 064018 (Preprint 1108.1189)
+[44] Etienne Z B, Liu Y T, Shapiro S L and Baumgarte T W 2009
+Phys. Rev. D79 044024
+[45] Foucart F, Deaton M B, Duez M D, Kidder L E, MacDonald I,
+Ott C D, Pfeiffer H P, Scheel M A, Szil ´agyi B and Teukolsky
+S A 2013 Phys. Rev. D 87 084006 (Preprint 1212.4810)
+[46] Bardeen J M, Press W H and Teukolsky S A 1972 Astrophys. J.
+178 347
+[47] Buonanno A and Damour T 1999 Phys. Rev. D59 084006
+(Preprint gr-qc/9811091)
+[48] Le Tiec A, Mrou ´e A H, Barack L, Buonanno A, Pfeiffer H P,
+Sago N and Taracchini A 2011 Phys. Rev. Lett. 107 141101
+(Preprint 1106.3278)
+[49] Kawaguchi K and Kyutoku K 2018 private communication
+[50] The LIGO Scientiﬁc Collaboration, the Virgo Collaboration,
+Abbott B P, Abbott R, Abbott T D, Acernese F, Ackley K,
+Adams C, Adams T, Addesso P and et al 2018 ArXiv e-prints
+(Preprint 1805.11581)
+[51] Yagi K and Yunes N 2017 Phys. Rept. 681 1–72 ( Preprint
+1608.02582)
+[52] Maselli A, Cardoso V , Ferrari V , Gualtieri L and Pani P 2013
+Phys. Rev. D88 023007 (Preprint 1304.2052)
+
+--- Page 8 ---
+8
+TABLE I. Numerical-relativity simulations used in our ﬁts that were
+already used in FF12. We list the mass ratio Q = MBH/MNS,
+the neutron star compaction CNS = GMNS/(RNSc2), the dimen-
+sionless spin-parameter of the black hole χBH, the parameter ρ =
+(15Λ)1/5 used in Eq. 7 (with Λ the dimensionless tidal deformabil-
+ity of the neutron star), and the baryon mass remaining outside of the
+black hole 10 ms after merger, M rem, normalized to initial baryon
+mass of the neutron starM b
+NS. We also provide the type of equation
+of state, the code used to perform the simulation, and a reference to
+the relevant publication. The Γ2 equation of state denotes an ideal
+gas with polytropic index Γ = 2, while PP refers to piecewise poly-
+tropic equations of state.
+Q χBH CNS ρ M rem
+M b
+NS
+EoS Type Code Reference
+7.0 0.9 0.144 6.56 0.24 Γ2 SpEC [41]
+7.0 0.7 0.144 6.56 0.05 Γ2 SpEC [41]
+5.0 0.5 0.144 6.56 0.05 Γ2 SpEC [41]
+3.0 0.9 0.144 6.56 0.35 Γ2 SpEC [42]
+3.0 0.5 0.145 6.51 0.15 Γ2/PP SpEC/SACRA [42, 43]
+3.0 0.0 0.144 6.56 0.04 Γ2 UIUC/SpEC [42, 44]
+3.0 0.75 0.145 6.51 0.21 Γ2/PP UIUC/SACRA [43, 44]
+5.0 0.75 0.131 8.10 0.25 PP SACRA [43]
+5.0 0.75 0.162 6.21 0.11 PP SACRA [43]
+5.0 0.75 0.172 5.75 0.06 PP SACRA [43]
+5.0 0.75 0.182 5.33 0.02 PP SACRA [43]
+4.0 0.75 0.131 8.10 0.25 PP SACRA [43]
+4.0 0.75 0.162 6.21 0.15 PP SACRA [43]
+4.0 0.75 0.172 5.75 0.12 PP SACRA [43]
+4.0 0.75 0.182 5.33 0.07 PP SACRA [43]
+4.0 0.5 0.131 8.10 0.19 PP SACRA [43]
+4.0 0.5 0.162 6.21 0.06 PP SACRA [43]
+4.0 0.5 0.172 5.75 0.02 PP SACRA [43]
+3.0 0.75 0.131 8.10 0.24 PP SACRA [43]
+3.0 0.75 0.162 6.21 0.16 PP SACRA [43]
+3.0 0.75 0.172 5.75 0.15 PP SACRA [43]
+3.0 0.75 0.182 5.33 0.1 PP SACRA [43]
+3.0 0.5 0.131 8.10 0.19 PP SACRA [43]
+3.0 0.5 0.162 6.21 0.11 PP SACRA [43]
+3.0 0.5 0.172 5.75 0.07 PP SACRA [43]
+3.0 0.5 0.182 5.33 0.03 PP SACRA [43]
+7.0 0.5 0.144 6.56 0.0 PP SpEC [41]
+3.0 -0.5 0.145 6.51 0.01 PP UIUC [44]
+5.0 0.0 0.145 6.51 0.01 PP UIUC [44]
+4.0 0.5 0.182 5.33 0.0 PP SACRA [43]
+3.0 -0.5 0.172 5.75 0.0 PP SACRA [43]
+
+--- Page 9 ---
+9
+TABLE II. Same as Table I, but for simulations that were not used in
+FF12. The ﬁrst 11 simulations are outside of the range of parameters
+covered by the ﬁt derived in FF12. Tab refers to tabulated, composi-
+tion and temperature dependent equations of state.
+Q χBH CNS ρ M rem
+M b
+NS
+EoS Type Code Reference
+1.0 0.0 0.16 6.19 0.02 Tab SpEC In Prep.
+1.2 0.0 0.134 7.58 0.11 Tab SpEC In Prep.
+3.0 0.97 0.144 6.56 0.52 Γ2 SpEC [40]
+7.0 0.9 0.144 6.56 0.3 Γ2 SpEC [45]
+5.83 0.9 0.135 7.52 0.28 Tab SpEC [32]
+5.0 0.9 0.156 6.38 0.26 Tab SpEC [32]
+5.83 0.9 0.13 7.77 0.29 Tab SpEC [32]
+5.0 0.9 0.152 6.51 0.25 Tab SpEC [32]
+5.83 0.9 0.148 6.66 0.28 Tab SpEC [32]
+5.83 0.9 0.139 7.73 0.26 Tab SpEC [31]
+5.83 0.8 0.139 7.73 0.21 Tab SpEC [31]
+7.0 0.9 0.156 5.90 0.2 Γ2 SpEC [45]
+7.0 0.9 0.17 5.24 0.1 Γ2 SpEC [45]
+5.0 0.7 0.163 6.30 0.09 Tab SpEC [31]
+5.0 0.8 0.163 6.30 0.15 Tab SpEC [31]
+5.0 0.9 0.163 6.30 0.19 Tab SpEC [31]
+3.0 0.75 0.18 5.45 0.09 PP SACRA [29]
+3.0 0.75 0.161 6.44 0.13 PP SACRA [29]
+3.0 0.75 0.147 7.00 0.17 PP SACRA [29]
+3.0 0.75 0.138 7.66 0.18 PP SACRA [29]
+3.0 0.5 0.18 5.45 0.04 PP SACRA [29]
+3.0 0.5 0.161 6.44 0.09 PP SACRA [29]
+3.0 0.5 0.147 7.00 0.12 PP SACRA [29]
+3.0 0.5 0.138 7.66 0.13 PP SACRA [29]
+3.0 0.0 0.18 5.45 0.0 PP SACRA [29]
+3.0 0.0 0.161 6.44 0.015 PP SACRA [29]
+3.0 0.0 0.147 7.00 0.05 PP SACRA [29]
+3.0 0.0 0.138 7.66 0.08 PP SACRA [29]
+5.0 0.75 0.18 5.45 0.03 PP SACRA [29]
+5.0 0.75 0.161 6.44 0.12 PP SACRA [29]
+5.0 0.75 0.147 7.00 0.16 PP SACRA [29]
+5.0 0.75 0.138 7.66 0.18 PP SACRA [29]
+5.0 0.5 0.18 5.45 0.0 PP SACRA [29]
+5.0 0.5 0.161 6.44 0.02 PP SACRA [29]
+5.0 0.5 0.147 7.00 0.07 PP SACRA [29]
+5.0 0.5 0.138 7.66 0.12 PP SACRA [29]
+7.0 0.75 0.18 5.45 0.0 PP SACRA [29]
+7.0 0.75 0.161 6.44 0.035 PP SACRA [29]
+7.0 0.75 0.147 7.00 0.095 PP SACRA [29]
+7.0 0.75 0.138 7.66 0.15 PP SACRA [29]
+7.0 0.5 0.18 5.45 0.0 PP SACRA [29]
+7.0 0.5 0.161 6.44 0.0 PP SACRA [29]
+7.0 0.5 0.147 7.00 0.0 PP SACRA [29]
+7.0 0.5 0.138 7.66 0.02 PP SACRA [29]
