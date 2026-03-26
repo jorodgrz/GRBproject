@@ -23,3 +23,5 @@ dist/
 build/
 *.egg-info/
 *.code-workspace
+.pdf_extract/
+.pdf_extract/
