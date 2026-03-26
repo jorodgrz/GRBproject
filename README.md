@@ -87,7 +87,7 @@ $M_1$ vs $M_2$ for merging BNS systems colored by formation channel (left) and b
 
 ![BHNS channel rates](Plots/bhns_channel_rates.png)
 
-Channel-resolved merger rate densities $\mathcal{R}(z)$ for BHNS at $a = 0.5$ (left) and $a = 0.9$ (right), decomposed by Classic CE and Double-core CE. Classic CE accounts for ~88% of the total BHNS merger rate at all redshifts. Double-core CE contributes negligibly. Combined with the BNS cosmic rate results, this confirms the unified picture: **Classic CE is the evolutionary pathway connecting both populations**. It dominates the entire BHNS population by construction (BH+NS requires initial mass asymmetry incompatible with Double-core CE), and after cosmic integration it also drives the BNS Long cbGRB merger rate through its metallicity-dependent dominance at the star-forming metallicities that contribute most to cosmic rates.
+Channel-resolved merger rate densities $\mathcal{R}(z)$ for BHNS at $a = 0.5$ (left) and $a = 0.9$ (right), decomposed by Classic CE and Double-core CE. Classic CE accounts for ~87% of the total BHNS merger rate at all redshifts (intrinsic STROOPWAFEL-weighted; validated against Paper I detection-weighted 86%). Double-core CE contributes ~3%, with ~4% from the Other channel (Case A mass transfer). Combined with the BNS cosmic rate results, this confirms the unified picture: **Classic CE is the evolutionary pathway connecting both populations**. It dominates the entire BHNS population by construction (BH+NS requires initial mass asymmetry incompatible with Double-core CE), and after cosmic integration it also drives the BNS Long cbGRB merger rate through its metallicity-dependent dominance at the star-forming metallicities that contribute most to cosmic rates.
 
 ---
 
