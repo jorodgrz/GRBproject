@@ -3,7 +3,7 @@
 
 This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.00038) classification scheme to COMPAS binary population synthesis simulations (Model A, [Broekgaarden et al. 2022, Paper II](https://arxiv.org/abs/2112.05763)). It predicts the rates, mass distributions, and redshift evolution of all GRB types produced by BNS and BHNS mergers, with uncertainty estimates across NS equation of state, BH spin, and binary physics models. A formation channel analysis ([Broekgaarden et al. 2021, Paper I](https://arxiv.org/abs/2103.02608)) maps GRB classes onto isolated binary evolution pathways, revealing that **Classic CE is the unifying channel**: it dominates the entire BHNS population and, after cosmic integration, drives the BNS Long cbGRB merger rate despite being a minority channel intrinsically.
 
-**BHNS disk masses:** The [Foucart et al. (2018)](https://arxiv.org/abs/1807.00011) fitting formula (Eq. 4 and 6) gives total remnant baryon mass $M_{\rm rem}$ (Foucart 2012, Sec. VI). Before applying Gottlieb thresholds, the code maps $M_{\rm rem}$ to disk mass with a **smooth sigmoid** fraction $f_{\rm disk}(M_{\rm rem}) = 0.3 + 0.2/(1 + \exp(-(M_{\rm rem} - 0.1)/0.02))$ (asymptotes $\sim 0.3$ and $\sim 0.5$; scale $0.02\,M_\odot$), then $M_{\rm disk} = f_{\rm disk}\,M_{\rm rem}$. Since the specific sigmoid parameters are not from a published calibration, **sensitivity to constant $f_{\rm disk} = 1/3$ and $1/2$** is shown in both `GRB_BHNS.ipynb` and `GRB_CosmicRate.ipynb`. Jet-launching uses a **$0.01\,M_\odot$** minimum on $M_{\rm disk}$.
+**BHNS disk masses:** The [Foucart et al. (2018)](https://arxiv.org/abs/1807.00011) fitting formula (Eq. 4 and 6) gives total remnant baryon mass $M_{\rm rem}$ (Foucart 2012, Sec. VI). Before applying Gottlieb thresholds, the code converts to disk mass via $M_{\rm disk} = f_{\rm disk}\,M_{\rm rem}$ with **$f_{\rm disk} = 0.4$**, a midrange estimate consistent with NR simulations showing $\sim 1/3$ to $\sim 2/3$ of remnant material settling into a disk (Foucart 2012, Sec. VI). **Sensitivity to $f_{\rm disk} = 1/3$ and $1/2$** is shown in both `GRB_BHNS.ipynb` and `GRB_CosmicRate.ipynb`. All shared physics functions (ISCO, NS radius, baryon mass, Foucart disk mass) are defined once in `grb_physics.py` and imported by all notebooks. Jet-launching uses a **$0.01\,M_\odot$** minimum on $M_{\rm disk}$.
 
 **BNS rates:** Cosmic rates optionally scale BNS weights by a GRB efficiency $\varepsilon_{\rm grb}$ (fiducial 1.0; e.g. 0.7 for sensitivity). The comparison notebook still shows BNS class fractions under the Gottlieb scheme with no explicit failed-jet channel.
 
@@ -55,7 +55,7 @@ Gottlieb et al. (2023) classification diagram ($q$ vs $M_{\rm tot}$) at four red
 
 ![Spin-marginalized BHNS rates](Plots/rate_bhns_spin_marginalized.png)
 
-Long cbGRB rate densities with marginalized BH spin priors: a flat prior on $a \in [0, 1]$ (trapezoidal weights over the 4-point spin grid $a = \{0.0, 0.3, 0.5, 0.7\}$) and a Fuller and Ma (2019) low-spin prior (all weight on $a \approx 0$). Even with the optimistic flat prior (a lower bound, since $a = 0.7$ proxies for $a = 0.7$ to $1.0$), BHNS long cbGRB remains orders of magnitude below BNS. Under Fuller and Ma (2019), BHNS long cbGRBs are negligible.
+Long cbGRB rate densities with marginalized BH spin priors: a flat prior on $a \in [0, 1]$ (trapezoidal weights over the 6-point spin grid $a = \{0.0, 0.3, 0.5, 0.7, 0.8, 0.9\}$) and a Fuller and Ma (2019) low-spin prior (all weight on $a \approx 0$). The 6-point grid resolves the steep Foucart disruption cliff between $a = 0.7$ and $a = 0.9$, where the long cbGRB rate jumps from zero to hundreds of Gpc$^{-3}$ yr$^{-1}$. Under the flat prior, BHNS long cbGRBs (~129 Gpc$^{-3}$ yr$^{-1}$ at $z = 0$) actually exceed BNS long cbGRBs (~75), driven by the steep $a \geq 0.8$ contribution. Under Fuller and Ma (2019), BHNS long cbGRBs are negligible. The spin prior is thus the decisive systematic for the BHNS long cbGRB channel.
 
 ---
 
@@ -103,7 +103,7 @@ Channel-resolved merger rate densities $\mathcal{R}(z)$ for BHNS at $a = 0.5$ (l
 | Type II sGRB | Short cbGRB | $M_{\rm tot} \geq M_{\rm crit}$, $q < 1.2$ | Immediate BH + light accretion disk |
 | lGRB | Long cbGRB | $M_{\rm tot} \geq M_{\rm crit}$, $q \geq 1.2$ | BH + massive disk from asymmetric merger |
 
-**BHNS mergers** (Foucart $M_{\rm rem}$ from [Foucart et al. 2018](https://arxiv.org/abs/1807.00011) Eq. 4 and 6, then sigmoid $M_{\rm rem} \to M_{\rm disk}$ as above):
+**BHNS mergers** (Foucart $M_{\rm rem}$ from [Foucart et al. 2018](https://arxiv.org/abs/1807.00011) Eq. 4 and 6, then constant $f_{\rm disk} = 0.4$ conversion as above):
 
 | Type | Class | Condition |
 |---|---|---|
@@ -123,7 +123,7 @@ Run the core pipeline in order: `GRB_BNS.ipynb` -> `GRB_BHNS.ipynb` -> `GRB_Cosm
 |---|---|
 | `GRB_BNS.ipynb` | BNS classification, efficiency, weighted $M_{\rm crit}$ and $q$-threshold sensitivity, Model A vs K |
 | `GRB_BHNS.ipynb` | BHNS classification (Foucart + remnant-to-disk), spin, EOS, and $f_{\rm disk}$ sensitivity |
-| `GRB_CosmicRate.ipynb` | MSSFR cosmic integration, 4-channel fractions, W&P comparison, $\varepsilon_{\rm grb}$ sensitivity, $f_{\rm disk}$ rate sensitivity, spin-marginalized BHNS rates (4-point grid), Model K vs A normalization check |
+| `GRB_CosmicRate.ipynb` | MSSFR cosmic integration, 4-channel fractions, W&P comparison, $\varepsilon_{\rm grb}$ sensitivity, $f_{\rm disk}$ rate sensitivity, spin-marginalized BHNS rates (6-point grid), Model K vs A normalization check |
 | `GRB_comparison.ipynb` | BNS vs BHNS class fractions, efficiency vs metallicity, metallicity vs delay time |
 | `GRB_BNS_FormationChannels.ipynb` | BNS GRB classes mapped to Broekgaarden formation channels (Classic CE vs Double-core CE), metallicity dependence, channel-resolved cosmic rates |
 | `GRB_BHNS_FormationChannels.ipynb` | BHNS formation channel classification, GRB class x channel cross-tabulation at two spins, unified BNS vs BHNS comparison |
