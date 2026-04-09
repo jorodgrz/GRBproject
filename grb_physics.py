@@ -2,7 +2,7 @@
 Shared physics functions for GRB classification from compact binary mergers.
 
 Foucart et al. (2018) disk mass formula, NS equation-of-state helpers,
-and Gottlieb et al. (2023) classification thresholds.
+and Gottlieb et al. (2023, 2024) classification thresholds.
 """
 
 import numpy as np
@@ -10,15 +10,32 @@ import numpy as np
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2023) classification thresholds
 # ---------------------------------------------------------------------------
-M_CRIT_BNS = 2.8       # BNS total mass threshold [Msun]
+M_CRIT_BNS = 2.8       # BNS prompt-collapse total mass threshold [Msun]
 Q_THRESH_BNS = 1.2     # BNS mass ratio threshold (q = M_max / M_min >= 1)
 MDISK_SHORT = 0.01     # BHNS Short cbGRB disk mass threshold [Msun]
 MDISK_LONG = 0.1       # BHNS Long cbGRB disk mass threshold [Msun]
 
 # ---------------------------------------------------------------------------
+# Gottlieb et al. (2024) additions
+# ---------------------------------------------------------------------------
+M_TOV = 2.05            # Maximum non-rotating NS mass [Msun]
+M_THRESH = M_CRIT_BNS   # Alias: prompt-collapse threshold [Msun]
+Q_NO_DISK = 1.05        # Below this q, near-equal-mass prompt collapse suppresses disk
+
+# ---------------------------------------------------------------------------
 # Remnant-to-disk fraction
 # ---------------------------------------------------------------------------
-F_DISK = 0.4           # Midrange estimate (Foucart 2012, Sec. VI; NR range ~1/3 to ~2/3)
+F_DISK = 0.4            # Midrange estimate (Foucart 2012, Sec. VI; NR range ~1/3 to ~2/3)
+
+# ---------------------------------------------------------------------------
+# COMPAS simulation constants
+# ---------------------------------------------------------------------------
+MEAN_MASS_EVOLVED = 77708655  # M_sun formed per simulation; Kroupa IMF, 5-150 Msun primaries
+
+# ---------------------------------------------------------------------------
+# EOS reference models  {name: M_crit [Msun]}
+# ---------------------------------------------------------------------------
+EOS_MODELS = {'APR4': 2.46, 'SFHo': 2.60, 'LS220': 2.72, 'DD2': 3.35}
 
 
 # ---------------------------------------------------------------------------
@@ -43,8 +60,6 @@ def ns_baryon_mass(M_NS):
     """Approximate NS baryon mass from gravitational mass [M_sun].
 
     M^b ~ M_g + 0.080 * M_g^2 (Gao et al. 2020; Lattimer & Prakash 2001).
-    Coefficient A ~ 0.080 for non-rotating NS.  Accurate to ~2% across
-    typical EOS for M_NS in [1.0, 2.5] M_sun.
     """
     return M_NS + 0.080 * M_NS**2
 
@@ -54,12 +69,18 @@ def ns_radius(M_NS, R_1p4_km=12.0):
 
     R(M) = R_{1.4} * max(0.75, 1 - 0.25*(M - 1.4)^2)
 
-    Approximates a moderate-stiffness EOS (APR4/SLy family) within
-    M_NS in [1.0, 2.5] M_sun.  R_{1.4} = 12.0 km is consistent with
-    NICER constraints (Miller+ 2021, Riley+ 2021).  Clamped at 0.75*R_{1.4}
-    to avoid unphysical radii near M_max.
+    Approximates a moderate-stiffness EOS (APR4/SLy family).
+    R_{1.4} = 12.0 km is consistent with NICER constraints.
     """
     return R_1p4_km * np.maximum(0.75, 1.0 - 0.25 * (M_NS - 1.4)**2)
+
+
+def mcrit_to_r14(mc):
+    """Linear interpolation from M_crit [Msun] to R_{1.4} [km].
+
+    Based on APR4 (M_crit=2.46, R=11.9) and DD2 (M_crit=3.35, R=13.2).
+    """
+    return 11.9 + (13.2 - 11.9) / (3.35 - 2.60) * (mc - 2.60)
 
 
 # ---------------------------------------------------------------------------
@@ -69,35 +90,8 @@ def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
                       f_disk=F_DISK):
     """Foucart et al. (2018) Eq. (4) & (6) [arXiv:1807.00011].
 
-    Returns the accretion disk mass M_disk = f_disk * M_rem, where M_rem is
-    the total remnant baryon mass from the fitting formula.
-
-    Implementation details
-    ----------------------
-    1. Uses baryon mass M^b_NS (not gravitational mass) to scale M_rem,
-       correcting a ~10-15% systematic underestimate in disk mass.
-    2. Uses mass-dependent NS radius by default, avoiding unphysical
-       compactness for M_NS >> 1.4 M_sun.
-
-    Parameters
-    ----------
-    M_BH : float or array
-        Black hole gravitational mass [M_sun].
-    M_NS : float or array
-        Neutron star gravitational mass [M_sun].
-    a_BH : float or array
-        Dimensionless BH spin (prograde >= 0).
-    R_NS_km : float or None
-        If given, use this fixed radius for ALL NS (for EOS sensitivity
-        sweeps).  If None (default), use mass-dependent ns_radius().
-    R_1p4_km : float
-        Fiducial NS radius at 1.4 M_sun [km].  Only used when
-        R_NS_km is None.  Default 12.0 km (NICER).
-    f_disk : float
-        Fraction of remnant baryon mass that forms the accretion disk.
-        Default 0.4, a midrange estimate consistent with NR simulations
-        showing ~1/3 to ~2/3 of remnant material in a disk (Foucart 2012,
-        Sec. VI).  Use 1/3 and 1/2 as brackets for sensitivity analysis.
+    Returns the accretion disk mass M_disk = f_disk * M_rem.
+    Uses baryon mass and mass-dependent NS radius by default.
     """
     G = 6.674e-11; c = 3e8; Msun = 1.989e30
 

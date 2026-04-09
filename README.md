@@ -1,138 +1,111 @@
 # GRB Classification from Compact Binary Mergers
-### Using COMPAS Population Synthesis to Predict Short and Long cbGRB Rates
+### Population-Level Predictions for Merger-Driven Short and Long GRBs
 
-This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.00038) classification scheme to COMPAS binary population synthesis simulations (Model A, [Broekgaarden et al. 2022, Paper II](https://arxiv.org/abs/2112.05763)). It predicts the rates, mass distributions, and redshift evolution of all GRB types produced by BNS and BHNS mergers, with uncertainty estimates across NS equation of state, BH spin, and binary physics models. A formation channel analysis ([Broekgaarden et al. 2021, Paper I](https://arxiv.org/abs/2103.02608)) maps GRB classes onto isolated binary evolution pathways, revealing that **Classic CE is the unifying channel**: it dominates the entire BHNS population and, after cosmic integration, drives the BNS Long cbGRB merger rate despite being a minority channel intrinsically.
+This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.00038) and [Gottlieb et al. (2024)](https://arxiv.org/abs/2411.13657v2) GRB classification frameworks to COMPAS binary population synthesis simulations (Model A, [Broekgaarden et al. 2022](https://arxiv.org/abs/2112.05763)). Starting from the mass-plane diagnostics that connect merger remnant physics to GRB type, the analysis progresses through population synthesis, cosmic integration, kinematic offsets, and parameter space exploration to produce the first comprehensive population-level predictions for merger-driven long and short GRBs.
 
-**BHNS disk masses:** The [Foucart et al. (2018)](https://arxiv.org/abs/1807.00011) fitting formula (Eq. 4 and 6) gives total remnant baryon mass $M_{\rm rem}$ (Foucart 2012, Sec. VI). Before applying Gottlieb thresholds, the code converts to disk mass via $M_{\rm disk} = f_{\rm disk}\,M_{\rm rem}$ with **$f_{\rm disk} = 0.4$**, a midrange estimate consistent with NR simulations showing $\sim 1/3$ to $\sim 2/3$ of remnant material settling into a disk (Foucart 2012, Sec. VI). **Sensitivity to $f_{\rm disk} = 1/3$ and $1/2$** is shown in both `GRB_BHNS.ipynb` and `GRB_CosmicRate.ipynb`. All shared physics functions (ISCO, NS radius, baryon mass, Foucart disk mass) are defined once in `grb_physics.py` and imported by all notebooks. Jet-launching uses a **$0.01\,M_\odot$** minimum on $M_{\rm disk}$.
-
-**BNS rates:** Cosmic rates optionally scale BNS weights by a GRB efficiency $\varepsilon_{\rm grb}$ (fiducial 1.0; e.g. 0.7 for sensitivity). The comparison notebook still shows BNS class fractions under the Gottlieb scheme with no explicit failed-jet channel.
+**2024 update:** The Gottlieb et al. (2024) hybrid model refines the sub-threshold BNS region by splitting it according to HMNS lifetime: long-lived HMNS ($M_\mathrm{tot} \lesssim 1.2\,M_\mathrm{TOV}$) powers sbGRB + blue KN, while short-lived HMNS collapses to a BH with massive disk, powering lbGRB + red KN. Kilonova color (red vs blue) becomes the key diagnostic for the central engine.
 
 ---
 
-## Results
+## Project Structure
 
-### 1. Combined BNS + BHNS Rate Density
+All analysis is consolidated in a single notebook backed by four reusable Python modules:
 
-![Combined rate density](Plots/rate_combined_bns_bhns.png)
+| File | Purpose |
+|---|---|
+| **`GRB_Main.ipynb`** | Main research notebook (20 sections, see below) |
+| `grb_physics.py` | Core physics: Foucart disk mass, NS helpers, ISCO, EOS constants, Gottlieb thresholds |
+| `grb_classify.py` | Classification: BNS 2023/2024 schemes, BHNS Foucart, unified grid, formation channels |
+| `grb_rates.py` | Cosmic rates: MSSFR convolution, per-system weights, efficiency, spin marginalization |
+| `grb_io.py` | Data I/O: HDF5 loading (BNS/BHNS with channels and kicks), export helpers, plotting utilities |
 
-All Gottlieb et al. (2023) cbGRB channels on a single axis: BNS Type I sGRB (HMNS), Type II sGRB (BH + light disk), Long cbGRB (BH + massive disk, $q \geq 1.2$), and BHNS sGRB ($a = 0.5$). At the fiducial spin, BHNS long cbGRB is zero (Foucart 2012: insufficient spin for massive disk formation). BNS short cbGRB dominates at all redshifts. COMPAS Model A, MSSFR from Neijssel et al. (2019).
-
----
-
-### 2. BHNS GRB Classification by BH Spin
-
-![BHNS mass plane by spin](Plots/bhns_mass_plane_spin.png)
-
-BH mass vs NS mass colored by GRB class at $a = 0.0,\,0.3,\,0.5,\,0.7$. Higher spin moves the ISCO inward, expanding the tidally disrupted region. At $a \approx 0$ almost no systems disrupt; at higher spin a larger fraction can produce Short or Long cbGRBs. The $a = 0.3$ panel captures the steep disruption cliff between $a = 0$ and $a = 0.5$, improving quadrature accuracy for spin marginalization. The horizontal gap is the NS remnant mass gap from the rapid supernova engine. Natal BH spins are not taken from COMPAS; see spin-marginalized rates below.
+Archived notebooks from earlier development are in `archive/`.
 
 ---
 
-### 3. cbGRB Channel Fraction vs Redshift
+## Notebook Sections
 
-![GRB channel fraction vs redshift](Plots/grb_channel_fraction_vs_redshift.png)
+### Part I: Mass-Plane Diagnostics (Sections 1 to 6)
 
-Stacked fractions of the total cbGRB rate from four channels (BNS Short, BNS Long, BHNS Short, BHNS Long) vs redshift. BNS Short (~80% at $z = 0$) dominates at all epochs. BNS Long grows at high $z$ because the Classic CE channel, which can produce asymmetric mergers ($q \geq 1.2$), becomes increasingly dominant at lower metallicities after cosmic integration (Broekgaarden et al. 2021, 2022). Rastinejad et al. (2025) independently find observational evidence that merger-driven long GRB progenitors are asymmetric compact object binaries. BHNS Short contributes ~15% at low $z$, while BHNS Long is zero at $a = 0.5$ (Foucart 2012). A teal shaded band brackets the spin uncertainty ($a = 0.0$ to $0.7$) on the BNS/BHNS boundary.
+| Section | Plot | Description |
+|---|---|---|
+| 1. BNS Mass Plane | ![](Plots/bns_mass_plane_2024.png) | BNS scatter in the $M_2$ vs $M_1$ plane with Gottlieb 2024 four-class boundaries, GW170817/GW190425 markers |
+| 2. Unified Mass Plane | ![](Plots/unified_mass_plane.png) | Combined BNS + BHNS grid spanning all merger outcomes (cf. Gottlieb 2024 Fig. 3) |
+| 3. Ejecta vs Duration | ![](Plots/ejecta_vs_T50.png) | Observed GRB/KN sample: kilonova ejecta mass vs GRB duration with engine diagnostic bands |
+| 4. Side-by-Side Panels | ![](Plots/bns_bhns_sidebyside.png) | Left: BNS four-class plane. Right: BHNS with Foucart disk mass contours |
+| 5. 2023 vs 2024 Fractions | ![](Plots/classification_fractions_2023_vs_2024.png) | How the BNS population redistributes between the three-class and five-class schemes |
+| 6. $M_\mathrm{thresh}$ Sensitivity | ![](Plots/mthresh_sensitivity_3panel.png) | Three-panel BNS scatter at $M_\mathrm{thresh} = 2.4,\,2.8,\,3.2\,M_\odot$ |
 
----
+### Part II: Population Synthesis Predictions (Sections 7 to 10)
 
-### 4. Intrinsic Long cbGRB Rate vs Observed lGRB Rate
+| Section | Plot | Description |
+|---|---|---|
+| 7. Mass Distributions | ![](Plots/mass_distributions_by_class.png) | Weighted histograms of $M_1$, $M_2$, $M_\mathrm{tot}$, $q$ for BNS and BHNS, split by GRB class |
+| 8. Delay Times | ![](Plots/delay_time_distributions.png) | Delay time distributions by GRB class (BNS vs BHNS, log scale) |
+| 9. Metallicity Dependence | ![](Plots/metallicity_dependence.png) | Formation efficiency vs $Z$, plus GRB class fraction stackplot |
+| 10. Formation Channels | ![](Plots/formation_channels_by_grb_class.png) | Broekgaarden channel breakdown (I to V) per BNS GRB class |
 
-![Predicted vs observed rates](Plots/rate_bns_bhns_dominance.png)
+### Part III: Cosmic Integration (Sections 11 to 14)
 
-Predicted intrinsic BNS long cbGRB merger rate compared with the beaming-corrected long GRB rate from Wanderman and Piran (2010). The predicted rate exceeds the observed total lGRB rate (which includes collapsars) by ~50 to 100x, implying $\varepsilon_{\rm grb}^{\rm long} \ll 1$. BHNS long cbGRB is gated: at $a = 0.5$ it is zero and not plotted. The W&P band is an upper bound on merger-driven lGRBs since it includes the dominant collapsar population.
+| Section | Plot | Description |
+|---|---|---|
+| 11. MSSFR Grid | -- | Redshift grid, SFR, metallicity distribution setup via COMPAS FastCosmicIntegration |
+| 12. BNS $\mathcal{R}(z)$ | ![](Plots/rate_bns_by_class.png) | BNS merger rate density per GRB class vs redshift |
+| 13. BHNS $\mathcal{R}(z)$ | ![](Plots/rate_bhns_spin_sensitivity.png) | BHNS merger rate with BH spin sensitivity envelope ($a = 0$ to $0.9$) |
+| 14. Combined Summary | ![](Plots/rate_combined_summary.png) | All BNS + BHNS rates on one axis, plus rate-weighted $M_\mathrm{tot}$ at $z = 0$ vs $z = 2$ |
 
----
+### Part IV: Kinematic Offsets (Sections 15 to 16)
 
-### 5. BNS + BHNS Classification Plane at Redshift Slices
+| Section | Plot | Description |
+|---|---|---|
+| 15. Systemic Velocities | ![](Plots/systemic_velocity_distributions.png) | Post-SN $v_\mathrm{sys}$ distributions by GRB class (BNS vs BHNS) |
+| 16. Projected Offsets | ![](Plots/projected_offsets.png) | Cumulative offset CDFs ($v_\mathrm{sys} \times t_\mathrm{delay}$) for merger site predictions |
 
-![Classification plane](Plots/bns_bhns_gottlieb_plane_redshift_slices.png)
+### Part V: Parameter Space Exploration (Sections 17 to 19)
 
-Gottlieb et al. (2023) classification diagram ($q$ vs $M_{\rm tot}$) at four redshift slices ($z = 0, 0.5, 1, 2$). Top row shows the full view (BNS + BHNS, log scale); bottom row zooms into the BNS region (linear scale). Classification boundaries at $M_{\rm crit} = 2.8\,M_\odot$ and $q = 1.2$ separate the three BNS outcomes. BHNS sGRB systems (purple triangles) appear at high $M_{\rm tot}$ and $q$; BHNS lGRB has zero systems at $a = 0.5$.
+| Section | Plot | Description |
+|---|---|---|
+| 17. EOS Sensitivity | ![](Plots/mthresh_rate_sensitivity.png) | GRB class fractions and $z = 0$ rates vs $M_\mathrm{crit}$, with $R_{1.4}$ axis and EOS markers |
+| 18. BH Spin Exploration | ![](Plots/bh_spin_exploration.png) | Spin marginalization (flat vs Fuller and Ma 2019 priors), $\mathcal{R}(z = 0)$ vs $a_\mathrm{BH}$ |
+| 19. Model A vs K | ![](Plots/model_a_vs_k.png) | $\alpha_\mathrm{CE} = 1.0$ vs $0.5$: mass distributions, class fractions, $\mathcal{R}(z)$ comparison |
 
----
+### Part VI: Summary (Section 20)
 
-### 6. Spin-Marginalized BHNS Long cbGRB Rates
-
-![Spin-marginalized BHNS rates](Plots/rate_bhns_spin_marginalized.png)
-
-Long cbGRB rate densities with marginalized BH spin priors: a flat prior on $a \in [0, 1]$ (trapezoidal weights over the 6-point spin grid $a = \{0.0, 0.3, 0.5, 0.7, 0.8, 0.9\}$) and a Fuller and Ma (2019) low-spin prior (all weight on $a \approx 0$). The 6-point grid resolves the steep Foucart disruption cliff between $a = 0.7$ and $a = 0.9$, where the long cbGRB rate jumps from zero to hundreds of Gpc$^{-3}$ yr$^{-1}$. Under the flat prior, BHNS long cbGRBs (~129 Gpc$^{-3}$ yr$^{-1}$ at $z = 0$) actually exceed BNS long cbGRBs (~75), driven by the steep $a \geq 0.8$ contribution. Under Fuller and Ma (2019), BHNS long cbGRBs are negligible. The spin prior is thus the decisive systematic for the BHNS long cbGRB channel.
-
----
-
-### 7. BNS GRB Classes Mapped to Formation Channels
-
-![BNS GRB vs formation channel](Plots/bns_grb_vs_channel_bar.png)
-
-The core hypothesis test from the BNS formation channel analysis: STROOPWAFEL-weighted fractions of each GRB class coming from each Broekgaarden et al. ([2021](https://arxiv.org/abs/2103.02608), [2022](https://arxiv.org/abs/2112.05763)) formation channel. Intrinsically, **Double-core CE dominates all three BNS GRB classes** (61% of Short Type I, ~100% of Short Type II, 93% of Long cbGRB) because it accounts for ~75% of the total BNS population. However, **Classic CE is enriched in Short Type I** (39% vs 25% overall) while being depleted in Long cbGRB (7% vs 25%). The cosmic rate decomposition (Section 9 of the notebook) reverses this: after metallicity-weighted integration, Classic CE dominates the Long cbGRB merger rate because it preferentially forms at higher metallicities where most cosmic star formation occurs.
-
----
-
-### 8. BHNS GRB Classes by Formation Channel
-
-![BHNS channel cross-tabulation](Plots/bhns_channel_crosstab.png)
-
-The companion analysis for BHNS: cross-tabulation of GRB class vs formation channel at $a = 0.5$ (left) and $a = 0.9$ (right). **Classic CE dominates all BHNS GRB classes** (~80-90%), in stark contrast to BNS where channel composition varies by GRB class. This is because BH+NS formation requires initial mass asymmetry, which is fundamentally incompatible with the Double-core CE pathway (which requires $q_i \sim 0.9$-$1.0$).
-
----
-
-### 9. BNS Mass Plane by Formation Channel and GRB Class
-
-![BNS mass plane channels](Plots/bns_mass_plane_channels.png)
-
-$M_1$ vs $M_2$ for merging BNS systems colored by formation channel (left) and by GRB class (right). Classic CE (blue) and Double-core CE (red) occupy distinct but overlapping regions: Double-core CE is concentrated along the equal-mass diagonal ($q \approx 1$), while Classic CE extends to higher mass ratios. The GRB class panel shows Long cbGRBs (orange) occupying the high-$M_{\rm tot}$, high-$q$ corner. Although Classic CE has a broader $q$ distribution, Double-core CE's population dominance means it still contributes the majority of Long cbGRB systems intrinsically.
-
----
-
-### 10. BHNS Channel-Resolved Cosmic Merger Rates
-
-![BHNS channel rates](Plots/bhns_channel_rates.png)
-
-Channel-resolved merger rate densities $\mathcal{R}(z)$ for BHNS at $a = 0.5$ (left) and $a = 0.9$ (right), decomposed by Classic CE and Double-core CE. Classic CE accounts for ~87% of the total BHNS merger rate at all redshifts (intrinsic STROOPWAFEL-weighted; validated against Paper I detection-weighted 86%). Double-core CE contributes ~3%, with ~4% from the Other channel (Case A mass transfer). Combined with the BNS cosmic rate results, this confirms the unified picture: **Classic CE is the evolutionary pathway connecting both populations**. It dominates the entire BHNS population by construction (BH+NS requires initial mass asymmetry incompatible with Double-core CE), and after cosmic integration it also drives the BNS Long cbGRB merger rate through its metallicity-dependent dominance at the star-forming metallicities that contribute most to cosmic rates.
+Consolidated table of $z = 0$ rates, median masses, delay times, systemic velocities, and projected offsets per GRB class, with key findings.
 
 ---
 
 ## Classification Scheme
 
-[Gottlieb et al. (2023)](https://arxiv.org/abs/2309.00038) tie GRB class to the merger remnant.
+### Gottlieb et al. (2024) BNS (five classes)
 
-**BNS mergers:**
-
-| Type | Class | Condition | Engine |
+| Class | Condition | Engine | KN Color |
 |---|---|---|---|
-| Type I sGRB | Short cbGRB | $M_{\rm tot} < M_{\rm crit}$ (~$2.8\,M_\odot$) | HMNS remnant powers jet before collapse |
-| Type II sGRB | Short cbGRB | $M_{\rm tot} \geq M_{\rm crit}$, $q < 1.2$ | Immediate BH + light accretion disk |
-| lGRB | Long cbGRB | $M_{\rm tot} \geq M_{\rm crit}$, $q \geq 1.2$ | BH + massive disk from asymmetric merger |
+| sbGRB + blue KN | $M_\mathrm{tot} < 1.2\,M_\mathrm{TOV}$ | Long-lived HMNS | Blue |
+| lbGRB + red KN (HMNS) | $1.2\,M_\mathrm{TOV} \leq M_\mathrm{tot} < M_\mathrm{thresh}$ | Short-lived HMNS, collapses to BH | Red |
+| lbGRB + red KN (disk) | $M_\mathrm{tot} \geq M_\mathrm{thresh}$, $q \geq 1.2$ | Prompt collapse, massive disk | Red |
+| Faint lbGRB | $M_\mathrm{tot} \geq M_\mathrm{thresh}$, $1.05 \leq q < 1.2$ | Prompt collapse, small disk | Red |
+| No GRB / No KN | $M_\mathrm{tot} \geq M_\mathrm{thresh}$, $q < 1.05$ | Prompt collapse, no disk | -- |
 
-**BHNS mergers** (Foucart $M_{\rm rem}$ from [Foucart et al. 2018](https://arxiv.org/abs/1807.00011) Eq. 4 and 6, then constant $f_{\rm disk} = 0.4$ conversion as above):
+### BHNS (Foucart disk mass)
 
-| Type | Class | Condition |
-|---|---|---|
-| No disruption / sub-threshold | No GRB | NS plunges or $M_{\rm disk} < 0.01\,M_\odot$ |
-| sGRB | Short cbGRB | $0.01 \leq M_{\rm disk} < 0.1\,M_\odot$ |
-| lGRB | Long cbGRB | $M_{\rm disk} \geq 0.1\,M_\odot$ |
+| Class | Condition |
+|---|---|
+| No GRB | NS plunges or $M_\mathrm{disk} < 0.01\,M_\odot$ |
+| Faint lbGRB + red KN | $0.01 \leq M_\mathrm{disk} < 0.1\,M_\odot$ |
+| lbGRB + red KN | $M_\mathrm{disk} \geq 0.1\,M_\odot$ |
 
-**Conventions:** BNS uses $q = M_{\max}/M_{\min} \ge 1$. BHNS uses $Q = M_{\rm BH}/M_{\rm NS}$ in the Foucart parameterisation (consistent with Gottlieb Fig. 2).
+Disk mass from [Foucart et al. (2018)](https://arxiv.org/abs/1807.00011) Eq. 4 and 6 with $f_\mathrm{disk} = 0.4$.
 
 ---
 
-## Analysis Pipeline
+## Data Sources
 
-Run the core pipeline in order: `GRB_BNS.ipynb` -> `GRB_BHNS.ipynb` -> `GRB_CosmicRate.ipynb` -> `GRB_comparison.ipynb`. The formation channel notebooks can run independently after the first two.
+- BNS (Model A): [Zenodo 5189849](https://zenodo.org/records/5189849) (`COMPASCompactOutput_BNS_A.h5`)
+- BHNS (Model A): [Zenodo 5178777](https://zenodo.org/records/5178777) (`COMPASCompactOutput_BHNS_A.h5`)
+- BNS (Model K): [Zenodo 5189849](https://zenodo.org/records/5189849) (`COMPASCompactOutput_BNS_K.h5`)
 
-| Notebook | Contents |
-|---|---|
-| `GRB_BNS.ipynb` | BNS classification, efficiency, weighted $M_{\rm crit}$ and $q$-threshold sensitivity, Model A vs K |
-| `GRB_BHNS.ipynb` | BHNS classification (Foucart + remnant-to-disk), spin, EOS, and $f_{\rm disk}$ sensitivity |
-| `GRB_CosmicRate.ipynb` | MSSFR cosmic integration, 4-channel fractions, W&P comparison, $\varepsilon_{\rm grb}$ sensitivity, $f_{\rm disk}$ rate sensitivity, spin-marginalized BHNS rates (6-point grid), Model K vs A normalization check |
-| `GRB_comparison.ipynb` | BNS vs BHNS class fractions, efficiency vs metallicity, metallicity vs delay time |
-| `GRB_BNS_FormationChannels.ipynb` | BNS GRB classes mapped to Broekgaarden formation channels (Classic CE vs Double-core CE), metallicity dependence, channel-resolved cosmic rates |
-| `GRB_BHNS_FormationChannels.ipynb` | BHNS formation channel classification, GRB class x channel cross-tabulation at two spins, unified BNS vs BHNS comparison |
-
-**Data sources:**
-- BNS: [Zenodo 5189849](https://zenodo.org/records/5189849)
-- BHNS: [Zenodo 5178777](https://zenodo.org/records/5178777)
-
-Data files (`.h5`, `.hdf5`) are not included. Download from Zenodo before running.
+HDF5 data files are not included in the repository. Download from Zenodo and place in `Data/`.
 
 ---
 
@@ -150,13 +123,14 @@ python -m ipykernel install --user --name grb-env --display-name "GRB (grb-env)"
 ## References
 
 - Gottlieb et al. (2023): [arXiv:2309.00038](https://arxiv.org/abs/2309.00038)
+- Gottlieb et al. (2024): [arXiv:2411.13657v2](https://arxiv.org/abs/2411.13657v2)
 - Foucart et al. (2018): [arXiv:1807.00011](https://arxiv.org/abs/1807.00011)
-- Foucart (2012): remnant mass vs disk mass discussion (Phys. Rev. D 86, 124007)
-- Broekgaarden et al. (2021, Paper I): [arXiv:2103.02608](https://arxiv.org/abs/2103.02608) - Formation channels of DCOs
-- Broekgaarden et al. (2022, Paper II): [arXiv:2112.05763](https://arxiv.org/abs/2112.05763) - Impact of massive binary star and CE physics
+- Foucart (2012): Phys. Rev. D 86, 124007
+- Broekgaarden et al. (2021, Paper I): [arXiv:2103.02608](https://arxiv.org/abs/2103.02608)
+- Broekgaarden et al. (2022, Paper II): [arXiv:2112.05763](https://arxiv.org/abs/2112.05763)
 - Neijssel et al. (2019): Metallicity-specific star formation rate density
 - Wanderman and Piran (2010): Long GRB rate and luminosity function
-- Fuller and Ma (2019): Natal BH spins in isolated binaries (spin priors for marginalized rates)
+- Fuller and Ma (2019): Natal BH spins in isolated binaries
 - Rastinejad et al. (2025): Merger-driven long GRBs and asymmetric compact object binaries
 
 ---
