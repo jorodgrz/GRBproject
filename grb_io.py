@@ -116,6 +116,13 @@ def load_bns_with_channels(path=None, sort_masses=True):
     else:
         m1_out, m2_out = m1_m, m2_m
 
+    # NOTE: sort_masses swaps m1/m2 so that m1 >= m2, but it does NOT
+    # reorder the formation-channel columns (dblCE, fc_*, sep_*, ZAMS
+    # masses).  Those columns still reference the *original* COMPAS
+    # primary/secondary labelling, not the heavier/lighter compact object.
+    # This is correct for formation-channel classification (which follows
+    # COMPAS primary/secondary), but callers must not assume that
+    # fc_mt_p1 corresponds to the heavier compact remnant.
     return {
         'm1':           m1_out,
         'm2':           m2_out,
@@ -241,6 +248,11 @@ def load_bhns_with_channels(path=None):
 # ═══════════════════════════════════════════════════════════════════════════
 # COMPAS metallicity grid
 # ═══════════════════════════════════════════════════════════════════════════
+# 53-element grid from COMPAS default settings.  The final value (0.03)
+# appears twice: this matches the original COMPAS configuration where the
+# last bin edge is duplicated.  np.digitize handles it correctly (both map
+# to the same bin), but callers doing exact-equality checks against
+# np.unique(METALLICITY_GRID) will see only 52 unique values.
 METALLICITY_GRID = np.array([
     0.0001, 0.00011, 0.00012, 0.00014, 0.00016, 0.00017,
     0.00019, 0.00022, 0.00024, 0.00027, 0.0003,  0.00034,

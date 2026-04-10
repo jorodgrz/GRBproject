@@ -21,11 +21,26 @@ MDISK_LONG = 0.1       # BHNS Long cbGRB disk mass threshold [Msun]
 M_TOV = 2.05            # Maximum non-rotating NS mass [Msun]
 M_THRESH = M_CRIT_BNS   # Alias: prompt-collapse threshold [Msun]
 Q_NO_DISK = 1.05        # Below this q, near-equal-mass prompt collapse suppresses disk
+# NOTE: The HMNS short/long-lived split used in the notebook is at
+# 1.2 * M_TOV ~ 2.46 M_sun (total baryonic remnant mass).  Gottlieb (2024)
+# discusses this near ~2.7 M_sun total *gravitational* mass (close to
+# M_THRESH).  The 1.2 * M_TOV choice is a convenient proxy; physically it
+# captures the concept that remnants significantly above M_TOV but below
+# M_THRESH collapse on viscous timescales rather than surviving long enough
+# to power an extended GRB engine.
 
 # ---------------------------------------------------------------------------
 # Remnant-to-disk fraction
 # ---------------------------------------------------------------------------
-F_DISK = 0.4            # Midrange estimate (Foucart 2012, Sec. VI; NR range ~1/3 to ~2/3)
+# F_DISK converts Foucart's total remnant baryon mass M_rem into accretion
+# disk mass: M_disk = F_DISK * M_rem.  Foucart (2012, Sec. VI) reports the
+# *total* remnant (disk + tidal tail + ejecta); the fraction that settles
+# into the disk depends on mass ratio and spin, with NR simulations showing
+# ~1/3 to ~2/3.  F_DISK = 0.4 is a midrange choice.  This is a significant
+# systematic: shifting to 0.3 or 0.5 moves many systems across the 0.01 and
+# 0.1 M_sun classification thresholds.  Use f_disk parameter in
+# foucart_disk_mass() for sensitivity sweeps.
+F_DISK = 0.4
 
 # ---------------------------------------------------------------------------
 # COMPAS simulation constants
@@ -69,8 +84,16 @@ def ns_radius(M_NS, R_1p4_km=12.0):
 
     R(M) = R_{1.4} * max(0.75, 1 - 0.25*(M - 1.4)^2)
 
-    Approximates a moderate-stiffness EOS (APR4/SLy family).
-    R_{1.4} = 12.0 km is consistent with NICER constraints.
+    Custom analytic approximation (not from a specific published EOS fit).
+    Captures the qualitative trend that heavier NS are more compact, with a
+    floor at 0.75*R_{1.4}.  R_{1.4} = 12.0 km is consistent with NICER
+    constraints (Miller+ 2021, Riley+ 2021).
+
+    Caveat: this underestimates the R(M) slope compared to actual EOS
+    tables.  For APR4, R drops ~16% from 1.4 to 2.0 M_sun; this formula
+    gives only ~5%.  The net effect is a slight overestimate of NS radius
+    (and therefore disk mass) for heavy NS.  For Foucart disk mass
+    calculations requiring EOS-specific accuracy, pass R_NS_km directly.
     """
     return R_1p4_km * np.maximum(0.75, 1.0 - 0.25 * (M_NS - 1.4)**2)
 
@@ -78,9 +101,10 @@ def ns_radius(M_NS, R_1p4_km=12.0):
 def mcrit_to_r14(mc):
     """Linear interpolation from M_crit [Msun] to R_{1.4} [km].
 
-    Based on APR4 (M_crit=2.46, R=11.9) and DD2 (M_crit=3.35, R=13.2).
+    Anchored at APR4 (M_crit=2.46, R_{1.4}=11.9 km) and
+    DD2 (M_crit=3.35, R_{1.4}=13.2 km).
     """
-    return 11.9 + (13.2 - 11.9) / (3.35 - 2.60) * (mc - 2.60)
+    return 11.9 + (13.2 - 11.9) / (3.35 - 2.46) * (mc - 2.46)
 
 
 # ---------------------------------------------------------------------------

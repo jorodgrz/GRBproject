@@ -128,6 +128,10 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
     m_tot = m1g + m2g
     q = np.where(m2g > 0, m1g / m2g, 999.0)
 
+    # ns_max sets the upper mass edge of the BNS region on the grid.
+    # M_TOV + 0.15 ~ 2.20 M_sun is a pragmatic buffer above the maximum
+    # gravitational mass, allowing for numerical/EOS uncertainty.
+    # If your COMPAS output has NS masses above this, increase accordingly.
     ns_max = m_tov + 0.15
 
     # BNS region
@@ -140,7 +144,9 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
     cls[is_bns & (m_tot >= m_thresh) & (q >= q_no_disk) & (q < q_thresh)] = 1
     cls[is_bns & (m_tot >= m_thresh) & (q < q_no_disk)] = 0
 
-    # BHNS region
+    # BHNS region: m2g > 0.8 M_sun floor excludes sub-NS-mass companions
+    # that would not form a realistic NS.  Adjust if your COMPAS sample
+    # includes ultra-low-mass or ECSN NS below this floor.
     is_bhns = (m1g > ns_max) & (m2g <= ns_max) & (m2g > 0.8)
     if np.any(is_bhns):
         md = foucart_disk_mass(m1g[is_bhns], m2g[is_bhns], a_BH=a_bh)
@@ -176,6 +182,10 @@ def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1,
     donor_type = np.where(first_is_primary, fc_mt_p1_K1,
                  np.where(first_is_secondary, fc_mt_s1_K2, -1))
 
+    # Case-A (donor_type 0 or 1) mass transfer routes straight to "Other".
+    # Broekgaarden et al. treat Case-A donors as a separate evolutionary
+    # pathway that does not fit cleanly into the CE/stable-MT hierarchy.
+    # This is a deliberate classification choice, not an omission.
     is_case_A = (donor_type == 0) | (donor_type == 1)
     had_CE    = (fc_CEE > 0)
 

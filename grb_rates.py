@@ -28,6 +28,11 @@ def compute_merger_rate(redshifts, times, time_first_SF, n_formed,
     The merger rate at z_merge equals the formation rate evaluated at the
     redshift when the binary was born (z_form corresponding to
     t = t(z_merge) - delay_time).
+
+    Important: ``n_formed`` must already contain the 1/MEAN_MASS_EVOLVED
+    normalisation.  Callers typically pass the output of
+    ``FastCosmicIntegration.find_sfrd()``, which includes this factor.
+    If you pass raw SFR values, divide by MEAN_MASS_EVOLVED first.
     """
     n_z           = len(redshifts)
     redshift_step = redshifts[1] - redshifts[0]
