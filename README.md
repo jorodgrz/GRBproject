@@ -9,15 +9,16 @@ This project applies the [Gottlieb et al. (2023)](https://arxiv.org/abs/2309.000
 
 ## Project Structure
 
-All analysis is consolidated in a single notebook backed by four reusable Python modules:
+All analysis is consolidated in a single notebook backed by five reusable Python modules:
 
 | File | Purpose |
 |---|---|
-| **`GRB_Main.ipynb`** | Main research notebook (20 sections, see below) |
+| **`GRB_Main.ipynb`** | Main research notebook (21 sections, see below) |
 | `grb_physics.py` | Core physics: Foucart disk mass, NS helpers, ISCO, EOS constants, Gottlieb thresholds |
 | `grb_classify.py` | Classification: BNS 2023/2024 schemes, BHNS Foucart, unified grid, formation channels |
 | `grb_rates.py` | Cosmic rates: MSSFR convolution, per-system weights, efficiency, spin marginalization |
 | `grb_io.py` | Data I/O: HDF5 loading (BNS/BHNS with channels and kicks), export helpers, plotting utilities |
+| `grb_offsets.py` | Host-galaxy offsets: Hernquist potential orbit integration, projected offset CDFs |
 
 Archived notebooks from earlier development are in `archive/`.
 
@@ -54,12 +55,13 @@ Archived notebooks from earlier development are in `archive/`.
 | 13. BHNS $\mathcal{R}(z)$ | ![](Plots/rate_bhns_spin_sensitivity.png) | BHNS merger rate with BH spin sensitivity envelope ($a = 0$ to $0.9$) |
 | 14. Combined Summary | ![](Plots/rate_combined_summary.png) | All BNS + BHNS rates on one axis, plus rate-weighted $M_\mathrm{tot}$ at $z = 0$ vs $z = 2$ |
 
-### Part IV: Kinematic Offsets (Sections 15 to 16)
+### Part IV: Kinematic Offsets (Sections 15 to 16b)
 
 | Section | Plot | Description |
 |---|---|---|
 | 15. Systemic Velocities | ![](Plots/systemic_velocity_distributions.png) | Post-SN $v_\mathrm{sys}$ distributions by GRB class (BNS vs BHNS) |
-| 16. Projected Offsets | ![](Plots/projected_offsets.png) | Cumulative offset CDFs ($v_\mathrm{sys} \times t_\mathrm{delay}$) for merger site predictions |
+| 16. Ballistic Travel Distance | ![](Plots/ballistic_travel_distance.png) | Ballistic upper-bound travel distance CDFs ($v_\mathrm{sys} \times t_\mathrm{delay}$) |
+| 16b. Physical Offsets | ![](Plots/projected_offsets.png) | Orbit-integrated projected offsets using Hernquist galaxy potential, with observed SGRB/lGRB-KN data |
 
 ### Part V: Parameter Space Exploration (Sections 17 to 19)
 
@@ -132,6 +134,9 @@ python -m ipykernel install --user --name grb-env --display-name "GRB (grb-env)"
 - Wanderman and Piran (2010): Long GRB rate and luminosity function
 - Fuller and Ma (2019): Natal BH spins in isolated binaries
 - Rastinejad et al. (2025): Merger-driven long GRBs and asymmetric compact object binaries
+- Hernquist (1990): Analytical model for spherical galaxies and bulges
+- Bloom et al. (1999): Host galaxy offset distributions for gamma-ray bursts
+- Fong and Berger (2013): Short GRB host galaxies and offsets
 
 ---
 

@@ -31,7 +31,7 @@ def compute_merger_rate(redshifts, times, time_first_SF, n_formed,
 
     Important: ``n_formed`` must already contain the 1/MEAN_MASS_EVOLVED
     normalisation.  Callers typically pass the output of
-    ``FastCosmicIntegration.find_sfrd()``, which includes this factor.
+    ``FastCosmicIntegration.find_sfr()``, which includes this factor.
     If you pass raw SFR values, divide by MEAN_MASS_EVOLVED first.
     """
     n_z           = len(redshifts)
@@ -216,3 +216,81 @@ def mcrit_sweep(M_tot, q, w_all, M_crit_range=None, q_thresh=1.2):
 
     return (np.array(frac_I), np.array(frac_II), np.array(frac_L),
             M_crit_range)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Beaming correction
+# ═══════════════════════════════════════════════════════════════════════════
+def beamed_rate(rate_intrinsic, theta_j_deg):
+    """Convert intrinsic merger rate to observer-frame GRB rate.
+
+    f_beam = 1 - cos(theta_j) is the fraction of the sky subtended
+    by the two-sided jet cone.  Typical sGRB jets have theta_j ~ 10-16 deg
+    (Fong+ 2015, ApJ 815, 102; Beniamini & Nakar 2019, MNRAS 482, 5430),
+    giving f_beam ~ 0.015-0.04 (i.e. only ~2-4% of jets are visible).
+
+    Parameters
+    ----------
+    rate_intrinsic : float or array
+        Intrinsic (all-sky) merger rate density [Gpc^-3 yr^-1].
+    theta_j_deg : float
+        Half-opening angle of the jet [degrees].
+
+    Returns
+    -------
+    Observable rate density [Gpc^-3 yr^-1].
+    """
+    theta_j = np.radians(theta_j_deg)
+    f_beam = 1.0 - np.cos(theta_j)
+    return rate_intrinsic * f_beam
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Observed sGRB rate reference data
+# ═══════════════════════════════════════════════════════════════════════════
+# All rates are *observed* (beaming-limited) local values [Gpc^-3 yr^-1].
+OBSERVED_SGRB_RATES = {
+    'Wanderman & Piran 2015': {
+        'R_obs': 4.1, 'R_obs_lo': 2.2, 'R_obs_hi': 6.4,
+        'note': 'MNRAS 448, 3026; intrinsic ~270 at theta_j ~10 deg',
+    },
+    'Ghirlanda+ 2016': {
+        'R_obs': 1.3, 'R_obs_lo': 0.5, 'R_obs_hi': 3.0,
+        'note': 'A&A 594, A84; Fermi/GBM, intrinsic ~200-700 after beaming',
+    },
+    'Colombo+ 2022': {
+        'R_obs': 3.6, 'R_obs_lo': 1.8, 'R_obs_hi': 6.5,
+        'note': 'ApJ 937, 79; Fermi/GBM update',
+    },
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Observed sGRB rate vs redshift: Wanderman & Piran (2015)
+# ═══════════════════════════════════════════════════════════════════════════
+def wanderman_piran_2015_Rz(z, R0=4.1, n1=1.7, n2=-0.6, z_peak=0.9,
+                             R0_lo=2.2, R0_hi=6.4):
+    """Observed sGRB rate density vs redshift from Wanderman & Piran (2015).
+
+    Broken power-law fit from MNRAS 448, 3026, Table 2:
+        R(z) = R0 * (1+z)^n1          for z <= z_peak
+        R(z) = R0 * A * (1+z)^n2      for z > z_peak
+    where A = (1+z_peak)^(n1-n2) ensures continuity at z_peak.
+
+    Best-fit parameters: R0 ~ 4.1 +2.3/-1.9 Gpc^-3 yr^-1 (observed,
+    beaming-limited), n1 = 1.7 +0.5/-0.4, z_peak ~ 0.9, n2 ~ -0.6.
+
+    Returns dict with 'R_best', 'R_lo', 'R_hi' arrays (same shape as z).
+    """
+    z = np.asarray(z, dtype=float)
+    A = (1.0 + z_peak) ** (n1 - n2)
+
+    R_shape = np.where(z <= z_peak,
+                       (1.0 + z) ** n1,
+                       A * (1.0 + z) ** n2)
+
+    return {
+        'R_best': R0 * R_shape,
+        'R_lo':   R0_lo * R_shape,
+        'R_hi':   R0_hi * R_shape,
+    }
