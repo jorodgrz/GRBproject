@@ -4,8 +4,36 @@ Shared physics functions for GRB classification from compact binary mergers.
 Foucart et al. (2018) remnant mass formula, Kruger & Foucart (2020)
 dynamical ejecta fits, NS equation-of-state helpers, and
 Gottlieb et al. (2023, 2024) classification thresholds.
+
+Cosmology
+---------
+Throughout this pipeline we adopt the same cosmological parameters used
+by COMPAS ``FastCosmicIntegration`` (Planck 2015 / TNG-consistent):
+  H0 = 67.74 km/s/Mpc,  Omega_m = 0.3089,  Omega_Lambda = 0.6911
+All lookback-time ↔ redshift conversions, comoving volumes, and SFR
+integrals use these values.  Mixing with Planck 2018 parameters would
+introduce ~2% inconsistencies at high z.
+
+Supernova engine
+----------------
+The COMPAS simulations (Broekgaarden et al. 2021, Model A and K) use the
+Fryer et al. (2012) *rapid* supernova explosion mechanism.  This produces
+a narrow NS mass distribution peaked near 1.26–1.28 M_sun with a gap
+around 2–5 M_sun.  The delayed mechanism yields broader NS masses and a
+less pronounced mass gap, which would shift GRB class fractions
+(especially the sbGRB + blue KN boundary at 1.2 × M_TOV).
+
+Jet efficiency caveat
+---------------------
+All disk-mass-based GRB classifications assume 100% jet launching
+efficiency above the disk-mass threshold.  In reality, the jet must
+break out of the merger ejecta and the disk must reach the MAD
+(magnetically arrested disk) state on a timescale shorter than the
+accretion time (Gottlieb 2023).  Predicted GRB fractions and rates
+should therefore be interpreted as *upper bounds*.
 """
 
+import warnings
 import numpy as np
 
 # ---------------------------------------------------------------------------
@@ -24,8 +52,11 @@ M_TOV = 2.2             # Maximum non-rotating NS mass [Msun]
                          # NICER + GW + KN analysis: M_TOV = 2.23 +0.14/-0.23 (PP)
                          # and 2.11 +0.29/-0.16 (CS).  2.2 is a central estimate.
 M_THRESH = M_CRIT_BNS   # Alias: prompt-collapse threshold [Msun]
-                         # M_THRESH / M_TOV ~ 1.27 here; literature range is
-                         # ~1.3-1.7 (Bauswein+ 2013, 2020; Koppel+ 2019).
+                         # M_THRESH / M_TOV ~ 1.27 here.  Bauswein+ 2013, 2020
+                         # and Koppel+ 2019 find ratios ~1.3-1.7 across EOSs;
+                         # the fiducial 2.8 Msun is from Gottlieb+ 2023 and sits
+                         # slightly below the NR-derived range.  See Section 17
+                         # for the full EOS sensitivity analysis.
 Q_NO_DISK = 1.05        # Below this q, near-equal-mass prompt collapse suppresses disk
 # NOTE: The HMNS short/long-lived split used in the notebook is at
 # 1.2 * M_TOV ~ 2.64 M_sun (total gravitational mass).  Gottlieb (2024)
@@ -45,16 +76,19 @@ F_DISK = 0.4
 # ---------------------------------------------------------------------------
 # COMPAS simulation constants
 # ---------------------------------------------------------------------------
-MEAN_MASS_EVOLVED = 77708655  # M_sun formed per simulation; Kroupa IMF, 5-150 Msun primaries
+MEAN_MASS_EVOLVED = 77708655  # DEPRECATED — do not use for rate normalization.
+# Each simulation (BNS, BHNS) has its own total evolved mass.
+# Use calibrate_mean_mass_evolved() from grb_rates to derive per-population values.
 
 # ---------------------------------------------------------------------------
 # EOS reference models
 # ---------------------------------------------------------------------------
 # M_crit : BNS prompt-collapse total-mass threshold [Msun]
-# R_1p4  : NS radius at 1.4 Msun [km]  (Read et al. 2008, Table III)
-# M_TOV  : maximum non-rotating NS mass [Msun]  (Read et al. 2008)
+#          Bauswein et al. (2013, arXiv:1307.5191) Table I
+# R_1p4  : NS radius at 1.4 Msun [km]  (Read et al. 2009, Table III)
+# M_TOV  : maximum non-rotating NS mass [Msun]  (Read et al. 2009)
 EOS_MODELS = {
-    'APR4':  {'M_crit': 2.46, 'R_1p4': 11.1, 'M_TOV': 2.20},
+    'APR4':  {'M_crit': 2.88, 'R_1p4': 11.1, 'M_TOV': 2.20},
     'SFHo':  {'M_crit': 2.60, 'R_1p4': 11.9, 'M_TOV': 2.06},
     'LS220': {'M_crit': 2.72, 'R_1p4': 12.7, 'M_TOV': 2.04},
     'DD2':   {'M_crit': 3.35, 'R_1p4': 13.2, 'M_TOV': 2.42},
@@ -88,10 +122,14 @@ def ns_baryon_mass(M_NS):
 
 
 def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
-    """Mass-dependent NS radius [km].
+    """Mass-dependent NS radius [km] (heuristic model).
 
-    Asymmetric profile calibrated to the qualitative behaviour of
-    tabulated EOS (APR4, SFHo, DD2) from Read et al. (2008, Table III):
+    Phenomenological interpolation NOT derived from a specific EOS table.
+    The cubic suppression R = R_1p4*(1 - 0.15*x^3) is tuned to the
+    qualitative shape of tabulated EOSs (APR4, SFHo, DD2) but can
+    differ from individual EOSs by up to ~5-10% near M_TOV.
+
+    Qualitative behaviour:
       - Nearly flat plateau from ~1.0 to ~1.6 Msun
       - Steepening drop approaching M_TOV (~15% below R_1.4)
       - No neutron star above M_TOV (returns NaN)
@@ -99,8 +137,9 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     R_1p4_km = 12.0 km is consistent with NICER + GW170817 constraints
     (Raaijmakers et al. 2021: R_1.4 = 12.18 +0.56/-0.79 km, CS model).
 
-    For calculations requiring EOS-specific accuracy, pass R_NS_km
-    directly to foucart_disk_mass() instead.
+    For production-quality EOS-specific calculations, pass R_NS_km
+    directly to foucart_disk_mass() using the R_1p4 value from
+    EOS_MODELS, or supply a full R(M) table.
     """
     if M_TOV_local is None:
         M_TOV_local = M_TOV
@@ -142,10 +181,24 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0):
 
     Returns the *total* baryon mass outside the BH after merger (disk +
     tidal tail + dynamical ejecta), **not** the disk mass alone.
+
+    Calibrated for Q in [1, 7], chi_BH in [-0.5, 0.97],
+    C_NS in [0.13, 0.182].  A warning is emitted when Q > 7.
     """
+    M_BH_a = np.asarray(M_BH, dtype=float)
+    M_NS_a = np.asarray(M_NS, dtype=float)
+    Q = M_BH_a / M_NS_a
+    if np.any(Q > 7.0):
+        n_extrap = int(np.sum(Q > 7.0))
+        warnings.warn(
+            f"Foucart (2018) formula applied to {n_extrap} systems with "
+            f"Q > 7 (max Q={float(np.max(Q)):.1f}); "
+            f"calibrated for Q in [1, 7]",
+            stacklevel=2)
+
     R_km = R_NS_km if R_NS_km is not None else ns_radius(M_NS, R_1p4_km=R_1p4_km)
     C_NS = _compactness(M_NS, R_km)
-    eta = M_NS * M_BH / (M_NS + M_BH)**2
+    eta = M_NS_a * M_BH_a / (M_NS_a + M_BH_a)**2
     R_hat = r_isco(a_BH)
 
     alpha, beta, gamma, delta = 0.406, 0.139, 0.255, 1.761
@@ -218,3 +271,41 @@ def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
     M_dyn = bhns_dynamical_ejecta(M_BH, M_NS, a_BH,
                                    R_NS_km=R_NS_km, R_1p4_km=R_1p4_km)
     return np.maximum(0.0, M_rem - M_dyn)
+
+
+# ---------------------------------------------------------------------------
+# BH spin misalignment (Issue 5)
+# ---------------------------------------------------------------------------
+def effective_aligned_spin(a_BH, theta_tilt):
+    """Project BH spin onto the orbital angular momentum axis.
+
+    Kawaguchi et al. (2015) NR simulations show that the Foucart remnant
+    mass formula (derived for aligned spins) overestimates disk mass when
+    the BH spin is misaligned.  The disk mass drops to near zero for
+    misalignment angles > 50–60 deg.
+
+    Parameters
+    ----------
+    a_BH : float or array
+        Dimensionless BH spin magnitude.
+    theta_tilt : float or array
+        Angle between BH spin and orbital angular momentum [rad].
+
+    Returns
+    -------
+    a_eff : float or array
+        Effective aligned spin component (clipped to >= 0).
+    """
+    return np.maximum(0.0, np.asarray(a_BH) * np.cos(np.asarray(theta_tilt)))
+
+
+MISALIGNMENT_SYSTEMATIC_FACTOR = 0.5
+"""Population-averaged reduction in BHNS GRB fractions from spin-orbit
+misalignment.  Pop-synth suggests ~50% of BHNS systems have
+misalignment > 45 deg (Fragos+ 2010; Gerosa+ 2018).  This is a rough
+factor-of-2 correction flagged as a systematic uncertainty.
+
+For per-system treatment when individual tilt angles are available,
+use ``effective_aligned_spin(a_BH, theta_tilt)`` to project the BH
+spin onto the orbital angular momentum axis and pass the result as
+``a_BH`` to the Foucart disk-mass formula."""

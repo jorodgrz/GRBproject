@@ -18,6 +18,29 @@ DEFAULT_BNS_K_PATH = os.path.join(_DATA_DIR, 'COMPASCompactOutput_BNS_K.h5')
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Simulation metadata
+# ═══════════════════════════════════════════════════════════════════════════
+def read_expected_local_rate(path):
+    """Read the pre-computed local (z=0) intrinsic merger rate from a
+    Broekgaarden et al. COMPAS HDF5 file.
+
+    Returns the sum of the ``weights_intrinsic/w_000`` column, which
+    represents the fiducial-model merger rate density at z = 0 in
+    Gpc^-3 yr^-1.  This value is used to calibrate the per-population
+    ``MEAN_MASS_EVOLVED`` normalization constant.
+    """
+    with h5.File(path, 'r') as f:
+        return float(f['weights_intrinsic']['w_000'][...].sum())
+
+
+def read_metallicity_range(path):
+    """Return (Z_min, Z_max) of birth metallicities in the HDF5 file."""
+    with h5.File(path, 'r') as f:
+        Z = f['systems']['Metallicity1'][...].squeeze()
+    return float(Z.min()), float(Z.max())
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # BNS data loading
 # ═══════════════════════════════════════════════════════════════════════════
 def load_bns(path=None, sort_masses=True):
@@ -318,6 +341,8 @@ def _match_sn_to_dco(f):
 
     The supernovae group has two rows per system (one per SN).
     We take the LAST SN event per seed (the 2nd SN that forms the DCO).
+
+    Vectorized with numpy for performance on large populations.
     """
     sn = f['supernovae']
     sn_seed = sn['randomSeed'][...].squeeze()
@@ -328,16 +353,19 @@ def _match_sn_to_dco(f):
     dco_seed_key = 'seed' if 'seed' in dco else 'm_randomSeed'
     dco_seed = dco[dco_seed_key][...].squeeze()
 
-    vsys_out = np.full(len(dco_seed), np.nan)
-    seed_to_vsys = {}
-    for i in range(len(sn_seed)):
-        s = sn_seed[i]
-        if s not in seed_to_vsys or sn_time[i] > seed_to_vsys[s][1]:
-            seed_to_vsys[s] = (sn_vsys[i], sn_time[i])
+    order = np.lexsort((sn_time, sn_seed))
+    sn_seed_s = sn_seed[order]
+    sn_vsys_s = sn_vsys[order]
 
-    for i, s in enumerate(dco_seed):
-        if s in seed_to_vsys:
-            vsys_out[i] = seed_to_vsys[s][0]
+    u_seeds, first_rev = np.unique(sn_seed_s[::-1], return_index=True)
+    last_idx = len(sn_seed_s) - 1 - first_rev
+    last_vsys = sn_vsys_s[last_idx]
+
+    vsys_out = np.full(len(dco_seed), np.nan)
+    match = np.searchsorted(u_seeds, dco_seed)
+    match_clipped = np.clip(match, 0, len(u_seeds) - 1)
+    found = (match < len(u_seeds)) & (u_seeds[match_clipped] == dco_seed)
+    vsys_out[found] = last_vsys[match_clipped[found]]
 
     return vsys_out
 

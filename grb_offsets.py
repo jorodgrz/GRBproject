@@ -15,6 +15,7 @@ Typical usage
 
 import numpy as np
 from scipy.integrate import solve_ivp
+from scipy.optimize import brentq
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Constants
@@ -28,6 +29,26 @@ KM_CM = 1e5                 # cm
 # Default host galaxy: typical SGRB host (Fong & Berger 2013)
 DEFAULT_M_GAL = 10**10.5 * MSUN_G          # stellar mass [g]
 DEFAULT_R_E = 5.0 * KPC_CM                 # effective radius [cm]
+
+# Representative host galaxy types (Fong & Berger 2013).
+# sGRB hosts: ~75% star-forming, ~25% elliptical.
+HOST_MODELS = {
+    'SF_disk': {
+        'M_gal': 10**9.8 * MSUN_G,
+        'R_e': 3.6 * KPC_CM,
+        'weight': 0.50,
+    },
+    'SF_massive': {
+        'M_gal': 10**10.5 * MSUN_G,
+        'R_e': 5.0 * KPC_CM,
+        'weight': 0.25,
+    },
+    'Elliptical': {
+        'M_gal': 10**11.0 * MSUN_G,
+        'R_e': 8.0 * KPC_CM,
+        'weight': 0.25,
+    },
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -45,6 +66,33 @@ def hernquist_scale_radius(R_e):
     the projected relation is the correct one to use here.
     """
     return R_e / 1.8153
+
+
+def hernquist_birth_radius(a, rng=None, size=1):
+    """Draw birth radii from the Hernquist stellar density profile.
+
+    The enclosed mass fraction is M(<r)/M_tot = (r/(r+a))^2, so the
+    inverse CDF gives r = a * sqrt(u) / (1 - sqrt(u)) for uniform
+    u in [0, 1).  Clipped at 20*a to avoid rare extreme draws.
+
+    Parameters
+    ----------
+    a : float
+        Hernquist scale radius [same units as output].
+    rng : np.random.Generator, optional
+    size : int
+        Number of samples.
+
+    Returns
+    -------
+    r_birth : array of shape (size,)
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    u = rng.uniform(0, 1, size=size)
+    su = np.sqrt(u)
+    r = a * su / (1.0 - su)
+    return np.minimum(r, 20.0 * a)
 
 
 def hernquist_potential(r, M_gal, a):
@@ -77,7 +125,7 @@ def _orbit_rhs(t, y, M_gal, a):
     return [drdt, dvrdt, dLdt]
 
 
-def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=0.5,
+def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=None,
                     theta_launch=None, rng=None):
     """Integrate a single orbit in Hernquist potential.
 
@@ -91,8 +139,10 @@ def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=0.5,
         Galaxy mass [g].
     a : float
         Hernquist scale radius [cm].
-    r0 : float
-        Launch radius as fraction of scale radius (birthplace offset from center).
+    r0 : float or None
+        Launch radius as fraction of scale radius.  If None (default),
+        draws from the Hernquist stellar density profile via inverse-CDF
+        sampling so that birth sites trace the galaxy light.
     theta_launch : float or None
         Angle between kick velocity and radial direction [rad].
         None (default) draws isotropically from arccos(U(-1,1)),
@@ -105,7 +155,12 @@ def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=0.5,
     r_final : float
         Galactocentric distance at merger [cm].
     """
-    r_init = r0 * a
+    if r0 is None:
+        if rng is None:
+            rng = np.random.default_rng()
+        r_init = hernquist_birth_radius(a, rng=rng, size=1)[0]
+    else:
+        r_init = r0 * a
 
     if v_sys_cm <= 0 or t_delay_s <= 0:
         return r_init
@@ -180,20 +235,41 @@ def compute_offset_single(v_sys_km, t_delay_myr, M_gal=DEFAULT_M_GAL,
 # ═══════════════════════════════════════════════════════════════════════════
 # Analytic bound-orbit approximation (fast path)
 # ═══════════════════════════════════════════════════════════════════════════
-def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=0.5, rng=None):
+def _hernquist_apocenter(E, L, M_gal, a):
+    """Find the apocenter of a bound orbit in a Hernquist potential.
+
+    Solves E = L^2/(2*r^2) - GM/(r+a) for the outer turning point
+    where the radial velocity vanishes.
+    """
+    GM = G_CGS * M_gal
+
+    def eff_potential_minus_E(r):
+        return 0.5 * L**2 / r**2 - GM / (r + a) - E
+
+    try:
+        return brentq(eff_potential_minus_E, 1e-3 * a, 200.0 * a)
+    except ValueError:
+        return 20.0 * a
+
+
+def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
     """Fast analytic estimate of 3D galactocentric distance at merger.
 
     For bound orbits in a Hernquist potential, uses energy and angular
-    momentum conservation to find the orbital period and apocenter,
-    then estimates the time-averaged radius.  Falls back to full
-    integration for unbound orbits.
+    momentum conservation to find the apocenter via root-finding in the
+    true Hernquist effective potential, then estimates the time-averaged
+    radius.  Falls back to full integration for unbound orbits and
+    short-delay systems.
 
     Returns r_3d [cm].
     """
     if rng is None:
         rng = np.random.default_rng()
 
-    r0 = r0_frac * a
+    if r0_frac is None:
+        r0 = hernquist_birth_radius(a, rng=rng, size=1)[0]
+    else:
+        r0 = r0_frac * a
     v_cm = v_sys_km * KM_CM
     t_s = t_delay_myr * MYR_S
 
@@ -204,7 +280,8 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=0.5, rng=None):
     v_esc = escape_velocity(r0, M_gal, a)
 
     if v_cm >= v_esc:
-        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_frac, rng=rng)
+        r0_f = r0 / a
+        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f, rng=rng)
 
     theta_launch = np.arccos(rng.uniform(-1, 1))
     vr = v_cm * np.cos(theta_launch)
@@ -212,19 +289,17 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=0.5, rng=None):
     L = r0 * vt
 
     GM = G_CGS * M_gal
-    E_neg = -E
 
-    r_peri_plus_apo = GM / E_neg
-    r_apo = min(r_peri_plus_apo, 20.0 * a)
-
+    r_apo = _hernquist_apocenter(E, L, M_gal, a)
     r_mean = (r0 + r_apo) / 2.0
 
     P_est = 2.0 * np.pi * np.sqrt(r_mean**3 / GM) * (1 + a / r_mean)
 
-    if t_s > 3.0 * P_est:
+    if t_s > 5.0 * P_est:
         return r_mean
     else:
-        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_frac, rng=rng)
+        r0_f = r0 / a
+        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f, rng=rng)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -304,6 +379,148 @@ def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
         'offsets_kpc': offsets,
         'indices': valid_idx,
         'weights_sub': w_valid,
+    }
+
+
+def compute_offsets_mixed_hosts(v_sys_km, t_delay_myr, weights=None,
+                                host_models=None, max_systems=50000,
+                                rng=None, **kw):
+    """Compute offsets for a population using a mixture of host galaxy types.
+
+    A single shared subsample is drawn once and then each host potential
+    is evaluated on the *same* set of binaries, avoiding inconsistent
+    subsampling across galaxy types.
+
+    Parameters
+    ----------
+    host_models : dict, optional
+        Keys are host names, values are dicts with ``M_gal``, ``R_e``,
+        and ``weight`` (mixture fraction, should sum to 1).
+        Defaults to ``HOST_MODELS``.
+    max_systems : int
+        Maximum population size (weight-based subsample if exceeded).
+    rng : np.random.Generator, optional
+
+    Returns
+    -------
+    dict with keys:
+        'per_host' : {name: compute_offsets_population result}
+        'mixed_offsets' : combined offset array
+        'mixed_weights' : combined weight array (including host mixture)
+    """
+    if host_models is None:
+        host_models = HOST_MODELS
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    v = np.asarray(v_sys_km, dtype=float)
+    t = np.asarray(t_delay_myr, dtype=float)
+    valid = np.isfinite(v) & np.isfinite(t) & (v > 0) & (t > 0)
+    valid_idx = np.where(valid)[0]
+    if weights is not None:
+        w_valid = np.asarray(weights, dtype=float)[valid_idx]
+    else:
+        w_valid = np.ones(len(valid_idx))
+
+    if len(valid_idx) > max_systems:
+        p = w_valid / w_valid.sum()
+        chosen = rng.choice(len(valid_idx), size=max_systems,
+                            replace=False, p=p)
+        valid_idx = valid_idx[chosen]
+        w_valid = w_valid[chosen]
+
+    per_host = {}
+    all_off, all_w = [], []
+    for name, hp in host_models.items():
+        res = compute_offsets_population(
+            v[valid_idx], t[valid_idx], weights=w_valid,
+            M_gal=hp['M_gal'], R_e=hp['R_e'],
+            max_systems=len(valid_idx), rng=rng, **kw)
+        per_host[name] = res
+        all_off.append(res['offsets_kpc'])
+        all_w.append(res['weights_sub'] * hp['weight'])
+
+    return {
+        'per_host': per_host,
+        'mixed_offsets': np.concatenate(all_off),
+        'mixed_weights': np.concatenate(all_w),
+    }
+
+
+def assign_host_by_delay(t_delay_myr, t_sf_max=3000.0):
+    """Assign each binary to a host galaxy type based on delay time.
+
+    Short delay (< *t_sf_max* Myr) systems are placed in star-forming
+    hosts (split between SF_disk and SF_massive with 2:1 ratio).
+    Long delay systems go to elliptical hosts.  This connects GRB class
+    properties (delay time tracks M_tot) to host type, following the
+    observation from Fong & Berger (2013) that ~25% of sGRBs are in
+    elliptical hosts with older stellar populations.
+
+    Returns
+    -------
+    host_assignment : array of str
+        Host model key per system ('SF_disk', 'SF_massive', 'Elliptical').
+    """
+    t = np.asarray(t_delay_myr)
+    out = np.full(len(t), 'Elliptical', dtype='<U12')
+    sf_mask = t < t_sf_max
+    n_sf = sf_mask.sum()
+    rng = np.random.default_rng(42)
+    disk_frac = rng.random(n_sf) < 0.67
+    out[sf_mask] = np.where(disk_frac, 'SF_disk', 'SF_massive')
+    return out
+
+
+def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
+                                t_sf_max=3000.0, host_models=None, **kw):
+    """Compute offsets with delay-time-dependent host assignment.
+
+    Each system is assigned a host type via ``assign_host_by_delay``,
+    then its offset is computed in the corresponding galaxy potential.
+
+    Returns
+    -------
+    dict with 'offsets_kpc', 'weights_sub', 'host_assignments'.
+    """
+    if host_models is None:
+        host_models = HOST_MODELS
+    rng = kw.pop('rng', None)
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    v = np.asarray(v_sys_km, dtype=float)
+    t = np.asarray(t_delay_myr, dtype=float)
+    hosts = assign_host_by_delay(t, t_sf_max=t_sf_max)
+
+    valid = np.isfinite(v) & np.isfinite(t) & (v > 0) & (t > 0)
+    valid_idx = np.where(valid)[0]
+    if weights is not None:
+        w_valid = np.asarray(weights, dtype=float)[valid_idx]
+    else:
+        w_valid = np.ones(len(valid_idx))
+
+    max_systems = kw.pop('max_systems', 50000)
+    if len(valid_idx) > max_systems:
+        p = w_valid / w_valid.sum()
+        chosen = rng.choice(len(valid_idx), size=max_systems, replace=False, p=p)
+        valid_idx = valid_idx[chosen]
+        w_valid = w_valid[chosen]
+
+    offsets = np.zeros(len(valid_idx))
+    n_proj = 8
+    for i, idx in enumerate(valid_idx):
+        hp = host_models[hosts[idx]]
+        a_host = hernquist_scale_radius(hp['R_e'])
+        r_3d = _analytic_offset(v[idx], t[idx], hp['M_gal'], a_host, rng=rng)
+        cos_th = rng.uniform(-1, 1, size=n_proj)
+        projected = r_3d * np.sqrt(1.0 - cos_th**2)
+        offsets[i] = np.median(projected) / KPC_CM
+
+    return {
+        'offsets_kpc': offsets,
+        'weights_sub': w_valid,
+        'host_assignments': hosts[valid_idx],
     }
 
 

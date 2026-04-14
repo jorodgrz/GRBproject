@@ -119,10 +119,11 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
     -------
     0 = No GRB / No KN   (no disk)
     1 = Faint lbGRB + red KN  (small disk, BH engine)
-    2 = lbGRB + red KN   (massive disk / short-lived HMNS, BNS)
+    2 = lbGRB + red KN   (short-lived HMNS, BNS)
     3 = sbGRB + blue KN  (long-lived HMNS, BNS)
     4 = lbGRB + red KN   (BHNS, massive disk Md >= 0.1)
     5 = Faint lbGRB + red KN  (BHNS, 0.01 <= Md < 0.1)
+    6 = lbGRB + red KN   (BNS prompt collapse, massive disk q >= q_thresh)
     """
     cls = np.full_like(m1g, 0, dtype=int)
     m_tot = m1g + m2g
@@ -140,7 +141,7 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
 
     cls[is_bns & (m_tot < hmns_split)] = 3
     cls[is_bns & (m_tot >= hmns_split) & (m_tot < m_thresh)] = 2
-    cls[is_bns & (m_tot >= m_thresh) & (q >= q_thresh)] = 2
+    cls[is_bns & (m_tot >= m_thresh) & (q >= q_thresh)] = 6
     cls[is_bns & (m_tot >= m_thresh) & (q >= q_no_disk) & (q < q_thresh)] = 1
     cls[is_bns & (m_tot >= m_thresh) & (q < q_no_disk)] = 0
 
