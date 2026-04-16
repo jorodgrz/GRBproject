@@ -108,6 +108,17 @@ def classify_bhns_spins(M_BH, M_NS, spins=(0.0, 0.3, 0.5, 0.7, 0.9), **kw):
 # ═══════════════════════════════════════════════════════════════════════════
 # Unified mass-plane grid classifier (Gottlieb 2024 hybrid)
 # ═══════════════════════════════════════════════════════════════════════════
+GRID_CLASS_LABELS = {
+    0: 'No GRB / No KN',
+    1: 'Faint lbGRB (BNS)',
+    2: 'lbGRB + red KN (HMNS)',
+    3: 'sbGRB + blue KN',
+    4: 'lbGRB + red KN (BNS disk)',
+    5: 'Faint lbGRB (BHNS)',
+    6: 'lbGRB + red KN (BHNS disk)',
+}
+
+
 def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
                   q_thresh=Q_THRESH_BNS, a_bh=0.5, q_no_disk=Q_NO_DISK):
     """Return an integer class map on a (M1, M2) grid.
@@ -115,15 +126,18 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
     2024 Gottlieb hybrid model: all BH-powered jets produce lbGRBs;
     only long-lived HMNS (NS engine) produces sbGRBs.
 
-    Classes
-    -------
-    0 = No GRB / No KN   (no disk)
-    1 = Faint lbGRB + red KN  (small disk, BH engine)
-    2 = lbGRB + red KN   (short-lived HMNS, BNS)
-    3 = sbGRB + blue KN  (long-lived HMNS, BNS)
-    4 = lbGRB + red KN   (BHNS, massive disk Md >= 0.1)
-    5 = Faint lbGRB + red KN  (BHNS, 0.01 <= Md < 0.1)
-    6 = lbGRB + red KN   (BNS prompt collapse, massive disk q >= q_thresh)
+    Classes (grouped by physical hierarchy; see ``GRID_CLASS_LABELS``):
+
+        BNS region:
+        0 = No GRB / No KN        (near-equal-mass prompt collapse, no disk)
+        1 = Faint lbGRB + red KN  (prompt collapse, small disk)
+        2 = lbGRB + red KN        (short-lived HMNS, BNS)
+        3 = sbGRB + blue KN       (long-lived HMNS, BNS)
+        4 = lbGRB + red KN        (BNS prompt collapse, massive disk q >= q_thresh)
+
+        BHNS region:
+        5 = Faint lbGRB + red KN  (BHNS, 0.01 <= Md < 0.1)
+        6 = lbGRB + red KN        (BHNS, massive disk Md >= 0.1)
     """
     cls = np.full_like(m1g, 0, dtype=int)
     m_tot = m1g + m2g
@@ -141,7 +155,7 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
 
     cls[is_bns & (m_tot < hmns_split)] = 3
     cls[is_bns & (m_tot >= hmns_split) & (m_tot < m_thresh)] = 2
-    cls[is_bns & (m_tot >= m_thresh) & (q >= q_thresh)] = 6
+    cls[is_bns & (m_tot >= m_thresh) & (q >= q_thresh)] = 4
     cls[is_bns & (m_tot >= m_thresh) & (q >= q_no_disk) & (q < q_thresh)] = 1
     cls[is_bns & (m_tot >= m_thresh) & (q < q_no_disk)] = 0
 
@@ -152,7 +166,7 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
     if np.any(is_bhns):
         md = foucart_disk_mass(m1g[is_bhns], m2g[is_bhns], a_BH=a_bh)
         bhns_cls = np.zeros_like(md, dtype=int)
-        bhns_cls[md >= MDISK_LONG] = 4
+        bhns_cls[md >= MDISK_LONG] = 6
         bhns_cls[(md >= MDISK_SHORT) & (md < MDISK_LONG)] = 5
         cls[is_bhns] = bhns_cls
 

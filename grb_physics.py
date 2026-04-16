@@ -76,9 +76,7 @@ F_DISK = 0.4
 # ---------------------------------------------------------------------------
 # COMPAS simulation constants
 # ---------------------------------------------------------------------------
-MEAN_MASS_EVOLVED = 77708655  # DEPRECATED — do not use for rate normalization.
-# Each simulation (BNS, BHNS) has its own total evolved mass.
-# Use calibrate_mean_mass_evolved() from grb_rates to derive per-population values.
+_MEAN_MASS_EVOLVED_VALUE = 77708655
 
 # ---------------------------------------------------------------------------
 # EOS reference models
@@ -137,9 +135,15 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     R_1p4_km = 12.0 km is consistent with NICER + GW170817 constraints
     (Raaijmakers et al. 2021: R_1.4 = 12.18 +0.56/-0.79 km, CS model).
 
-    For production-quality EOS-specific calculations, pass R_NS_km
-    directly to foucart_disk_mass() using the R_1p4 value from
-    EOS_MODELS, or supply a full R(M) table.
+    Quantitative comparison at M_NS = 1.4 Msun with default R_1p4_km:
+      - This heuristic: 12.0 km (by construction)
+      - APR4: 11.1 km  |  SFHo: 11.9 km  |  DD2: 13.2 km
+    The ~10% spread in R propagates as ~10% in compactness C_NS, which
+    can shift disk masses near the MDISK_SHORT/MDISK_LONG thresholds.
+
+    For EOS-consistent calculations, use ``ns_radius_from_eos()`` or
+    pass R_NS_km directly to ``foucart_disk_mass()`` with the R_1p4
+    value from ``EOS_MODELS``.
     """
     if M_TOV_local is None:
         M_TOV_local = M_TOV
@@ -149,6 +153,23 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     R = np.where(M_NS > M_TOV_local, np.nan, R)
     R = np.where(M_NS < 0.8, R_1p4_km, R)
     return R
+
+
+def ns_radius_from_eos(M_NS, eos_name):
+    """EOS-anchored NS radius [km] using ``EOS_MODELS`` parameters.
+
+    Calls ``ns_radius`` with R_1p4 and M_TOV from the named EOS,
+    ensuring self-consistent compactness for the Foucart formula.
+
+    Parameters
+    ----------
+    M_NS : float or array
+        Gravitational mass [Msun].
+    eos_name : str
+        Key in ``EOS_MODELS`` (e.g. 'APR4', 'SFHo', 'DD2').
+    """
+    eos = EOS_MODELS[eos_name]
+    return ns_radius(M_NS, R_1p4_km=eos['R_1p4'], M_TOV_local=eos['M_TOV'])
 
 
 def mcrit_to_r14(mc):
@@ -176,7 +197,8 @@ def _compactness(M_NS, R_km):
 # ---------------------------------------------------------------------------
 # Foucart et al. (2018) total remnant baryon mass
 # ---------------------------------------------------------------------------
-def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0):
+def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
+                          clip_Q=None):
     """Foucart et al. (2018) Eq. (4) & (6) [arXiv:1807.00011].
 
     Returns the *total* baryon mass outside the BH after merger (disk +
@@ -184,6 +206,13 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0):
 
     Calibrated for Q in [1, 7], chi_BH in [-0.5, 0.97],
     C_NS in [0.13, 0.182].  A warning is emitted when Q > 7.
+
+    Parameters
+    ----------
+    clip_Q : float, optional
+        If given, systems with Q > clip_Q are assigned zero remnant mass
+        instead of extrapolating the fit.  Set to 7.0 for conservative
+        results within the calibration range.
     """
     M_BH_a = np.asarray(M_BH, dtype=float)
     M_NS_a = np.asarray(M_NS, dtype=float)
@@ -205,7 +234,12 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0):
     bracket = alpha * (1 - 2*C_NS) / eta**(1/3) - beta * R_hat * C_NS / eta + gamma
 
     M_b = ns_baryon_mass(M_NS)
-    return np.maximum(0.0, bracket)**delta * M_b
+    result = np.maximum(0.0, bracket)**delta * M_b
+
+    if clip_Q is not None:
+        result = np.where(Q > clip_Q, 0.0, result)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +270,11 @@ def bns_dynamical_ejecta(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0):
 
     Fitted to 200 NR simulations (Dietrich & Ujevic 2017, Kiuchi+ 2019).
     Result is in solar masses (the formula output is in units of 1e-3 Msun).
+
+    Sanity check (GW170817-like, M1=1.46, M2=1.27, R_1p4=12.0 km):
+        expected M_ej_dyn ~ 0.003-0.006 Msun
+    AT2017gfo total ejecta ~ 0.05-0.08 Msun (Rastinejad+ 2025); the
+    dynamical component is a subset, with disk wind adding ~0.01-0.05 Msun.
     """
     M1 = np.asarray(M1, dtype=float)
     M2 = np.asarray(M2, dtype=float)
@@ -254,7 +293,7 @@ def bns_dynamical_ejecta(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0):
 # Disk mass = remnant mass - dynamical ejecta
 # ---------------------------------------------------------------------------
 def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
-                      f_disk=None):
+                      f_disk=None, clip_Q=None):
     """BHNS accretion disk mass [Msun].
 
     Default behaviour (f_disk=None): computes
@@ -262,9 +301,16 @@ def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
     which properly separates the disk from dynamical ejecta.
 
     Legacy behaviour (f_disk=<float>): returns f_disk * M_rem as before.
+
+    Parameters
+    ----------
+    clip_Q : float, optional
+        Forwarded to ``foucart_remnant_mass``.  Systems with Q > clip_Q
+        get zero remnant (and therefore zero disk) mass.
     """
     M_rem = foucart_remnant_mass(M_BH, M_NS, a_BH=a_BH,
-                                 R_NS_km=R_NS_km, R_1p4_km=R_1p4_km)
+                                 R_NS_km=R_NS_km, R_1p4_km=R_1p4_km,
+                                 clip_Q=clip_Q)
     if f_disk is not None:
         return f_disk * M_rem
 
@@ -309,3 +355,16 @@ For per-system treatment when individual tilt angles are available,
 use ``effective_aligned_spin(a_BH, theta_tilt)`` to project the BH
 spin onto the orbital angular momentum axis and pass the result as
 ``a_BH`` to the Foucart disk-mass formula."""
+
+
+# ---------------------------------------------------------------------------
+# Module-level __getattr__ for deprecated attributes
+# ---------------------------------------------------------------------------
+def __getattr__(name):
+    if name == "MEAN_MASS_EVOLVED":
+        warnings.warn(
+            "MEAN_MASS_EVOLVED is deprecated; use "
+            "grb_rates.calibrate_mean_mass_evolved() instead",
+            DeprecationWarning, stacklevel=2)
+        return _MEAN_MASS_EVOLVED_VALUE
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

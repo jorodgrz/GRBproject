@@ -17,6 +17,33 @@ DEFAULT_BHNS_PATH = os.path.join(_DATA_DIR, 'COMPASCompactOutput_BHNS_A.h5')
 DEFAULT_BNS_K_PATH = os.path.join(_DATA_DIR, 'COMPASCompactOutput_BNS_K.h5')
 
 
+def _validate_delay_times(dt, label=""):
+    """Sanity-check that delay times are in Myr (expected range ~1-14000).
+
+    COMPAS stores tform and tc in Myr.  If someone passes data in Gyr
+    the values would be 1e3x too small; in yr they'd be 1e6x too large.
+    """
+    if dt.max() > 1e5 or dt.min() < 0:
+        raise ValueError(
+            f"delay_time range [{dt.min():.1f}, {dt.max():.1f}]{label} "
+            "looks wrong; expected Myr (typical range 1-14000)")
+
+
+def verify_shared_metallicity_prior(path_a, path_b):
+    """Assert two COMPAS files use the same birth-metallicity prior.
+
+    Both populations must span the same Z range for a single p_draw
+    to be valid.  Returns the shared (Z_min, Z_max) tuple.
+    """
+    r_a = read_metallicity_range(path_a)
+    r_b = read_metallicity_range(path_b)
+    if r_a != r_b:
+        raise ValueError(
+            f"Metallicity ranges differ: {r_a} vs {r_b}; "
+            "need separate dPdlogZ / p_draw per population")
+    return r_a
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Simulation metadata
 # ═══════════════════════════════════════════════════════════════════════════
@@ -77,6 +104,8 @@ def load_bns(path=None, sort_masses=True):
         tform = dco['tform'][...].squeeze()
 
     mask = (mh == 1)
+    delay = (tform + tc)[mask]
+    _validate_delay_times(delay, " in load_bns")
 
     m1_m, m2_m = m1[mask], m2[mask]
     if sort_masses:
@@ -90,7 +119,7 @@ def load_bns(path=None, sort_masses=True):
         'm2':           m2_out,
         'weights':      w[mask],
         'metallicity':  Z[mask],
-        'delay_time':   (tform + tc)[mask],
+        'delay_time':   delay,
         'n_merging':    int(mask.sum()),
         'mask_merging': mask,
     }
@@ -131,6 +160,8 @@ def load_bns_with_channels(path=None, sort_masses=True):
         fc_CEE      = fc['CEE'][...].squeeze()
 
     mask = (mh == 1)
+    delay = (tform + tc)[mask]
+    _validate_delay_times(delay, " in load_bns_with_channels")
 
     m1_m, m2_m = m1[mask], m2[mask]
     if sort_masses:
@@ -151,7 +182,7 @@ def load_bns_with_channels(path=None, sort_masses=True):
         'm2':           m2_out,
         'weights':      w[mask],
         'metallicity':  Z[mask],
-        'delay_time':   (tform + tc)[mask],
+        'delay_time':   delay,
         'n_merging':    int(mask.sum()),
         'mask_merging': mask,
         'm1zams':       m1z[mask],
@@ -204,13 +235,15 @@ def load_bhns(path=None):
     M_NS = np.where(is_BH1, m2, m1)
 
     mask = (mh == 1)
+    delay = (tform + tc)[mask]
+    _validate_delay_times(delay, " in load_bhns")
 
     return {
         'M_BH':         M_BH[mask],
         'M_NS':         M_NS[mask],
         'weights':      w[mask],
         'metallicity':  Z[mask],
-        'delay_time':   (tform + tc)[mask],
+        'delay_time':   delay,
         'n_merging':    int(mask.sum()),
         'mask_merging': mask,
     }
@@ -249,13 +282,15 @@ def load_bhns_with_channels(path=None):
     M_NS = np.where(is_BH1, m2, m1)
 
     mask = (mh == 1)
+    delay = (tform + tc)[mask]
+    _validate_delay_times(delay, " in load_bhns_with_channels")
 
     return {
         'M_BH':         M_BH[mask],
         'M_NS':         M_NS[mask],
         'weights':      w[mask],
         'metallicity':  Z[mask],
-        'delay_time':   (tform + tc)[mask],
+        'delay_time':   delay,
         'n_merging':    int(mask.sum()),
         'mask_merging': mask,
         'dblCE':        dblCE[mask],
@@ -396,6 +431,9 @@ def load_bns_with_kicks(path=None, sort_masses=True):
         vsys_all = _match_sn_to_dco(f)
 
     mask = (mh == 1)
+    delay = (tform + tc)[mask]
+    _validate_delay_times(delay, " in load_bns_with_kicks")
+
     m1_m, m2_m = m1[mask], m2[mask]
     if sort_masses:
         m1_out = np.maximum(m1_m, m2_m)
@@ -406,7 +444,7 @@ def load_bns_with_kicks(path=None, sort_masses=True):
     return {
         'm1': m1_out, 'm2': m2_out,
         'weights': w[mask], 'metallicity': Z[mask],
-        'delay_time': (tform + tc)[mask],
+        'delay_time': delay,
         'n_merging': int(mask.sum()), 'mask_merging': mask,
         'drawnKick1': dk1[mask], 'drawnKick2': dk2[mask],
         'v_sys': vsys_all[mask], 'sep_DCO': sep[mask], 'ecc_DCO': ecc[mask],
@@ -439,11 +477,13 @@ def load_bhns_with_kicks(path=None):
     M_BH = np.where(is_BH1, m1, m2)
     M_NS = np.where(is_BH1, m2, m1)
     mask = (mh == 1)
+    delay = (tform + tc)[mask]
+    _validate_delay_times(delay, " in load_bhns_with_kicks")
 
     return {
         'M_BH': M_BH[mask], 'M_NS': M_NS[mask],
         'weights': w[mask], 'metallicity': Z[mask],
-        'delay_time': (tform + tc)[mask],
+        'delay_time': delay,
         'n_merging': int(mask.sum()), 'mask_merging': mask,
         'drawnKick1': dk1[mask], 'drawnKick2': dk2[mask],
         'v_sys': vsys_all[mask], 'sep_DCO': sep[mask], 'ecc_DCO': ecc[mask],

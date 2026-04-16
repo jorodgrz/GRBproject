@@ -9,23 +9,149 @@ verification, per-system rate weights, and BH spin marginalization.
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.integrate import quad
+from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
+from scipy.stats import norm as _NormDist
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Cosmic integration
 # ═══════════════════════════════════════════════════════════════════════════
+
+# Neijssel et al. (2019) / COMPAS default MSSFR parameters.
+# These must match the values passed to find_metallicity_distribution().
+_MU0 = 0.035
+_MUZ = -0.23
+_SIGMA_0 = 0.39
+_SIGMA_Z = 0.0
+
+
+def _bin_averaged_dPdlogZ(redshifts, COMPAS_Z,
+                          mu0=_MU0, muz=_MUZ,
+                          sigma_0=_SIGMA_0, sigma_z=_SIGMA_Z):
+    """Analytic bin-integrated metallicity weights via the normal CDF.
+
+    For each COMPAS birth metallicity Z_k, compute the exact integral of
+    the Neijssel et al. (2019) log-normal metallicity PDF over the
+    Voronoi cell [ln Z_lo, ln Z_hi] at every redshift:
+
+        P_bin(z, k) = Phi((ln Z_hi - mu(z)) / sigma(z))
+                    - Phi((ln Z_lo - mu(z)) / sigma(z))
+
+    where Phi is the standard normal CDF, and mu(z), sigma(z) are the
+    redshift-dependent log-normal parameters (Langer & Norman 2006;
+    Neijssel et al. 2019 Eq. 2; Broekgaarden et al. 2021, Section 2.4).
+
+    This replaces the Riemann-sum approximation on the fine dPdlogZ grid,
+    which produced residual aliasing from the non-uniform spacing of the
+    53-point COMPAS metallicity grid.
+
+    Parameters
+    ----------
+    redshifts : 1-D array, shape (n_z,)
+        Redshift grid.
+    COMPAS_Z : 1-D array, shape (n_systems,)
+        Birth metallicity of each COMPAS binary.
+    mu0, muz, sigma_0, sigma_z : float
+        MSSFR log-normal parameters (must match those used in
+        ``find_metallicity_distribution``).
+
+    Returns
+    -------
+    dPdlogZ_binned : 2-D array, shape (n_z, n_unique_Z)
+        Bin-integrated metallicity weight for each unique COMPAS Z.
+    sys_col_idx : 1-D int array, shape (n_systems,)
+        Column index into ``dPdlogZ_binned`` for each COMPAS system.
+    """
+    # Reproduce mu(z) and sigma(z) from Neijssel+19 / COMPAS defaults.
+    # With alpha=0 (pure log-normal, no skewness) the mu simplification
+    # is: mu = ln(mean_Z) - sigma^2/2  (standard log-normal identity).
+    sigma = sigma_0 * 10.0 ** (sigma_z * redshifts)     # (n_z,)
+    mean_Z = mu0 * 10.0 ** (muz * redshifts)            # (n_z,)
+    mu = np.log(mean_Z) - 0.5 * sigma ** 2              # (n_z,)
+
+    unique_Z = np.unique(COMPAS_Z)
+    log_unique = np.log(unique_Z)
+    n_bins = len(unique_Z)
+
+    # Voronoi boundaries: geometric midpoints between adjacent COMPAS Z values
+    mid = 0.5 * (log_unique[:-1] + log_unique[1:])
+    lo_edges = np.empty(n_bins)
+    hi_edges = np.empty(n_bins)
+    lo_edges[0] = log_unique[0] - 0.5 * (log_unique[1] - log_unique[0])
+    lo_edges[1:] = mid
+    hi_edges[:-1] = mid
+    hi_edges[-1] = log_unique[-1] + 0.5 * (log_unique[-1] - log_unique[-2])
+
+    # Analytic CDF evaluation: P_bin(z,k) = Phi(hi_std) - Phi(lo_std)
+    # Vectorised over redshifts (axis 0) and bins (axis 1).
+    inv_sigma = 1.0 / sigma                             # (n_z,)
+    lo_std = (lo_edges[np.newaxis, :] - mu[:, np.newaxis]) * inv_sigma[:, np.newaxis]
+    hi_std = (hi_edges[np.newaxis, :] - mu[:, np.newaxis]) * inv_sigma[:, np.newaxis]
+    dPdlogZ_binned = _NormDist.cdf(hi_std) - _NormDist.cdf(lo_std)  # (n_z, n_bins)
+
+    # Normalize: COMPAS convention clips to the sampled Z range and
+    # renormalizes so the total probability over all bins sums to 1.
+    ln_Z_min = log_unique[0]
+    ln_Z_max = log_unique[-1]
+    norm = (_NormDist.cdf((ln_Z_max - mu) / sigma)
+            - _NormDist.cdf((ln_Z_min - mu) / sigma))   # (n_z,)
+    norm = np.where(norm > 0, norm, 1.0)
+    total_bin = dPdlogZ_binned.sum(axis=1)               # (n_z,)
+    total_bin = np.where(total_bin > 0, total_bin, 1.0)
+    dPdlogZ_binned *= (norm / total_bin)[:, np.newaxis]
+
+    # Map each COMPAS system to its unique-Z column index
+    Z_to_col = {z: k for k, z in enumerate(unique_Z)}
+    sys_col_idx = np.array([Z_to_col[float(z)] for z in COMPAS_Z])
+
+    return dPdlogZ_binned, sys_col_idx
+
+
+def _interp_formation_rate(n_formed, dPdlogZ_col, p_draw, weight,
+                           z_form, redshift_step, n_z):
+    """Shared interpolation of the formation rate at arbitrary z_form.
+
+    Both ``compute_merger_rate`` and ``per_system_rate_weights`` use this
+    to evaluate  n_formed(z_form) * dPdlogZ_binned(z_form) / p_draw * w
+    via linear interpolation on the uniform redshift grid.
+
+    Parameters
+    ----------
+    dPdlogZ_col : 1-D array, shape (n_z,)
+        Bin-integrated metallicity weight for this system (or array of
+        systems when called from ``per_system_rate_weights``), already
+        selected from the ``dPdlogZ_binned`` columns.
+    """
+    z_idx_float = z_form / redshift_step
+    z_lo = np.clip(np.floor(z_idx_float).astype(int), 0, n_z - 1)
+    z_hi = np.clip(z_lo + 1, 0, n_z - 1)
+    frac = z_idx_float - np.floor(z_idx_float)
+
+    form_lo = n_formed[z_lo] * dPdlogZ_col[z_lo] / p_draw * weight
+    form_hi = n_formed[z_hi] * dPdlogZ_col[z_hi] / p_draw * weight
+    return form_lo * (1.0 - frac) + form_hi * frac
+
+
 def compute_merger_rate(redshifts, times, time_first_SF, n_formed,
                         dPdlogZ, metallicities, p_draw,
-                        COMPAS_Z, COMPAS_delay_times, COMPAS_weights):
+                        COMPAS_Z, COMPAS_delay_times, COMPAS_weights,
+                        smooth_sigma=30):
     """
     Intrinsic merger rate density [Gpc^-3 yr^-1] vs redshift.
 
     For each binary the formation rate is:
         SFR(z) * dP/dlogZ(z, Z_i) / p_draw * weight_i / meanMassEvolved
 
-    The merger rate at z_merge equals the formation rate evaluated at the
-    redshift when the binary was born (z_form corresponding to
-    t = t(z_merge) - delay_time).
+    The metallicity weight dP/dlogZ is integrated over each COMPAS
+    metallicity's Voronoi cell (bin-averaged) rather than point-evaluated,
+    following Neijssel et al. (2019) Eq. 2 and Broekgaarden et al. (2021)
+    Section 2.4.  This eliminates aliasing artifacts caused by the
+    discrete COMPAS metallicity grid.
+
+    A light Gaussian kernel (``smooth_sigma`` redshift bins, default 30
+    = dz 0.3 at step 0.01) suppresses the residual ~3% Monte Carlo
+    wobble from the finite number of discrete COMPAS metallicities.
+    Set ``smooth_sigma=0`` to disable smoothing.
 
     Important: ``n_formed`` must already contain the 1/MEAN_MASS_EVOLVED
     normalisation.  ``find_sfr()`` returns *raw* SFR in Msun/yr/Gpc^3 and
@@ -40,28 +166,31 @@ def compute_merger_rate(redshifts, times, time_first_SF, n_formed,
     redshift_step = redshifts[1] - redshifts[0]
     times_to_z    = interp1d(times, redshifts)
 
-    Z_bins = np.clip(np.digitize(COMPAS_Z, metallicities),
-                     0, len(metallicities) - 1)
+    dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(redshifts, COMPAS_Z)
 
     t_min = max(time_first_SF, times.min())
     total_merger = np.zeros(n_z)
 
     for i in range(len(COMPAS_delay_times)):
-        form_i = n_formed * dPdlogZ[:, Z_bins[i]] / p_draw * COMPAS_weights[i]
         t_form = times - COMPAS_delay_times[i]
 
         valid = (t_form >= t_min)
         if not valid.any():
             continue
 
-        j_idx      = np.where(valid)[0]
-        z_form     = times_to_z(t_form[j_idx])
+        # j_idx = merger-grid indices where this binary has a valid formation time
+        # z_form = formation redshift for each valid merger-grid point
+        # Both arrays are sliced by the same `valid` mask so they align by construction.
+        j_idx  = np.where(valid)[0]
+        z_form = times_to_z(t_form[j_idx])
+        assert len(j_idx) == len(z_form), "valid-mask index mismatch"
 
-        z_idx_float = z_form / redshift_step
-        z_lo = np.clip(np.floor(z_idx_float).astype(int), 0, n_z - 1)
-        z_hi = np.clip(z_lo + 1, 0, n_z - 1)
-        frac = z_idx_float - np.floor(z_idx_float)
-        total_merger[j_idx] += form_i[z_lo] * (1.0 - frac) + form_i[z_hi] * frac
+        total_merger[j_idx] += _interp_formation_rate(
+            n_formed, dPdlogZ_binned[:, sys_col[i]], p_draw,
+            COMPAS_weights[i], z_form, redshift_step, n_z)
+
+    if smooth_sigma > 0:
+        total_merger = _gaussian_filter1d(total_merger, sigma=smooth_sigma)
 
     return total_merger
 
@@ -74,6 +203,8 @@ def per_system_rate_weights(z_target, redshifts, times, time_first_SF,
 
     Same physics as compute_merger_rate but returns an array of individual
     weights (one per binary) for constructing rate-weighted histograms.
+    Uses the same ``_interp_formation_rate`` helper and bin-averaged
+    metallicity weights for consistency.
     """
     n_z           = len(redshifts)
     redshift_step = redshifts[1] - redshifts[0]
@@ -82,8 +213,7 @@ def per_system_rate_weights(z_target, redshifts, times, time_first_SF,
     j_target = np.argmin(np.abs(redshifts - z_target))
     t_merge  = times[j_target]
 
-    Z_bins = np.clip(np.digitize(COMPAS_Z, metallicities),
-                     0, len(metallicities) - 1)
+    dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(redshifts, COMPAS_Z)
     t_min  = max(time_first_SF, times.min())
 
     out    = np.zeros(len(COMPAS_weights))
@@ -91,17 +221,10 @@ def per_system_rate_weights(z_target, redshifts, times, time_first_SF,
     valid  = t_form >= t_min
 
     if valid.any():
-        z_form      = times_to_z(t_form[valid])
-        z_idx_float = z_form / redshift_step
-        z_lo = np.clip(np.floor(z_idx_float).astype(int), 0, n_z - 1)
-        z_hi = np.clip(z_lo + 1, 0, n_z - 1)
-        frac = z_idx_float - np.floor(z_idx_float)
-
-        val_lo = (n_formed[z_lo] * dPdlogZ[z_lo, Z_bins[valid]]
-                  / p_draw * COMPAS_weights[valid])
-        val_hi = (n_formed[z_hi] * dPdlogZ[z_hi, Z_bins[valid]]
-                  / p_draw * COMPAS_weights[valid])
-        out[valid] = val_lo * (1.0 - frac) + val_hi * frac
+        z_form = times_to_z(t_form[valid])
+        out[valid] = _interp_formation_rate(
+            n_formed, dPdlogZ_binned[:, sys_col[valid]], p_draw,
+            COMPAS_weights[valid], z_form, redshift_step, n_z)
     return out
 
 
@@ -228,13 +351,15 @@ def verify_mean_mass_evolved(m_lo_full=0.01, m_hi_full=200.0,
 
     Parameters
     ----------
-    mean_mass_evolved : float, optional
-        Value to check.  If None, uses the deprecated legacy constant
-        from grb_physics (for back-compat diagnostics only).
+    mean_mass_evolved : float
+        Value to check.  Use ``calibrate_mean_mass_evolved()`` to derive
+        per-population values.
     """
     if mean_mass_evolved is None:
-        from grb_physics import MEAN_MASS_EVOLVED
-        mean_mass_evolved = MEAN_MASS_EVOLVED
+        raise ValueError(
+            "mean_mass_evolved must be provided; use "
+            "calibrate_mean_mass_evolved() to derive per-population values"
+        )
 
     total_mass, _  = quad(lambda m: m * kroupa_imf(m), m_lo_full, m_hi_full)
     total_number, _ = quad(kroupa_imf, m_lo_full, m_hi_full)
@@ -296,6 +421,11 @@ narrower collimation than HMNS-powered sbGRB jets.
 
 def check_dPdlogZ_normalization(dPdlogZ, metallicities, rtol=0.05):
     """Verify dP/dlogZ integrates to ~1 at every redshift slice.
+
+    Convention: ``dPdlogZ`` is dP/d(ln Z) (natural log), consistent with
+    COMPAS ``find_metallicity_distribution``.  The integration uses
+    Delta(ln Z) = np.diff(np.log(Z)), NOT Delta(log10 Z).
+    If your dPdlogZ is per d(log10 Z), multiply by ln(10) first.
 
     Returns the per-slice integral array.  Raises ValueError if any
     slice deviates by more than *rtol* from unity.
