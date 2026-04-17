@@ -12,6 +12,8 @@ from scipy.integrate import quad
 from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
 from scipy.stats import norm as _NormDist
 
+from grb_physics import MISALIGNMENT_SYSTEMATIC_FACTOR
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Cosmic integration
@@ -62,6 +64,16 @@ def _bin_averaged_dPdlogZ(redshifts, COMPAS_Z,
     sys_col_idx : 1-D int array, shape (n_systems,)
         Column index into ``dPdlogZ_binned`` for each COMPAS system.
     """
+    COMPAS_Z = np.asarray(COMPAS_Z, dtype=float)
+    n_z = len(redshifts)
+
+    # Empty-population guard: when a downstream selection (e.g. a class
+    # mask in compute_merger_rate) is empty, return zero-sized weights
+    # and an empty column-index array.  Callers that loop over systems
+    # will produce a zero rate vector instead of an IndexError.
+    if COMPAS_Z.size == 0:
+        return np.zeros((n_z, 0)), np.zeros(0, dtype=int)
+
     # Reproduce mu(z) and sigma(z) from Neijssel+19 / COMPAS defaults.
     # With alpha=0 (pure log-normal, no skewness) the mu simplification
     # is: mu = ln(mean_Z) - sigma^2/2  (standard log-normal identity).
@@ -73,14 +85,20 @@ def _bin_averaged_dPdlogZ(redshifts, COMPAS_Z,
     log_unique = np.log(unique_Z)
     n_bins = len(unique_Z)
 
-    # Voronoi boundaries: geometric midpoints between adjacent COMPAS Z values
-    mid = 0.5 * (log_unique[:-1] + log_unique[1:])
-    lo_edges = np.empty(n_bins)
-    hi_edges = np.empty(n_bins)
-    lo_edges[0] = log_unique[0] - 0.5 * (log_unique[1] - log_unique[0])
-    lo_edges[1:] = mid
-    hi_edges[:-1] = mid
-    hi_edges[-1] = log_unique[-1] + 0.5 * (log_unique[-1] - log_unique[-2])
+    # Single-Z degenerate case: a half-decade-wide window around the lone bin.
+    if n_bins == 1:
+        half_width = 0.5 * np.log(10.0)
+        lo_edges = np.array([log_unique[0] - half_width])
+        hi_edges = np.array([log_unique[0] + half_width])
+    else:
+        # Voronoi boundaries: geometric midpoints between adjacent COMPAS Z values
+        mid = 0.5 * (log_unique[:-1] + log_unique[1:])
+        lo_edges = np.empty(n_bins)
+        hi_edges = np.empty(n_bins)
+        lo_edges[0] = log_unique[0] - 0.5 * (log_unique[1] - log_unique[0])
+        lo_edges[1:] = mid
+        hi_edges[:-1] = mid
+        hi_edges[-1] = log_unique[-1] + 0.5 * (log_unique[-1] - log_unique[-2])
 
     # Analytic CDF evaluation: P_bin(z,k) = Phi(hi_std) - Phi(lo_std)
     # Vectorised over redshifts (axis 0) and bins (axis 1).
@@ -164,6 +182,14 @@ def compute_merger_rate(redshifts, times, time_first_SF, n_formed,
     """
     n_z           = len(redshifts)
     redshift_step = redshifts[1] - redshifts[0]
+
+    # Empty-population guard: a class mask with zero True entries (e.g. a
+    # high-spin clip wiping out all Long cbGRB systems) returns a zero
+    # rate vector instead of erroring.  Same shape as the redshift grid
+    # so downstream array operations remain consistent.
+    if len(COMPAS_delay_times) == 0:
+        return np.zeros(n_z)
+
     times_to_z    = interp1d(times, redshifts)
 
     dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(redshifts, COMPAS_Z)
@@ -208,6 +234,11 @@ def per_system_rate_weights(z_target, redshifts, times, time_first_SF,
     """
     n_z           = len(redshifts)
     redshift_step = redshifts[1] - redshifts[0]
+
+    # Empty-population guard: zero-length per-system weight array.
+    if len(COMPAS_weights) == 0:
+        return np.zeros(0)
+
     times_to_z    = interp1d(times, redshifts)
 
     j_target = np.argmin(np.abs(redshifts - z_target))
@@ -313,6 +344,38 @@ def formation_efficiency(metallicityGrid, Z_all, w_all, masks=None,
 def marginalize(rate_dict, weights):
     """Weighted average over spin values: sum(w_a * rate[a])."""
     return sum(weights[a] * rate_dict[a] for a in rate_dict)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BHNS spin-orbit misalignment population correction
+# ═══════════════════════════════════════════════════════════════════════════
+def apply_bhns_misalignment(rate_bhns, factor=MISALIGNMENT_SYSTEMATIC_FACTOR):
+    """Multiplicative population-averaged BHNS GRB rate suppression.
+
+    Folds in the systematic that ~50% of BHNS systems have spin-orbit
+    misalignment large enough (> 45-60 deg) to suppress disk-jet
+    formation.  Population synthesis (Fragos+ 2010, arXiv:1001.1107;
+    Gerosa+ 2018) plus NR results (Kawaguchi+ 2015) motivate a
+    population-averaged factor-of-2 reduction of BHNS GRB rates.
+
+    This helper is the canonical use-site of
+    ``grb_physics.MISALIGNMENT_SYSTEMATIC_FACTOR``; do NOT also apply
+    the per-system ``effective_aligned_spin`` projection on the same
+    population (that would double-count the suppression).
+
+    Parameters
+    ----------
+    rate_bhns : float or array
+        BHNS merger / GRB rate(s) to correct (any units; multiplicative).
+    factor : float, optional
+        Suppression factor, defaulting to
+        ``MISALIGNMENT_SYSTEMATIC_FACTOR`` (= 0.5).
+
+    Returns
+    -------
+    Same shape/units as ``rate_bhns``, scaled by ``factor``.
+    """
+    return np.asarray(rate_bhns) * factor
 
 
 # ═══════════════════════════════════════════════════════════════════════════

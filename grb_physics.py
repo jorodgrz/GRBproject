@@ -123,17 +123,17 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     """Mass-dependent NS radius [km] (heuristic model).
 
     Phenomenological interpolation NOT derived from a specific EOS table.
-    The cubic suppression R = R_1p4*(1 - 0.15*x^3) is tuned to the
-    qualitative shape of tabulated EOSs (APR4, SFHo, DD2) but can
-    differ from individual EOSs by up to ~5-10% near M_TOV.
+    The cubic suppression R = R_1p4*(1 - 0.15*x^3) with x = (M - 1.4) /
+    (M_TOV - 1.4) is anchored at M = 1.4 Msun so that R(1.4) = R_1p4_km
+    exactly, matching the observational anchor (Raaijmakers et al. 2021,
+    arXiv:2105.06981: R_1.4 = 12.18 +0.56/-0.79 km, CS model).  Below
+    1.4 Msun the radius is held at R_1p4_km (flat plateau), and above
+    1.4 Msun the cubic suppression drops R by ~15% at M_TOV.
 
     Qualitative behaviour:
-      - Nearly flat plateau from ~1.0 to ~1.6 Msun
-      - Steepening drop approaching M_TOV (~15% below R_1.4)
+      - Flat plateau at R_1p4_km for M <= 1.4 Msun
+      - Steepening drop from 1.4 Msun to M_TOV (~15% below R_1.4)
       - No neutron star above M_TOV (returns NaN)
-
-    R_1p4_km = 12.0 km is consistent with NICER + GW170817 constraints
-    (Raaijmakers et al. 2021: R_1.4 = 12.18 +0.56/-0.79 km, CS model).
 
     Quantitative comparison at M_NS = 1.4 Msun with default R_1p4_km:
       - This heuristic: 12.0 km (by construction)
@@ -148,10 +148,10 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     if M_TOV_local is None:
         M_TOV_local = M_TOV
     M_NS = np.asarray(M_NS, dtype=float)
-    x = np.clip((M_NS - 1.0) / (M_TOV_local - 1.0), 0.0, 1.0)
+    x = np.clip((M_NS - 1.4) / (M_TOV_local - 1.4), 0.0, 1.0)
     R = R_1p4_km * (1.0 - 0.15 * x**3)
     R = np.where(M_NS > M_TOV_local, np.nan, R)
-    R = np.where(M_NS < 0.8, R_1p4_km, R)
+    R = np.where(M_NS < 1.4, R_1p4_km, R)
     return R
 
 
@@ -198,14 +198,32 @@ def _compactness(M_NS, R_km):
 # Foucart et al. (2018) total remnant baryon mass
 # ---------------------------------------------------------------------------
 def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
-                          clip_Q=None):
+                          clip_Q=None, clip_chi=None):
     """Foucart et al. (2018) Eq. (4) & (6) [arXiv:1807.00011].
 
     Returns the *total* baryon mass outside the BH after merger (disk +
     tidal tail + dynamical ejecta), **not** the disk mass alone.
 
-    Calibrated for Q in [1, 7], chi_BH in [-0.5, 0.97],
-    C_NS in [0.13, 0.182].  A warning is emitted when Q > 7.
+    Validity ranges (Foucart+ 2018):
+      - *Calibration range* (abstract / Eq. 4 fit validity):
+            Q in [1, 7],  chi_BH in [-0.5, 0.9],  C_NS in [0.13, 0.182]
+        Stay within these bounds for the documented ~15% accuracy.
+      - *Data range* (Table II coverage):
+            individual NR simulations extend to chi_BH = 0.97, but with
+            larger residuals (e.g. Q=3, chi=0.97 underestimates the NR
+            disk mass by ~30%).
+
+    A warning is emitted when Q > 7 OR |a_BH| > 0.9 (count and max
+    value reported per call).  Use ``clip_Q`` and ``clip_chi`` to zero
+    out extrapolated systems instead of returning fit values.
+
+    Note on bulk usage: the warnings are aggregated to a single
+    ``warnings.warn`` per call (with a count), so they do NOT flood
+    when called once on a large array.  If you call this in a Python
+    loop over many systems and want to suppress repeated messages,
+    wrap the loop in ``warnings.catch_warnings()`` with
+    ``warnings.simplefilter('once')`` (see the standard library
+    ``warnings`` documentation).
 
     Parameters
     ----------
@@ -213,9 +231,14 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
         If given, systems with Q > clip_Q are assigned zero remnant mass
         instead of extrapolating the fit.  Set to 7.0 for conservative
         results within the calibration range.
+    clip_chi : float, optional
+        If given, systems with |a_BH| > clip_chi are assigned zero
+        remnant mass instead of extrapolating the fit.  Set to 0.9 to
+        stay strictly within the Foucart+ 2018 calibration range.
     """
     M_BH_a = np.asarray(M_BH, dtype=float)
     M_NS_a = np.asarray(M_NS, dtype=float)
+    a_BH_a = np.asarray(a_BH, dtype=float)
     Q = M_BH_a / M_NS_a
     if np.any(Q > 7.0):
         n_extrap = int(np.sum(Q > 7.0))
@@ -223,6 +246,13 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
             f"Foucart (2018) formula applied to {n_extrap} systems with "
             f"Q > 7 (max Q={float(np.max(Q)):.1f}); "
             f"calibrated for Q in [1, 7]",
+            stacklevel=2)
+    if np.any(np.abs(a_BH_a) > 0.9):
+        n_chi = int(np.sum(np.abs(a_BH_a) > 0.9))
+        warnings.warn(
+            f"Foucart (2018) formula applied to {n_chi} systems with "
+            f"|chi_BH| > 0.9 (max |chi|={float(np.max(np.abs(a_BH_a))):.3f}); "
+            f"calibrated for chi_BH in [-0.5, 0.9]",
             stacklevel=2)
 
     R_km = R_NS_km if R_NS_km is not None else ns_radius(M_NS, R_1p4_km=R_1p4_km)
@@ -238,6 +268,8 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
 
     if clip_Q is not None:
         result = np.where(Q > clip_Q, 0.0, result)
+    if clip_chi is not None:
+        result = np.where(np.abs(a_BH_a) > clip_chi, 0.0, result)
 
     return result
 
@@ -265,6 +297,65 @@ def bhns_dynamical_ejecta(M_BH, M_NS, a_BH, R_NS_km=None, R_1p4_km=12.0):
     return np.maximum(0.0, bracket) * M_b
 
 
+def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0,
+                  M_TOV_local=None):
+    """BNS post-merger accretion disk mass [Msun] -- Kruger & Foucart (2020) Eq. (4).
+
+    Distinct from ``foucart_disk_mass`` (which is BHNS-only).  KF2020
+    fit the disk mass of BNS NR simulations to the compactness of the
+    *lighter* NS:
+
+        M_disk / M_b^tot = max(5e-4, a * C_1 + c)
+
+    where C_1 is the compactness of the less-massive component and
+    M_b^tot is the total baryon mass of the binary.  Best-fit
+    coefficients from KF2020 Table I:
+
+        a = -8.1580,  c = 1.2695
+
+    Note: this function is provided for completeness and downstream
+    use; the BNS classifiers in ``grb_classify`` use mass-ratio /
+    total-mass thresholds (Gottlieb 2023, 2024) rather than disk mass,
+    so ``bns_disk_mass`` is not currently wired into them.
+
+    Parameters
+    ----------
+    M1, M2 : array-like
+        Component gravitational masses [Msun] (any ordering).
+    R1_km, R2_km : array-like, optional
+        Component radii [km].  If None, computed via ``ns_radius``.
+    R_1p4_km : float, optional
+        Reference R_{1.4} for the heuristic ``ns_radius`` (only used if
+        the per-component radii are not supplied).
+    M_TOV_local : float, optional
+        TOV mass forwarded to ``ns_radius``; defaults to ``M_TOV``.
+
+    Returns
+    -------
+    M_disk : float or array
+        BNS disk mass [Msun].
+    """
+    M1 = np.asarray(M1, dtype=float)
+    M2 = np.asarray(M2, dtype=float)
+    m_heavy = np.maximum(M1, M2)
+    m_light = np.minimum(M1, M2)
+
+    if R1_km is not None and R2_km is not None:
+        R1 = np.asarray(R1_km, dtype=float)
+        R2 = np.asarray(R2_km, dtype=float)
+        R_heavy = np.where(M1 >= M2, R1, R2)
+        R_light = np.where(M1 >= M2, R2, R1)
+    else:
+        R_heavy = ns_radius(m_heavy, R_1p4_km=R_1p4_km, M_TOV_local=M_TOV_local)
+        R_light = ns_radius(m_light, R_1p4_km=R_1p4_km, M_TOV_local=M_TOV_local)
+
+    C_1 = _compactness(m_light, R_light)
+    M_b_tot = ns_baryon_mass(m_heavy) + ns_baryon_mass(m_light)
+
+    a, c = -8.1580, 1.2695  # KF2020 Table I (BNS disk fit)
+    return M_b_tot * np.maximum(5e-4, a * C_1 + c)
+
+
 def bns_dynamical_ejecta(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0):
     """BNS dynamical ejecta mass [Msun] -- Kruger & Foucart (2020) Eq. (6).
 
@@ -272,7 +363,10 @@ def bns_dynamical_ejecta(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0):
     Result is in solar masses (the formula output is in units of 1e-3 Msun).
 
     Sanity check (GW170817-like, M1=1.46, M2=1.27, R_1p4=12.0 km):
-        expected M_ej_dyn ~ 0.003-0.006 Msun
+        expected M_ej_dyn ~ 0.003-0.010 Msun
+    The fit residual quoted by Kruger & Foucart (2020) is sigma ~
+    0.004 Msun, so a single-system value within this band is consistent
+    with the fit even though the central value is closer to ~0.003-0.006.
     AT2017gfo total ejecta ~ 0.05-0.08 Msun (Rastinejad+ 2025); the
     dynamical component is a subset, with disk wind adding ~0.01-0.05 Msun.
     """
@@ -293,7 +387,7 @@ def bns_dynamical_ejecta(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0):
 # Disk mass = remnant mass - dynamical ejecta
 # ---------------------------------------------------------------------------
 def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
-                      f_disk=None, clip_Q=None):
+                      f_disk=None, clip_Q=None, clip_chi=None):
     """BHNS accretion disk mass [Msun].
 
     Default behaviour (f_disk=None): computes
@@ -307,10 +401,15 @@ def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
     clip_Q : float, optional
         Forwarded to ``foucart_remnant_mass``.  Systems with Q > clip_Q
         get zero remnant (and therefore zero disk) mass.
+    clip_chi : float, optional
+        Forwarded to ``foucart_remnant_mass``.  Systems with
+        |a_BH| > clip_chi get zero remnant (and therefore zero disk)
+        mass; set to 0.9 to stay strictly within the Foucart+ 2018
+        calibration range.
     """
     M_rem = foucart_remnant_mass(M_BH, M_NS, a_BH=a_BH,
                                  R_NS_km=R_NS_km, R_1p4_km=R_1p4_km,
-                                 clip_Q=clip_Q)
+                                 clip_Q=clip_Q, clip_chi=clip_chi)
     if f_disk is not None:
         return f_disk * M_rem
 
@@ -348,13 +447,23 @@ def effective_aligned_spin(a_BH, theta_tilt):
 MISALIGNMENT_SYSTEMATIC_FACTOR = 0.5
 """Population-averaged reduction in BHNS GRB fractions from spin-orbit
 misalignment.  Pop-synth suggests ~50% of BHNS systems have
-misalignment > 45 deg (Fragos+ 2010; Gerosa+ 2018).  This is a rough
-factor-of-2 correction flagged as a systematic uncertainty.
+misalignment > 45 deg (Fragos+ 2010, arXiv:1001.1107; Gerosa+ 2018).
+Kawaguchi+ 2015 NR simulations show the BHNS disk mass drops to near
+zero for misalignment > 50-60 deg, so a population-averaged factor-of-2
+suppression of BHNS GRB rates is the canonical way to fold this in.
 
-For per-system treatment when individual tilt angles are available,
-use ``effective_aligned_spin(a_BH, theta_tilt)`` to project the BH
-spin onto the orbital angular momentum axis and pass the result as
-``a_BH`` to the Foucart disk-mass formula."""
+Two ways to apply this:
+
+1. Population level (preferred when per-system tilts are unavailable):
+   multiply the integrated BHNS GRB rate by this factor.  See
+   ``grb_rates.apply_bhns_misalignment`` for the canonical helper.
+
+2. Per-system level (when individual tilt angles ``theta_tilt`` are
+   sampled): use ``effective_aligned_spin(a_BH, theta_tilt)`` to
+   project the BH spin onto the orbital angular momentum axis and
+   pass the result as ``a_BH`` to ``foucart_disk_mass``.  In this
+   regime the population factor should NOT also be applied (it would
+   double-count the suppression)."""
 
 
 # ---------------------------------------------------------------------------

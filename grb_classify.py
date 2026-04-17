@@ -6,6 +6,8 @@ BHNS disk-mass classification, and a unified mass-plane grid classifier.
 Also includes Broekgaarden-style formation channel classification.
 """
 
+import warnings
+
 import numpy as np
 from grb_physics import (
     foucart_disk_mass,
@@ -120,7 +122,8 @@ GRID_CLASS_LABELS = {
 
 
 def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
-                  q_thresh=Q_THRESH_BNS, a_bh=0.5, q_no_disk=Q_NO_DISK):
+                  q_thresh=Q_THRESH_BNS, a_bh=0.5, q_no_disk=Q_NO_DISK,
+                  ns_max=None):
     """Return an integer class map on a (M1, M2) grid.
 
     2024 Gottlieb hybrid model: all BH-powered jets produce lbGRBs;
@@ -138,19 +141,53 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
         BHNS region:
         5 = Faint lbGRB + red KN  (BHNS, 0.01 <= Md < 0.1)
         6 = lbGRB + red KN        (BHNS, massive disk Md >= 0.1)
+
+    Parameters
+    ----------
+    ns_max : float, optional
+        Upper mass edge [Msun] of the BNS region on the grid: any
+        component with mass > ns_max is treated as a BH.  This MUST
+        match the ``M_NS_max`` configuration of the COMPAS run that
+        produced your population (Broekgaarden+ 2021, arXiv:2103.02608:
+        Models A/J/K use M_NS_max = 2.5 / 2.0 / 3.0 Msun).  If left as
+        None, defaults to ``m_tov + 0.15`` and emits a UserWarning.
     """
+    # Symmetrize the q convention so callers can pass either ordering
+    # (or a rectangular meshgrid that includes both triangles).  This
+    # matches classify_bns_2024's convention q = m_heavy / m_light and
+    # avoids silently dropping cells where m2 > m1 into the default
+    # "no GRB" class.  Cells with m2 > m1 are masked off downstream
+    # in the visualization in the typical mass-plane use case.
+    m1g = np.asarray(m1g, dtype=float)
+    m2g = np.asarray(m2g, dtype=float)
+    m_heavy = np.maximum(m1g, m2g)
+    m_light = np.minimum(m1g, m2g)
+
     cls = np.full_like(m1g, 0, dtype=int)
     m_tot = m1g + m2g
-    q = np.where(m2g > 0, m1g / m2g, 999.0)
+    q = np.where(m_light > 0, m_heavy / m_light, 999.0)
 
-    # ns_max sets the upper mass edge of the BNS region on the grid.
-    # M_TOV + 0.15 ~ 2.20 M_sun is a pragmatic buffer above the maximum
-    # gravitational mass, allowing for numerical/EOS uncertainty.
-    # If your COMPAS output has NS masses above this, increase accordingly.
-    ns_max = m_tov + 0.15
+    if ns_max is None:
+        # Default is a pragmatic buffer ~0.15 Msun above M_TOV; with the
+        # default m_tov=2.2 this gives ns_max ~ 2.35 Msun.  This is NOT
+        # a physical NS upper mass: COMPAS runs typically impose a
+        # tighter or different M_NS_max (Broekgaarden+ 2021 fiducial
+        # 2.5 Msun, models J/K = 2.0/3.0 Msun).  Pass ns_max explicitly
+        # to match the run configuration.
+        ns_max = m_tov + 0.15
+        warnings.warn(
+            f"classify_grid: ns_max not specified; using default "
+            f"m_tov + 0.15 = {ns_max:.2f} Msun.  This must match the "
+            f"COMPAS run's M_NS_max (Broekgaarden+ 2021: 2.5 Msun "
+            f"fiducial; models J/K = 2.0/3.0).  Pass ns_max explicitly "
+            f"to suppress this warning.",
+            stacklevel=2)
 
-    # BNS region
-    is_bns = (m1g <= ns_max) & (m2g <= ns_max) & (m1g >= m2g)
+    # BNS region: both components below the NS-mass cap.  The BNS class
+    # is symmetric in (m_heavy, m_light) so we do not require any
+    # ordering on the input; mirror cells across the m1=m2 diagonal
+    # receive identical classifications.
+    is_bns = (m_heavy <= ns_max) & (m_light <= ns_max)
     hmns_split = 1.2 * m_tov
 
     cls[is_bns & (m_tot < hmns_split)] = 3
@@ -159,12 +196,13 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
     cls[is_bns & (m_tot >= m_thresh) & (q >= q_no_disk) & (q < q_thresh)] = 1
     cls[is_bns & (m_tot >= m_thresh) & (q < q_no_disk)] = 0
 
-    # BHNS region: m2g > 0.8 M_sun floor excludes sub-NS-mass companions
-    # that would not form a realistic NS.  Adjust if your COMPAS sample
-    # includes ultra-low-mass or ECSN NS below this floor.
-    is_bhns = (m1g > ns_max) & (m2g <= ns_max) & (m2g > 0.8)
+    # BHNS region: heavier component above the NS-mass cap (the BH),
+    # lighter component below it (the NS, with a 0.8 Msun floor to
+    # exclude sub-NS-mass companions).  Adjust the floor if your COMPAS
+    # sample includes ultra-low-mass or ECSN NS below this floor.
+    is_bhns = (m_heavy > ns_max) & (m_light <= ns_max) & (m_light > 0.8)
     if np.any(is_bhns):
-        md = foucart_disk_mass(m1g[is_bhns], m2g[is_bhns], a_BH=a_bh)
+        md = foucart_disk_mass(m_heavy[is_bhns], m_light[is_bhns], a_BH=a_bh)
         bhns_cls = np.zeros_like(md, dtype=int)
         bhns_cls[md >= MDISK_LONG] = 6
         bhns_cls[(md >= MDISK_SHORT) & (md < MDISK_LONG)] = 5

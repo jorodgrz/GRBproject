@@ -68,12 +68,28 @@ def hernquist_scale_radius(R_e):
     return R_e / 1.8153
 
 
-def hernquist_birth_radius(a, rng=None, size=1):
+_R_CAP_FACTOR = 1000.0
+"""Hard cap on radii expressed as a multiple of the Hernquist scale
+radius ``a``.  Used by ``hernquist_birth_radius`` and ``integrate_orbit``
+to bound the rare tail of the Hernquist profile (Hernquist 1990).
+
+For the inverse-CDF sample r = a*sqrt(u)/(1 - sqrt(u)), the fraction
+clipped at ``f * a`` is (1 - f/(1+f))^2.  Setting f = 1000 gives a
+pile-up of (1/1001)^2 ~ 1e-6, which is negligible for the offset CDF
+(Fong & Berger 2013 observed range tops out near 75 kpc, well below
+1000*a even for compact SF hosts).  The previous 20*a cap clipped
+~9.3% of draws into a delta function at 20*a, biasing the offset tail.
+"""
+
+
+def hernquist_birth_radius(a, rng=None, size=1, r_cap_factor=_R_CAP_FACTOR):
     """Draw birth radii from the Hernquist stellar density profile.
 
     The enclosed mass fraction is M(<r)/M_tot = (r/(r+a))^2, so the
     inverse CDF gives r = a * sqrt(u) / (1 - sqrt(u)) for uniform
-    u in [0, 1).  Clipped at 20*a to avoid rare extreme draws.
+    u in [0, 1).  Capped at ``r_cap_factor * a`` (default 1000*a)
+    to bound numerical edge cases without significantly distorting
+    the distribution.
 
     Parameters
     ----------
@@ -82,6 +98,10 @@ def hernquist_birth_radius(a, rng=None, size=1):
     rng : np.random.Generator, optional
     size : int
         Number of samples.
+    r_cap_factor : float, optional
+        Multiplier of ``a`` for the upper cap.  See ``_R_CAP_FACTOR``
+        for the rationale; the default yields a pileup fraction
+        ~1e-6.
 
     Returns
     -------
@@ -92,7 +112,7 @@ def hernquist_birth_radius(a, rng=None, size=1):
     u = rng.uniform(0, 1, size=size)
     su = np.sqrt(u)
     r = a * su / (1.0 - su)
-    return np.minimum(r, 20.0 * a)
+    return np.minimum(r, r_cap_factor * a)
 
 
 def hernquist_potential(r, M_gal, a):
@@ -184,7 +204,7 @@ def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=None,
                         dense_output=False)
         if sol.success:
             r_final = abs(sol.y[0, -1])
-            return min(r_final, 20.0 * a)
+            return min(r_final, _R_CAP_FACTOR * a)
         return r_init
     except Exception:
         return r_init
@@ -247,9 +267,9 @@ def _hernquist_apocenter(E, L, M_gal, a):
         return 0.5 * L**2 / r**2 - GM / (r + a) - E
 
     try:
-        return brentq(eff_potential_minus_E, 1e-3 * a, 200.0 * a)
+        return brentq(eff_potential_minus_E, 1e-3 * a, _R_CAP_FACTOR * a)
     except ValueError:
-        return 20.0 * a
+        return _R_CAP_FACTOR * a
 
 
 def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
@@ -260,6 +280,11 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
     true Hernquist effective potential, then estimates the time-averaged
     radius.  Falls back to full integration for unbound orbits and
     short-delay systems.
+
+    The kick direction ``theta_launch`` is drawn isotropically once
+    per call (Bloom+ 1999) and is threaded through to ``integrate_orbit``
+    so the bound/unbound branching uses the same orbit that is then
+    actually integrated.
 
     Returns r_3d [cm].
     """
@@ -276,14 +301,16 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
     if v_cm <= 0 or t_s <= 0:
         return r0
 
+    theta_launch = np.arccos(rng.uniform(-1, 1))
+
     E = 0.5 * v_cm**2 + hernquist_potential(r0, M_gal, a)
     v_esc = escape_velocity(r0, M_gal, a)
 
     if v_cm >= v_esc:
         r0_f = r0 / a
-        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f, rng=rng)
+        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f,
+                               theta_launch=theta_launch, rng=rng)
 
-    theta_launch = np.arccos(rng.uniform(-1, 1))
     vr = v_cm * np.cos(theta_launch)
     vt = v_cm * np.sin(theta_launch)
     L = r0 * vt
@@ -293,13 +320,22 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
     r_apo = _hernquist_apocenter(E, L, M_gal, a)
     r_mean = (r0 + r_apo) / 2.0
 
+    # Period heuristic.  The exact radial period in a Hernquist
+    # potential is T_r = 2 * integral_{r_peri}^{r_apo} dr / sqrt(2*(E - Phi_eff))
+    # (Binney & Tremaine 2008, "Galactic Dynamics", Section 3.1).
+    # The expression below recovers the Kepler limit for r_mean >> a
+    # and is order-of-magnitude correct for r_mean ~ a; for r_mean << a
+    # it overestimates the period.  Used here only to branch between
+    # the time-averaged-radius shortcut (when t >> P_est) and full
+    # numerical integration, so a coarse estimate is sufficient.
     P_est = 2.0 * np.pi * np.sqrt(r_mean**3 / GM) * (1 + a / r_mean)
 
     if t_s > 5.0 * P_est:
         return r_mean
     else:
         r0_f = r0 / a
-        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f, rng=rng)
+        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f,
+                               theta_launch=theta_launch, rng=rng)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -447,7 +483,7 @@ def compute_offsets_mixed_hosts(v_sys_km, t_delay_myr, weights=None,
     }
 
 
-def assign_host_by_delay(t_delay_myr, t_sf_max=3000.0):
+def assign_host_by_delay(t_delay_myr, t_sf_max=3000.0, rng=None):
     """Assign each binary to a host galaxy type based on delay time.
 
     Short delay (< *t_sf_max* Myr) systems are placed in star-forming
@@ -456,6 +492,14 @@ def assign_host_by_delay(t_delay_myr, t_sf_max=3000.0):
     properties (delay time tracks M_tot) to host type, following the
     observation from Fong & Berger (2013) that ~25% of sGRBs are in
     elliptical hosts with older stellar populations.
+
+    Parameters
+    ----------
+    rng : np.random.Generator, optional
+        Random generator for the SF_disk / SF_massive split.  If None,
+        defaults to ``np.random.default_rng(42)`` for backward
+        compatibility.  Pass an external ``rng`` to keep this function
+        consistent with a global reproducible stream.
 
     Returns
     -------
@@ -466,7 +510,8 @@ def assign_host_by_delay(t_delay_myr, t_sf_max=3000.0):
     out = np.full(len(t), 'Elliptical', dtype='<U12')
     sf_mask = t < t_sf_max
     n_sf = sf_mask.sum()
-    rng = np.random.default_rng(42)
+    if rng is None:
+        rng = np.random.default_rng(42)
     disk_frac = rng.random(n_sf) < 0.67
     out[sf_mask] = np.where(disk_frac, 'SF_disk', 'SF_massive')
     return out
@@ -491,7 +536,7 @@ def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
 
     v = np.asarray(v_sys_km, dtype=float)
     t = np.asarray(t_delay_myr, dtype=float)
-    hosts = assign_host_by_delay(t, t_sf_max=t_sf_max)
+    hosts = assign_host_by_delay(t, t_sf_max=t_sf_max, rng=rng)
 
     valid = np.isfinite(v) & np.isfinite(t) & (v > 0) & (t > 0)
     valid_idx = np.where(valid)[0]
