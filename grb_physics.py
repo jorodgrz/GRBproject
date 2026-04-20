@@ -7,7 +7,7 @@ Gottlieb et al. (2023, 2024) classification thresholds.
 
 Cosmology
 ---------
-Throughout this pipeline we adopt the same cosmological parameters used
+Throughout this pipeline I adopt the same cosmological parameters used
 by COMPAS ``FastCosmicIntegration`` (Planck 2015 / TNG-consistent):
   H0 = 67.74 km/s/Mpc,  Omega_m = 0.3089,  Omega_Lambda = 0.6911
 All lookback-time ↔ redshift conversions, comoving volumes, and SFR
@@ -19,7 +19,7 @@ Supernova engine
 The COMPAS simulations (Broekgaarden et al. 2021, Model A and K) use the
 Fryer et al. (2012) *rapid* supernova explosion mechanism.  This produces
 a narrow NS mass distribution peaked near 1.26–1.28 M_sun with a gap
-around 2–5 M_sun.  The delayed mechanism yields broader NS masses and a
+around 2–5 M_sun. The delayed mechanism yields broader NS masses and a
 less pronounced mass gap, which would shift GRB class fractions
 (especially the sbGRB + blue KN boundary at 1.2 × M_TOV).
 
@@ -47,23 +47,34 @@ MDISK_LONG = 0.1       # BHNS Long cbGRB disk mass threshold [Msun]
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2024) additions
 # ---------------------------------------------------------------------------
-M_TOV = 2.2             # Maximum non-rotating NS mass [Msun]
-                         # Raaijmakers et al. (2021, arXiv:2105.06981) combined
-                         # NICER + GW + KN analysis: M_TOV = 2.23 +0.14/-0.23 (PP)
-                         # and 2.11 +0.29/-0.16 (CS).  2.2 is a central estimate.
-M_THRESH = M_CRIT_BNS   # Alias: prompt-collapse threshold [Msun]
-                         # M_THRESH / M_TOV ~ 1.27 here.  Bauswein+ 2013, 2020
-                         # and Koppel+ 2019 find ratios ~1.3-1.7 across EOSs;
-                         # the fiducial 2.8 Msun is from Gottlieb+ 2023 and sits
-                         # slightly below the NR-derived range.  See Section 17
-                         # for the full EOS sensitivity analysis.
-Q_NO_DISK = 1.05        # Below this q, near-equal-mass prompt collapse suppresses disk
+M_TOV = 2.2
+"""Maximum non-rotating NS mass [Msun].  Raaijmakers et al. (2021,
+arXiv:2105.06981) combined NICER + GW + KN: 2.23 +0.14/-0.23 (PP),
+2.11 +0.29/-0.16 (CS); 2.2 is a central estimate."""
+
+K_THRESH_DEFAULT = 1.27
+"""Default ratio M_THRESH / M_TOV.  With M_TOV = 2.2 this gives 2.794
+(~ 2.8, matching the Gottlieb+ 2023 fiducial).  Bauswein+ 2013, 2020
+and Koppel+ 2019 find ratios ~1.3-1.7 across EOSs (stiffer -> larger);
+1.27 is on the soft side.  Override per-EOS for sensitivity studies
+(see ``EOS_MODELS`` and the ``k_thresh`` kwarg of
+``grb_classify.classify_bns_2024`` / ``classify_grid``)."""
+
+M_THRESH = K_THRESH_DEFAULT * M_TOV   # 2.794 ~ 2.8 by default
+"""Prompt-collapse total-mass threshold [Msun], expressed as
+``K_THRESH_DEFAULT * M_TOV`` so that EOS sweeps that change ``M_TOV``
+also move ``M_THRESH``.  Note: ``M_CRIT_BNS = 2.8`` is retained
+separately as the Gottlieb (2023) hard-coded threshold for
+``classify_bns_2023``; the 2024 hybrid model uses ``M_THRESH``."""
+
 # NOTE: The HMNS short/long-lived split used in the notebook is at
 # 1.2 * M_TOV ~ 2.64 M_sun (total gravitational mass).  Gottlieb (2024)
 # discusses this near ~2.7 M_sun (close to M_THRESH).  The 1.2 * M_TOV
 # choice captures the concept that remnants significantly above M_TOV but
 # below M_THRESH collapse on viscous timescales rather than surviving long
-# enough to power an extended GRB engine.
+# enough to power an extended GRB engine.  Configurable via the
+# ``hmns_factor`` kwarg in ``grb_classify.classify_bns_2024`` /
+# ``classify_grid``.
 
 # ---------------------------------------------------------------------------
 # Legacy remnant-to-disk fraction (deprecated; kept for back-compat)
@@ -101,10 +112,25 @@ def r_isco(a_BH):
 
     Uses np.where so that a_BH = 0 maps to the prograde ISCO (sign = +1)
     without silently mis-handling small negative (retrograde) spins.
+
+    Inputs with ``|a_BH| >= 1`` are unphysical (Kerr spins satisfy
+    ``|a| < 1``) and would make ``(1 - a**2)**(1/3)`` complex,
+    silently propagating ``complex128`` values through the entire
+    Foucart chain.  Such inputs are clipped to +/- (1 - 1e-9) and a
+    single aggregated warning is emitted.
     """
-    Z1 = 1 + (1 - a_BH**2)**(1/3) * ((1 + a_BH)**(1/3) + (1 - a_BH)**(1/3))
-    Z2 = np.sqrt(3*a_BH**2 + Z1**2)
-    sign = np.where(a_BH >= 0, 1.0, -1.0)
+    a = np.asarray(a_BH, dtype=float)
+    if np.any(np.abs(a) >= 1.0):
+        n_bad = int(np.sum(np.abs(a) >= 1.0))
+        warnings.warn(
+            f"r_isco received {n_bad} spin values with |a| >= 1 "
+            f"(max |a|={float(np.max(np.abs(a))):.6f}); clipping to "
+            f"+/- (1 - 1e-9). Physical Kerr spins satisfy |a| < 1.",
+            stacklevel=2)
+    a = np.clip(a, -1.0 + 1e-9, 1.0 - 1e-9)
+    Z1 = 1 + (1 - a**2)**(1/3) * ((1 + a)**(1/3) + (1 - a)**(1/3))
+    Z2 = np.sqrt(3*a**2 + Z1**2)
+    sign = np.where(a >= 0, 1.0, -1.0)
     return 3 + Z2 - sign * np.sqrt((3 - Z1)*(3 + Z1 + 2*Z2))
 
 
@@ -126,12 +152,23 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     The cubic suppression R = R_1p4*(1 - 0.15*x^3) with x = (M - 1.4) /
     (M_TOV - 1.4) is anchored at M = 1.4 Msun so that R(1.4) = R_1p4_km
     exactly, matching the observational anchor (Raaijmakers et al. 2021,
-    arXiv:2105.06981: R_1.4 = 12.18 +0.56/-0.79 km, CS model).  Below
-    1.4 Msun the radius is held at R_1p4_km (flat plateau), and above
+    arXiv:2105.06981: R_1.4 = 12.18 +0.56/-0.79 km, CS model).  Above
     1.4 Msun the cubic suppression drops R by ~15% at M_TOV.
 
+    Below 1.4 Msun this function returns ``R_1p4_km`` exactly (flat
+    plateau).  This is a *modeling choice*, not a derivation: real NS
+    R(M) sequences are nearly flat or weakly varying across 1.0 - 1.4
+    Msun for most EOSs (small *increase* in R for stiff EOSs, small
+    *decrease* for soft), but the qualitative direction is EOS-
+    dependent and small in magnitude.  The plateau biases compactness
+    by at most a few percent for low-mass NSs but is consequential for
+    populations dominated by sub-1.4 Msun NSs (Galactic BNS, COMPAS
+    rapid-mechanism distributions).  Use ``ns_radius_from_eos()``
+    or pass ``R_NS_km`` directly to ``foucart_disk_mass()`` /
+    ``bns_disk_mass()`` for EOS-realistic low-mass behaviour.
+
     Qualitative behaviour:
-      - Flat plateau at R_1p4_km for M <= 1.4 Msun
+      - Flat plateau at R_1p4_km for M < 1.4 Msun (modeling choice)
       - Steepening drop from 1.4 Msun to M_TOV (~15% below R_1.4)
       - No neutron star above M_TOV (returns NaN)
 
@@ -140,18 +177,19 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
       - APR4: 11.1 km  |  SFHo: 11.9 km  |  DD2: 13.2 km
     The ~10% spread in R propagates as ~10% in compactness C_NS, which
     can shift disk masses near the MDISK_SHORT/MDISK_LONG thresholds.
-
-    For EOS-consistent calculations, use ``ns_radius_from_eos()`` or
-    pass R_NS_km directly to ``foucart_disk_mass()`` with the R_1p4
-    value from ``EOS_MODELS``.
     """
     if M_TOV_local is None:
         M_TOV_local = M_TOV
     M_NS = np.asarray(M_NS, dtype=float)
-    x = np.clip((M_NS - 1.4) / (M_TOV_local - 1.4), 0.0, 1.0)
-    R = R_1p4_km * (1.0 - 0.15 * x**3)
+    # x in (-inf, 1] -- negative below 1.4 Msun, clipped on the upper
+    # end so the cubic suppression saturates at M_TOV.  The flat
+    # plateau below 1.4 Msun is made explicit via np.where rather than
+    # buried in a clip; see the docstring for the modeling rationale.
+    x = (M_NS - 1.4) / (M_TOV_local - 1.4)
+    R = np.where(M_NS >= 1.4,
+                 R_1p4_km * (1.0 - 0.15 * np.clip(x, 0.0, 1.0)**3),
+                 R_1p4_km)
     R = np.where(M_NS > M_TOV_local, np.nan, R)
-    R = np.where(M_NS < 1.4, R_1p4_km, R)
     return R
 
 
@@ -190,7 +228,7 @@ def mcrit_to_r14(mc):
 # ---------------------------------------------------------------------------
 def _compactness(M_NS, R_km):
     """Dimensionless NS compactness C = G*M/(R*c^2)."""
-    G = 6.674e-11; c = 3e8; Msun = 1.989e30
+    G = 6.674e-11; c = 2.99792458e8; Msun = 1.989e30
     return G * np.asarray(M_NS, dtype=float) * Msun / (np.asarray(R_km, dtype=float) * 1e3 * c**2)
 
 
@@ -301,6 +339,36 @@ def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0,
                   M_TOV_local=None):
     """BNS post-merger accretion disk mass [Msun] -- Kruger & Foucart (2020) Eq. (4).
 
+    .. warning::
+        The KF2020 BNS disk-mass fit has a sharp transition at
+        C_1 ~ 0.156 (R_NS ~ 12 km for a 1.27 Msun NS), where the
+        linear ``a * C_1 + c`` term hits the 5e-4 floor.  Empirically,
+        the disk mass can swing by ~100x for a 1 km change in NS
+        radius near this threshold (e.g. for a GW170817-like system,
+        R_1.4 = 12 km gives M_disk ~ 1.5e-3 Msun, while R_1.4 = 13 km
+        gives ~0.28 Msun).  For studies near R_1.4 ~ 12 km, average
+        over an EOS prior or use the smoother Radice et al. (2018)
+        Eq. (1) instead.  Single-EOS results in this regime are not
+        physically meaningful.
+
+    .. warning::
+        Interaction with the ``ns_radius`` plateau.  When component
+        radii are not supplied explicitly, ``R_light`` is computed
+        via the heuristic ``ns_radius``, which is *flat* at
+        ``R_1p4_km`` for ``m_light < 1.4 Msun`` (see
+        ``ns_radius`` docstring).  Combined with the KF2020
+        discontinuity above, this means: (i) the disk mass is
+        completely insensitive to ``m_light`` below 1.4 Msun and
+        depends only on ``R_1p4_km``; (ii) the discontinuity becomes
+        one-sided -- e.g. for ``M1 = 1.46, M2 = 1.27``, the result
+        is exactly the KF2020 floor (~1.5e-3 Msun) for any
+        ``R_1p4_km <= ~12.05`` km, then jumps two orders of magnitude
+        as ``R_1p4_km`` crosses ~12.1 km.  For sub-1.4 Msun light
+        components, supply explicit per-component ``R1_km`` /
+        ``R2_km`` from an EOS table (or use ``ns_radius_from_eos``)
+        to recover the proper R(M) margin and mitigate this
+        knife-edge sensitivity.
+
     Distinct from ``foucart_disk_mass`` (which is BHNS-only).  KF2020
     fit the disk mass of BNS NR simulations to the compactness of the
     *lighter* NS:
@@ -388,11 +456,24 @@ def bns_dynamical_ejecta(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0):
 # ---------------------------------------------------------------------------
 def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
                       f_disk=None, clip_Q=None, clip_chi=None):
-    """BHNS accretion disk mass [Msun].
+    """BHNS *late-time effective* accretion disk mass [Msun].
 
     Default behaviour (f_disk=None): computes
         M_disk = M_rem(Foucart 2018) - M_dyn(Kruger & Foucart 2020)
     which properly separates the disk from dynamical ejecta.
+
+    Time-scope note.  Foucart (2018) defines ``M_rem`` as the bound
+    baryon mass outside the BH at t ~ 10 ms after merger.  At that
+    snapshot ``M_rem`` includes (i) the accretion disk, (ii) the bound
+    tidal tail that falls back over ~0.1 - 1 s, and (iii) the unbound
+    dynamical ejecta.  Subtracting ``M_dyn`` (component iii) therefore
+    gives the *late-time effective disk mass* after tidal-tail
+    fallback has accreted onto the disk -- not the instantaneous
+    t = 10 ms accretion disk.  This is the right quantity for
+    powering the GRB jet engine (which operates on the viscous /
+    accretion timescale, well after the 10 ms snapshot) and for
+    comparison with downstream classification thresholds
+    (``MDISK_SHORT``, ``MDISK_LONG``).
 
     Legacy behaviour (f_disk=<float>): returns f_disk * M_rem as before.
 

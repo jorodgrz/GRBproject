@@ -6,6 +6,8 @@ using COMPAS FastCosmicIntegration infrastructure.  Also includes Kroupa IMF
 verification, per-system rate weights, and BH spin marginalization.
 """
 
+import warnings
+
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.integrate import quad
@@ -95,10 +97,18 @@ def _bin_averaged_dPdlogZ(redshifts, COMPAS_Z,
         mid = 0.5 * (log_unique[:-1] + log_unique[1:])
         lo_edges = np.empty(n_bins)
         hi_edges = np.empty(n_bins)
-        lo_edges[0] = log_unique[0] - 0.5 * (log_unique[1] - log_unique[0])
+        # First/last bin edges are snapped to log_unique[0] and
+        # log_unique[-1] so they coincide with the renormalization
+        # range used below (ln_Z_min / ln_Z_max).  The previous
+        # symmetric extrapolation by half the adjacent spacing
+        # extended outside [ln_Z_min, ln_Z_max], so probability
+        # captured in the extrapolated tails was rescaled away by
+        # the renormalization step -- harmless but logically
+        # inconsistent.  Effect on the first/last bin is sub-1%.
+        lo_edges[0] = log_unique[0]
         lo_edges[1:] = mid
         hi_edges[:-1] = mid
-        hi_edges[-1] = log_unique[-1] + 0.5 * (log_unique[-1] - log_unique[-2])
+        hi_edges[-1] = log_unique[-1]
 
     # Analytic CDF evaluation: P_bin(z,k) = Phi(hi_std) - Phi(lo_std)
     # Vectorised over redshifts (axis 0) and bins (axis 1).
@@ -108,15 +118,41 @@ def _bin_averaged_dPdlogZ(redshifts, COMPAS_Z,
     dPdlogZ_binned = _NormDist.cdf(hi_std) - _NormDist.cdf(lo_std)  # (n_z, n_bins)
 
     # Normalize: COMPAS convention clips to the sampled Z range and
-    # renormalizes so the total probability over all bins sums to 1.
+    # rescales the bin probabilities so their sum equals
+    #   norm(z) = Phi((ln Z_max - mu(z)) / sigma(z))
+    #           - Phi((ln Z_min - mu(z)) / sigma(z))
+    # i.e. the integrated log-normal probability that falls inside
+    # [ln_Z_min, ln_Z_max].  This is < 1 in general and approaches 0
+    # at high z, where the MSSFR log-normal sits well below the
+    # COMPAS Z grid (see the diagnostic warning below).  The bins do
+    # NOT renormalize to 1.
     ln_Z_min = log_unique[0]
     ln_Z_max = log_unique[-1]
     norm = (_NormDist.cdf((ln_Z_max - mu) / sigma)
             - _NormDist.cdf((ln_Z_min - mu) / sigma))   # (n_z,)
     norm = np.where(norm > 0, norm, 1.0)
     total_bin = dPdlogZ_binned.sum(axis=1)               # (n_z,)
-    total_bin = np.where(total_bin > 0, total_bin, 1.0)
-    dPdlogZ_binned *= (norm / total_bin)[:, np.newaxis]
+    total_bin_safe = np.where(total_bin > 0, total_bin, 1.0)
+    dPdlogZ_binned *= (norm / total_bin_safe)[:, np.newaxis]
+
+    # Diagnostic: at high z the MSSFR log-normal sits well below the
+    # COMPAS Z grid lower edge, so the Voronoi bin probabilities sum
+    # to a tiny ``total_bin`` and the renormalization factor blows up.
+    # Levina+ 2026 (arXiv:2601.20202) shows this kind of analytical
+    # extrapolation overestimates high-z BBH rates by 10 - 1e4x.  Warn
+    # when any redshift slice has > 10x amplification so callers know
+    # their high-z rates are extrapolation-dominated.
+    amplification = norm / total_bin_safe
+    if np.any(amplification > 10.0):
+        bad = amplification > 10.0
+        z_bad = redshifts[bad]
+        warnings.warn(
+            f"Metallicity grid does not span the MSSFR PDF at z = "
+            f"[{z_bad.min():.1f}, {z_bad.max():.1f}] "
+            f"(max amplification {amplification.max():.1f}x).  "
+            f"High-z rates are extrapolation-dominated; consider "
+            f"extending the COMPAS Z grid or capping max(z).",
+            stacklevel=2)
 
     # Map each COMPAS system to its unique-Z column index
     Z_to_col = {z: k for k, z in enumerate(unique_Z)}
