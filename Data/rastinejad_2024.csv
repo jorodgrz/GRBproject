@@ -2,18 +2,34 @@
 # Component ejecta masses (M_B, M_P, M_R) and asymmetric +/- intervals are
 # taken from Table 3 medians.  GRB 230307A uses the paper-favored KN Fit 1.
 #
-# T_50 source notes:
+# Component-to-origin mapping (Metzger 2019, Rev. Mod. Phys. 89, 023001;
+# Kasen et al. 2017, Nature 551, 80):
+#   M_B (lanthanide-poor)  : fast dynamical ejecta (tidal + shocked).
+#   M_P (intermediate Ye)  : disk-wind ejecta; thermal / neutrino-driven.
+#   M_R (lanthanide-rich)  : disk-wind ejecta; MHD/viscous component.
+# M_wind = M_P + M_R is the disk-wind total and is the apples-to-apples
+# quantity to compare against Gottlieb+25 Eq. (11) (BH engine) and
+# 0.3 * M_d (HMNS engine), both of which predict disk-wind mass only.
+# comparison.ipynb uses M_wind for the Fig. 2 residual; the Fig. 1 plot
+# still shows M_tot = M_B + M_P + M_R for continuity with Rastinejad+24.
+#
+# T_50 source and prior notes (see notebook T50_PRIOR_OVERRIDES):
 #   050709  : T_90 = 0.07 +/- 0.04 s from Villasenor+2005, Nature 437, 855
-#             (HETE-II FREGATE).  No published T_50.  We use T_90 itself
-#             as a pragmatic upper bound on T_50.
+#             (HETE-II FREGATE).  No published T_50.  The Gaussian prior
+#             previously used biased posterior mass toward the T_90 value;
+#             the notebook now draws T_50 log-uniformly on [0.02, 0.07] s
+#             to reflect the "upper bound only" status.
 #   170817A : T_50 = 0.6 +/- 0.1 s from Goldstein+2017, ApJL 848 L14 Table 1
 #             (Fermi-GBM 50-300 keV main pulse; T_90 = 2.0 +/- 0.5 s).
+#             Default Gaussian prior.
 #   230307A : No published T_50.  T_90 ~ 35 s (Levan+2024).  The burst's
 #             main-pulse fluence is concentrated within the first ~10 s,
 #             with an extended-emission tail extending T_90 to ~35 s.
-#             We adopt T_50 = T_90/2 = 17.5 s with a 50% (10 s) one-sigma
-#             bar that brackets both the "main pulse only" (~5 s) and
-#             "full T_90" (~25 s) interpretations.
+#             The previous symmetric Gaussian (T_50 = 17.5 +/- 10 s) leaked
+#             posterior mass to unphysically short durations; the notebook
+#             now draws T_50 log-normally with geomean 17.5 s and
+#             multiplicative sigma = 2 (factor-2 width, brackets the
+#             5 s "main pulse only" and 35 s "full T_90" interpretations).
 #
 # E_iso uncertainties for events without published errors (050709 and
 # 230307A) are set to 30% relative.

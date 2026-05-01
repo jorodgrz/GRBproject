@@ -548,6 +548,116 @@ Two ways to apply this:
 
 
 # ---------------------------------------------------------------------------
+# Gottlieb et al. (2025) Eq. (11) disk-wind ejecta relation
+# ---------------------------------------------------------------------------
+# Constants and helpers used by ``comparison.ipynb`` to compare BH-engine
+# and HMNS-engine kilonova ejecta predictions against the Rastinejad+24
+# observational sample.  Single source of truth per CLAUDE.md; previously
+# duplicated in the notebook.
+#
+# Reference: Gottlieb et al. 2025, arXiv:2411.13657.
+
+GOTTLIEB25_F_RANGE = (0.02, 0.71)
+"""Range of the dimensionless ratio ``f_code = f_b / epsilon_gamma``,
+which the notebook samples log-uniformly to marginalise the BH-engine
+prediction in ``predict_bh_mc``.
+
+Gottlieb+25 Eq. (10) defines
+
+    E_iso,gamma = (epsilon_gamma / f_b) * E_j = 10 * f_{-1} * E_j,
+    f_{-1} = 0.1 * epsilon_gamma / f_b,
+
+with ``0.01 <= f_b <= 0.11`` (beaming fraction, Berger 2014,
+ARA&A 52, 43) and ``0.15 <= epsilon_gamma <= 0.5`` (gamma-ray
+radiative efficiency, Beniamini & Granot 2015).  Combining the
+boundary values gives ``f_{-1} in [0.14, 5.0]``.
+
+The notebook stores the inverse, ``f_code = f_b / epsilon_gamma``, so
+that ``f_inv = 0.1 / f_code`` reproduces the paper's ``f_{-1}``.
+Algebraically ``f_code in [0.01/0.5, 0.11/0.15] = [0.02, 0.733]``;
+the upper bound is rounded down to 0.71 here, which compresses the
+high-``f_code`` (low-``f_inv``) tail by about 3% relative to the strict
+algebraic limit and is a deliberate cosmetic choice, not a derived
+value."""
+
+GOTTLIEB25_DISK_RANGE = (0.01, 0.10)
+"""Post-merger accretion-disk-mass prior for the HMNS / magnetar engine
+[Msun].  Anchored on the BNS disk-mass fit of Kruger & Foucart 2020
+(arXiv:2002.07728, Eq. 4), which gives ``M_disk <~ 0.1 Msun`` for
+``R_NS ~ 12 km``.  The upper edge is consistent with Gottlieb+25 §3.1
+(sbGRB-producing HMNSs have "less massive disks" than the ~0.1 Msun
+lbGRB benchmark) and with the disk masses sampled by the Radice+18 NR
+simulations (arXiv:1809.11163)."""
+
+GOTTLIEB25_WIND_FRAC = 0.3
+"""Disk-wind ejected fraction ``f_wind = M_ej / M_disk``.  Gottlieb+25
+§3.1, line 474; consistent with ``f_wind ~ 0.2-0.4`` in Radice+18
+GRMHD simulations (arXiv:1809.11163)."""
+
+GOTTLIEB25_T_HMNS_RANGE = (0.1, 10.0)
+"""Long-lived-HMNS lifetime window [s].  Set by magnetar spin-down and
+viscous timescales (Lippuner+17, Fujibayashi+18, Metzger 2019).  Used
+as a *guide for the eye* in Fig. 1 of ``comparison.ipynb``; Gottlieb+25
+§3.1 does not claim the HMNS engine predicts T_50 directly."""
+
+
+def gottlieb25_eq11(T50, E_iso, alpha=2.0, f_inv=1.0):
+    """Predicted disk-wind kilonova ejecta mass [Msun], BH engine.
+
+    Gottlieb et al. 2025 (arXiv:2411.13657) Eq. (11):
+
+        M_ej = 1e-3 * f_{-1}^{-1} * (E_iso / 2e51 erg) *
+               (T50 / 1 s) ** (alpha - 1)   Msun
+
+    Parameters
+    ----------
+    T50 : array-like
+        50% gamma-ray fluence duration [s].
+    E_iso : array-like
+        Isotropic-equivalent gamma-ray energy [erg].
+    alpha : float, default 2.0
+        Power-law index of the prompt luminosity function.
+    f_inv : float, default 1.0
+        Inverse GRB radiative efficiency normalised to f = 0.1, i.e.
+        ``f_inv = (f / 0.1) ** -1``.
+    """
+    T50 = np.asarray(T50, dtype=float)
+    E_iso = np.asarray(E_iso, dtype=float)
+    return 1e-3 * f_inv * (E_iso / 2e51) * (T50 / 1.0) ** (alpha - 1.0)
+
+
+def hmns_wind_ejecta(M_d, wind_frac=GOTTLIEB25_WIND_FRAC):
+    """Predicted disk-wind kilonova ejecta mass [Msun], HMNS engine.
+
+    ``M_ej = wind_frac * M_d``.  Independent of T_50 to first order.
+    Default ``wind_frac = 0.3`` from Gottlieb+25 §3.1.
+    """
+    return wind_frac * np.asarray(M_d, dtype=float)
+
+
+def _selftest_gottlieb25():
+    """Run on import; verifies that Eq. (11) normalisation and the f_inv
+    derivation from Eq. (10) are consistent with the cited values."""
+    assert np.isclose(gottlieb25_eq11(1.0, 2e51, alpha=2.0, f_inv=1.0),
+                      1e-3), "Eq. 11 normalisation failed"
+    assert np.isclose(gottlieb25_eq11(4.0, 2e51, alpha=1.5, f_inv=1.0),
+                      2e-3), "Eq. 11 alpha=1.5 scaling failed"
+    f_lo, f_hi = GOTTLIEB25_F_RANGE
+    finv_min, finv_max = 0.1 / f_hi, 0.1 / f_lo
+    assert np.isclose(finv_min, 0.14, atol=0.01), \
+        f"f_inv_min should be ~0.14 (got {finv_min:.3f})"
+    assert np.isclose(finv_max, 5.0, atol=0.05), \
+        f"f_inv_max should be ~5.0 (got {finv_max:.3f})"
+    lo, hi = hmns_wind_ejecta(np.array(GOTTLIEB25_DISK_RANGE))
+    assert 0 < lo < hi, "HMNS wind-ejecta range ordering failed"
+    t_lo, t_hi = GOTTLIEB25_T_HMNS_RANGE
+    assert 0 < t_lo < t_hi, "HMNS t_range ordering failed"
+
+
+_selftest_gottlieb25()
+
+
+# ---------------------------------------------------------------------------
 # Module-level __getattr__ for deprecated attributes
 # ---------------------------------------------------------------------------
 def __getattr__(name):

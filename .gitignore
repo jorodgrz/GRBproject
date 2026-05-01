@@ -15,8 +15,18 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
+# IPython
+.cache/
+.ipython/
+
 # macOS
 .DS_Store
+
+# Demos (vendored tutorials, not part of the project deliverable)
+Demos/
+
+# Reference papers (local PDFs, not part of the project deliverable)
+Papers/
 
 # Distribution / packaging
 dist/
@@ -24,4 +34,9 @@ build/
 *.egg-info/
 *.code-workspace
 .pdf_extract/
-.pdf_extract/
+CLAUDE.md
+COMPAS/
+
+# Data products (only the observational comparison CSV is tracked)
+Data/*
+!Data/rastinejad_2024.csv
