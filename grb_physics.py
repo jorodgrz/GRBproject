@@ -35,6 +35,7 @@ should therefore be interpreted as *upper bounds*.
 
 import warnings
 import numpy as np
+from scipy.special import erf
 
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2023) classification thresholds
@@ -221,6 +222,143 @@ def mcrit_to_r14(mc):
     return apr4['R_1p4'] + ((dd2['R_1p4'] - apr4['R_1p4'])
                             / (dd2['M_crit'] - apr4['M_crit'])
                             * (mc - apr4['M_crit']))
+
+
+# ---------------------------------------------------------------------------
+# NS-mass quantile remap (Mandel & Muller 2020 style)
+# ---------------------------------------------------------------------------
+# Alsing, Silva & Berti (2018) MNRAS 478, 1377 double-Gaussian fit to the
+# Galactic NS mass distribution.  Component 1 captures the recycled +
+# slow-pulsar peak near 1.34 Msun; component 2 captures the high-mass
+# tail (e.g. PSR J0740+6620, J1614-2230) near 1.80 Msun.
+NS_REMAP_W1 = 0.66
+NS_REMAP_MU1 = 1.34   # [Msun]
+NS_REMAP_SIG1 = 0.07  # [Msun]
+NS_REMAP_W2 = 0.34
+NS_REMAP_MU2 = 1.80   # [Msun]
+NS_REMAP_SIG2 = 0.21  # [Msun]
+NS_REMAP_M_MIN = 1.10  # [Msun] lower truncation
+
+
+def _truncated_double_gauss_cdf(x, m_min, m_max):
+    """Truncated Alsing+ 2018 double-Gaussian CDF, evaluated at x [Msun].
+
+    Computed analytically from the Gaussian erf, then renormalised so
+    F(m_min) = 0 and F(m_max) = 1.
+    """
+    def _g_cdf(t, mu, sig):
+        return 0.5 * (1.0 + erf((t - mu) / (sig * np.sqrt(2.0))))
+    raw = (NS_REMAP_W1 * _g_cdf(x, NS_REMAP_MU1, NS_REMAP_SIG1)
+           + NS_REMAP_W2 * _g_cdf(x, NS_REMAP_MU2, NS_REMAP_SIG2))
+    raw_lo = (NS_REMAP_W1 * _g_cdf(m_min, NS_REMAP_MU1, NS_REMAP_SIG1)
+              + NS_REMAP_W2 * _g_cdf(m_min, NS_REMAP_MU2, NS_REMAP_SIG2))
+    raw_hi = (NS_REMAP_W1 * _g_cdf(m_max, NS_REMAP_MU1, NS_REMAP_SIG1)
+              + NS_REMAP_W2 * _g_cdf(m_max, NS_REMAP_MU2, NS_REMAP_SIG2))
+    return (raw - raw_lo) / (raw_hi - raw_lo)
+
+
+def remap_ns_masses_double_gaussian(m1, m2, weights=None, m_tov=None,
+                                     m_min=NS_REMAP_M_MIN, n_grid=10000,
+                                     rng=None):
+    """Quantile-remap NS gravitational masses to an empirical Galactic-NS PDF.
+
+    The Fryer (2012) *rapid* SN engine used in the Broekgaarden et al.
+    (2021) COMPAS catalogues produces a known artificial deficit in the
+    NS gravitational-mass distribution near 1.7 Msun (Mandel & Muller
+    2020 MNRAS 499, 3214; Patton & Sukhbold 2020 MNRAS 499, 2803).  This
+    helper performs a weighted, rank-preserving quantile transform from
+    the empirical COMPAS NS-mass distribution to the Alsing, Silva &
+    Berti (2018) MNRAS 478, 1377 double-Gaussian fit to Galactic NSs:
+
+        f(m) propto W1 * N(m; mu1, sig1) + W2 * N(m; mu2, sig2),
+        truncated to [m_min, m_tov].
+
+    The remap is *marginal*: m1 and m2 are stacked into a single NS
+    stream, ranked by weighted CDF, and each ranked sample is mapped to
+    the corresponding quantile of the target distribution.  This means
+    both component slots are calibrated against the same target PDF
+    (consistent with single-population NS formation), but joint
+    correlations between m1 and m2 (chirp-mass, q, metallicity-mass
+    coupling) are preserved only up to per-rank-bin reordering.  Length,
+    indexing, STROOPWAFEL weights, and the m1 >= m2 invariant are
+    preserved.
+
+    Parameters
+    ----------
+    m1, m2 : array_like
+        Component gravitational masses [Msun], with m1 >= m2 (as
+        returned by ``grb_io.load_bns(sort_masses=True)``).
+    weights : array_like, optional
+        Per-system STROOPWAFEL weights.  If None, unweighted ranks.
+    m_tov : float, optional
+        Maximum NS gravitational mass [Msun].  Defaults to ``M_TOV``
+        (2.2).  The target distribution is truncated at ``m_tov``.
+    m_min : float, optional
+        Lower truncation of the target distribution [Msun].
+    n_grid : int, optional
+        Grid resolution for the inverse target CDF.
+    rng : np.random.Generator, optional
+        Used only for sub-microsolar deterministic jitter to break
+        rank ties.  Default ``np.random.default_rng(0)``.
+
+    Returns
+    -------
+    m1_new, m2_new : ndarray
+        Remapped component masses [Msun], sorted so m1_new >= m2_new
+        and clipped within [m_min, m_tov].
+
+    Notes
+    -----
+    Mandel & Muller (2020) and Patton & Sukhbold (2020) advocate
+    replacing the rapid prescription's piecewise M_CO -> M_remnant
+    mapping with a smooth distribution that matches observed Galactic
+    NS masses (Antoniadis et al. 2016; Alsing+ 2018).  Doing this
+    consistently from M_CO requires re-running COMPAS, which is out of
+    scope here.  This quantile transform is the standard postprocessing
+    workaround: it preserves the population *order* set by the binary
+    evolution while replacing the marginal mass distribution.
+    """
+    if rng is None:
+        rng = np.random.default_rng(0)
+    if m_tov is None:
+        m_tov = M_TOV
+
+    m1 = np.asarray(m1, dtype=float)
+    m2 = np.asarray(m2, dtype=float)
+    if m1.shape != m2.shape:
+        raise ValueError("m1 and m2 must have the same shape")
+    n_sys = m1.size
+
+    if weights is None:
+        w_sys = np.ones(n_sys, dtype=float)
+    else:
+        w_sys = np.asarray(weights, dtype=float)
+        if w_sys.shape != m1.shape:
+            raise ValueError("weights must have the same shape as m1")
+
+    m_stack = np.concatenate([m1, m2])
+    w_stack = np.concatenate([w_sys, w_sys])
+
+    jitter = rng.uniform(-1e-6, 1e-6, size=m_stack.size)
+    m_jitt = m_stack + jitter
+
+    order = np.argsort(m_jitt)
+    cum_w = np.cumsum(w_stack[order])
+    cum_w_total = cum_w[-1]
+    u_ranked = (cum_w - 0.5 * w_stack[order]) / cum_w_total
+
+    grid = np.linspace(m_min, m_tov, n_grid)
+    cdf_grid = _truncated_double_gauss_cdf(grid, m_min, m_tov)
+    m_target_ranked = np.interp(u_ranked, cdf_grid, grid)
+
+    m_remap = np.empty_like(m_stack)
+    m_remap[order] = m_target_ranked
+
+    m1_raw = m_remap[:n_sys]
+    m2_raw = m_remap[n_sys:]
+    m1_new = np.maximum(m1_raw, m2_raw)
+    m2_new = np.minimum(m1_raw, m2_raw)
+    return m1_new, m2_new
 
 
 # ---------------------------------------------------------------------------
@@ -592,7 +730,20 @@ simulations (arXiv:1809.11163)."""
 GOTTLIEB25_WIND_FRAC = 0.3
 """Disk-wind ejected fraction ``f_wind = M_ej / M_disk``.  Gottlieb+25
 §3.1, line 474; consistent with ``f_wind ~ 0.2-0.4`` in Radice+18
-GRMHD simulations (arXiv:1809.11163)."""
+GRMHD simulations (arXiv:1809.11163).
+
+Point value retained for the Fig. 1 visual band in
+``comparison.ipynb``; the Fig. 2 / Fig. 3 Monte-Carlo path samples
+``GOTTLIEB25_WIND_FRAC_RANGE`` log-uniformly instead, so that the
+HMNS-engine prediction reflects the GRMHD scatter."""
+
+GOTTLIEB25_WIND_FRAC_RANGE = (0.2, 0.4)
+"""Disk-wind ejected fraction range, ``f_wind in [0.2, 0.4]``.  Radice
+et al. 2018 GRMHD simulations (arXiv:1809.11163, Table 2) give
+``f_wind ~ 0.2-0.4`` across the BNS post-merger disk-mass range; this
+range is drawn log-uniformly in the HMNS-engine MC.  The point value
+``GOTTLIEB25_WIND_FRAC = 0.3`` is the geomean and is retained for the
+Fig. 1 visual band only."""
 
 GOTTLIEB25_T_HMNS_RANGE = (0.1, 10.0)
 """Long-lived-HMNS lifetime window [s].  Set by magnetar spin-down and
@@ -650,6 +801,10 @@ def _selftest_gottlieb25():
         f"f_inv_max should be ~5.0 (got {finv_max:.3f})"
     lo, hi = hmns_wind_ejecta(np.array(GOTTLIEB25_DISK_RANGE))
     assert 0 < lo < hi, "HMNS wind-ejecta range ordering failed"
+    fw_lo, fw_hi = GOTTLIEB25_WIND_FRAC_RANGE
+    assert 0 < fw_lo < fw_hi, "HMNS wind-fraction range ordering failed"
+    assert fw_lo <= GOTTLIEB25_WIND_FRAC <= fw_hi, \
+        "GOTTLIEB25_WIND_FRAC must lie inside GOTTLIEB25_WIND_FRAC_RANGE"
     t_lo, t_hi = GOTTLIEB25_T_HMNS_RANGE
     assert 0 < t_lo < t_hi, "HMNS t_range ordering failed"
 
