@@ -161,28 +161,37 @@ def _bin_averaged_dPdlogZ(redshifts, COMPAS_Z,
     return dPdlogZ_binned, sys_col_idx
 
 
-def _interp_formation_rate(n_formed, dPdlogZ_col, p_draw, weight,
+def _interp_formation_rate(n_formed, dPdlogZ_binned, cols, p_draw, weight,
                            z_form, redshift_step, n_z):
     """Shared interpolation of the formation rate at arbitrary z_form.
 
     Both ``compute_merger_rate`` and ``per_system_rate_weights`` use this
-    to evaluate  n_formed(z_form) * dPdlogZ_binned(z_form) / p_draw * w
+    to evaluate  n_formed(z_form) * dPdlogZ_binned(z_form, col) / p_draw * w
     via linear interpolation on the uniform redshift grid.
 
     Parameters
     ----------
-    dPdlogZ_col : 1-D array, shape (n_z,)
-        Bin-integrated metallicity weight for this system (or array of
-        systems when called from ``per_system_rate_weights``), already
-        selected from the ``dPdlogZ_binned`` columns.
+    dPdlogZ_binned : 2-D array, shape (n_z, n_unique_Z)
+        Bin-integrated metallicity weights, one column per unique
+        COMPAS metallicity (as returned by ``_bin_averaged_dPdlogZ``).
+    cols : int or 1-D int array
+        Column index (or per-system column indices) into
+        ``dPdlogZ_binned``.  When called from ``compute_merger_rate``
+        this is a scalar (one system per iteration, evaluated across
+        many merger-grid points); when called from
+        ``per_system_rate_weights`` this is a 1-D array matching
+        ``z_form`` (one redshift per system).  Paired advanced
+        indexing ``dPdlogZ_binned[z_lo, cols]`` collapses both cases
+        to a 1-D output without the broadcasting bug that would
+        otherwise produce a 2-D result in the per-system path.
     """
     z_idx_float = z_form / redshift_step
     z_lo = np.clip(np.floor(z_idx_float).astype(int), 0, n_z - 1)
     z_hi = np.clip(z_lo + 1, 0, n_z - 1)
     frac = z_idx_float - np.floor(z_idx_float)
 
-    form_lo = n_formed[z_lo] * dPdlogZ_col[z_lo] / p_draw * weight
-    form_hi = n_formed[z_hi] * dPdlogZ_col[z_hi] / p_draw * weight
+    form_lo = n_formed[z_lo] * dPdlogZ_binned[z_lo, cols] / p_draw * weight
+    form_hi = n_formed[z_hi] * dPdlogZ_binned[z_hi, cols] / p_draw * weight
     return form_lo * (1.0 - frac) + form_hi * frac
 
 
@@ -248,7 +257,7 @@ def compute_merger_rate(redshifts, times, time_first_SF, n_formed,
         assert len(j_idx) == len(z_form), "valid-mask index mismatch"
 
         total_merger[j_idx] += _interp_formation_rate(
-            n_formed, dPdlogZ_binned[:, sys_col[i]], p_draw,
+            n_formed, dPdlogZ_binned, sys_col[i], p_draw,
             COMPAS_weights[i], z_form, redshift_step, n_z)
 
     if smooth_sigma > 0:
@@ -290,7 +299,7 @@ def per_system_rate_weights(z_target, redshifts, times, time_first_SF,
     if valid.any():
         z_form = times_to_z(t_form[valid])
         out[valid] = _interp_formation_rate(
-            n_formed, dPdlogZ_binned[:, sys_col[valid]], p_draw,
+            n_formed, dPdlogZ_binned, sys_col[valid], p_draw,
             COMPAS_weights[valid], z_form, redshift_step, n_z)
     return out
 
