@@ -1,0 +1,58 @@
+name: pytest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  fast:
+    name: Fast tests (no Data, no compas pin)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install minimal runtime + pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy>=1.23 scipy>=1.10 h5py>=3.7 pandas>=2.0 pytest>=7.4
+
+      - name: Run smoke suite
+        run: make ci
+
+  data-bound:
+    name: Data-bound tests (manual dispatch)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install minimal runtime + pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy>=1.23 scipy>=1.10 h5py>=3.7 pandas>=2.0 pytest>=7.4
+
+      - name: Note about Data/
+        run: |
+          echo "Data-bound tests require Data/COMPASCompactOutput_*_A.h5"
+          echo "and Data/COMPASCompactOutput_*_K.h5 (Broekgaarden+ 2021,"
+          echo "Zenodo 5189849 / 5178777).  Tests that need them auto-skip"
+          echo "if absent.  To run them in CI, add a step that downloads"
+          echo "or restores the multi-GB archives into Data/ before pytest."
+
+      - name: Run full suite (skipping any test that auto-skips)
+        run: python -m pytest -q

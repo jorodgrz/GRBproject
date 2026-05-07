@@ -1,0 +1,30 @@
+# pyproject.toml
+#
+# Minimal pyproject for the GRB classification project.  The project
+# is *not* packaged for distribution (CLAUDE.md mandates conda-only
+# dependency management via environment.yml); this file exists solely
+# to host the pytest configuration.
+
+[tool.pytest.ini_options]
+minversion = "7.4"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: tests that take more than ~5 s wall-clock (deselect with '-m \"not slow\"')",
+    "requires_data: tests that need the COMPAS HDF5 catalogues in Data/ (skipped if absent)",
+    "requires_compas: tests that need the upstream compas_python_utils package (skipped if not importable)",
+]
+filterwarnings = [
+    # The COMPAS Foucart calibration warnings are intentional bulk-call
+    # signals for analysts, not test failures; downgrade them here.
+    "ignore:Foucart \\(2018\\) formula applied:UserWarning",
+    # The MEAN_MASS_EVOLVED deprecation warning fires whenever someone
+    # imports the legacy constant; tests that exercise the deprecation
+    # explicitly catch it themselves.
+    "ignore::DeprecationWarning:grb_physics",
+    # The HDF5 metadata validation prints a one-time "no embedded model
+    # identifier" warning on un-annotated catalogues.  Tests that load
+    # archives without first running tools/embed_model_metadata.py are
+    # expected; suppress the noise.
+    "ignore:COMPAS HDF5.*has no embedded model identifier:UserWarning",
+]
