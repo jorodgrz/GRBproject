@@ -23,7 +23,7 @@ jobs:
       - name: Install minimal runtime + pytest
         run: |
           python -m pip install --upgrade pip
-          pip install numpy>=1.23 scipy>=1.10 h5py>=3.7 pandas>=2.0 pytest>=7.4
+          pip install numpy>=1.23 scipy>=1.10 h5py>=3.7 pandas>=2.0 astropy>=5.0 pytest>=7.4
 
       - name: Run smoke suite
         run: make ci
@@ -44,7 +44,7 @@ jobs:
       - name: Install minimal runtime + pytest
         run: |
           python -m pip install --upgrade pip
-          pip install numpy>=1.23 scipy>=1.10 h5py>=3.7 pandas>=2.0 pytest>=7.4
+          pip install numpy>=1.23 scipy>=1.10 h5py>=3.7 pandas>=2.0 astropy>=5.0 pytest>=7.4
 
       - name: Note about Data/
         run: |
