@@ -156,22 +156,67 @@ def _find_extremum(redshifts, R, z_lo, z_hi, kind):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
+def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
+    """After ``calibrate_mean_mass_evolved`` was switched to
+    ``smooth_sigma=0`` (sharp z=0 anchor), the unsmoothed full-population
+    R(z=0) must equal ``expected_local_rate`` from the Broekgaarden+
+    2021 ``weights_intrinsic/w_000`` column to within numerical
+    precision at every ``redshift_step`` choice.  Pre-fix the
+    calibration helper inherited ``compute_merger_rate``'s default
+    ``smooth_sigma=30`` in BIN units, so the boundary-reflective
+    Gaussian at z=0 mixed in a different physical width of the rising
+    R(z) at different ``redshift_step`` and let MEAN_MASS_EVOLVED
+    drift ~30 percent across ``dz in [0.0025, 0.01]``.
+
+    Loops over ``dz in (0.01, 0.005)`` so a single test catches both
+    the calibration drift and any future bias regression.
+    """
+    from grb_rates import compute_merger_rate
+
+    setup = _build_setup(bns_a_path)
+    for dz in (0.01, 0.005):
+        grid = _cosmic_grid(setup, redshift_step=dz)
+        R_full = compute_merger_rate(
+            grid.redshifts, grid.times, grid.time_first_SF,
+            grid.n_formed, grid.p_draw,
+            setup.Z, setup.delays, setup.w,
+            Z_grid=setup.Z_grid, smooth_sigma=0)
+        rel = abs(R_full[0] / setup.expected_local_rate - 1.0)
+        assert rel < 1e-3, (
+            f"At dz={dz}, unsmoothed R_full(z=0) = {R_full[0]:.4f} does "
+            f"not match expected_local_rate = "
+            f"{setup.expected_local_rate:.4f} (relative {rel * 100:.3f}%); "
+            f"calibrate_mean_mass_evolved is no longer producing a sharp "
+            f"z=0 anchor.  Check that smooth_sigma=0 is still being "
+            f"passed to its internal compute_merger_rate call.")
+
+
+@pytest.mark.requires_data
+@pytest.mark.requires_compas
+@pytest.mark.slow
 def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
     """The cyan sbGRB + blue KN dip-and-recovery structure must persist
     under a 2x redshift-grid refinement.
 
-    The test is framed as a CONTRAST-RATIO invariant
-    (``R_peak / R_dip``) rather than an absolute-amplitude invariant.
-    Reason: ``calibrate_mean_mass_evolved`` is hard-coded to
-    ``smooth_sigma=30`` in BIN units, so the boundary-reflective Gaussian
-    at z = 0 mixes in a different slice of the rising R(z) at different
-    redshift_step values.  The MEAN_MASS_EVOLVED calibration thus drifts
-    with dz (~30% across dz=0.01 -> 0.0025), and so do the absolute
-    amplitudes of every downstream curve.  The SHAPE of the curve (peak
-    / dip ratios, locations) is what the "is the dip a binning artifact"
-    question asks about, and shape is invariant under that calibration
-    drift.  Empirically the contrast ratios are stable to ~0.01% across
-    dz = 0.01, 0.005, 0.0025 with the matched physical kernel below.
+    Tested in two complementary ways:
+
+    1. CONTRAST-RATIO invariance (``R_peak / R_dip``).  The shape-vs-
+       scale separation is what "is the dip a binning artifact"
+       actually asks about: a real feature has a redshift-stable depth
+       *relative* to the surrounding peaks, regardless of any overall
+       scaling.  Empirically these ratios are stable to ~0.01% across
+       dz = 0.01, 0.005, 0.0025 with the matched physical kernel below.
+
+    2. ABSOLUTE-AMPLITUDE invariance (``R_dip``, ``R_peak2``).  After
+       the ``smooth_sigma=0`` calibration fix in
+       ``calibrate_mean_mass_evolved`` (sharp z=0 anchor matching
+       Broekgaarden+ 2021 w_000), MEAN_MASS_EVOLVED no longer drifts
+       with redshift_step, so the per-class rate amplitudes are also
+       binning-stable when smoothing is applied with a matched physical
+       kernel.  Pre-fix this assertion failed at +38.9%; the 10%
+       threshold below leaves headroom for finite-dz residuals.  See
+       ``test_calibrated_rate_matches_expected_local_rate_at_z0`` for
+       the calibration-anchor regression that complements this one.
 
     Tolerance choices:
       - At each grid: ``R_peak1 / R_dip > 5x`` and ``R_peak2 / R_dip > 2x``
@@ -182,6 +227,8 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
       - p1/d and p2/d contrast ratios stable to within 15%, matching the
         shape tolerance used in
         ``test_compute_merger_rate_matches_compas_shape``.
+      - ``R_dip`` and ``R_peak2`` absolute amplitudes stable to within
+        10% (post-calibration-fix only).
 
     Both grids use a matched physical Gaussian kernel
     (``smooth_sigma * redshift_step = 0.30``): ``smooth_sigma=30`` at
@@ -279,6 +326,26 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
         f"sbGRB R_peak2 / R_dip changed by {delta_p2 * 100:+.1f}% "
         f"({contrast_p2_c:.3f} -> {contrast_p2_f:.3f}) between dz=0.01 "
         f"and dz=0.005.")
+
+    # Absolute-amplitude invariance.  Only meaningful after the
+    # smooth_sigma=0 calibration fix in calibrate_mean_mass_evolved;
+    # pre-fix this drifted +38.9% via the gaussian_filter1d reflective
+    # boundary at z=0 in the calibration helper.  With matched physical
+    # smoothing (Delta_z = 0.30 on both grids) the production-side
+    # boundary bias is also matched, so the subset rate at z near the
+    # dip / second peak should be invariant in the continuum limit.
+    # 10% leaves headroom for finite-dz residuals.
+    amp_dip = abs(R_d_f / R_d_c - 1.0)
+    amp_p2 = abs(R_p2_f / R_p2_c - 1.0)
+    assert amp_dip < 0.10, (
+        f"sbGRB R_dip drifted by {amp_dip * 100:+.1f}% between dz=0.01 "
+        f"(R_dip={R_d_c:.3e}) and dz=0.005 (R_dip={R_d_f:.3e}); pre-fix "
+        f"this was 38.9% via the calibrate_mean_mass_evolved boundary-"
+        f"smoothing bias.  Verify smooth_sigma=0 is still being passed "
+        f"to its internal compute_merger_rate call.")
+    assert amp_p2 < 0.10, (
+        f"sbGRB R_peak2 drifted by {amp_p2 * 100:+.1f}% between dz=0.01 "
+        f"(R_peak2={R_p2_c:.3e}) and dz=0.005 (R_peak2={R_p2_f:.3e}).")
 
 
 @pytest.mark.requires_data

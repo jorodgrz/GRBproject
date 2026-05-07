@@ -452,6 +452,32 @@ def calibrate_mean_mass_evolved(sfr, redshifts, times, time_first_SF,
     normalization) and scales so the z = 0 rate matches
     *expected_local_rate* (from pre-computed ``w_000`` weights).
 
+    The internal ``compute_merger_rate`` call pins ``smooth_sigma=0`` so
+    the calibration is anchored to the sharp pointwise R(z=0):
+
+    - ``expected_local_rate`` from ``weights_intrinsic/w_000``
+      (Broekgaarden et al. 2021, arXiv:2103.02608) is the
+      cosmic-integration weight at the z = 0 slice with no boundary
+      kernel applied;
+    - the Neijssel et al. (2019, MNRAS 490, 3740, Eq. 2) MSSFR
+      convolution is pointwise; smoothing is not part of the formal
+      expression;
+    - the upstream COMPAS ``find_formation_and_merger_rates`` in
+      ``FastCosmicIntegration`` is unsmoothed (the apples-to-apples
+      shape comparison in
+      ``tests/test_rates.py::test_compute_merger_rate_matches_compas_shape``
+      explicitly disables smoothing for that reason).
+
+    Anchoring instead to a kernel-smoothed model value would let
+    ``MEAN_MASS_EVOLVED`` drift with ``redshift_step`` via the
+    ``gaussian_filter1d`` ``mode='reflect'`` boundary at z = 0, which
+    mixes a different physical width of the rising R(z) at different
+    ``redshift_step`` (measured ~30 percent drift across
+    ``dz in [0.0025, 0.01]`` before this fix).  Cosmetic smoothing on
+    the *plotted* curve via the production ``compute_merger_rate``
+    default ``smooth_sigma=30`` is independent of this calibration
+    choice.
+
     Parameters
     ----------
     p_draw : float
@@ -468,12 +494,13 @@ def calibrate_mean_mass_evolved(sfr, redshifts, times, time_first_SF,
     mean_mass_evolved : float
         The total stellar mass [Msun] evolved in the simulation.
     rate_unnorm : 1-D array
-        Un-normalized merger rate; divide by *mean_mass_evolved* to get
-        the correctly normalized R(z).
+        Un-normalized merger rate (unsmoothed); divide by
+        *mean_mass_evolved* to get the correctly normalized sharp R(z).
     """
     rate_unnorm = compute_merger_rate(
         redshifts, times, time_first_SF, sfr, p_draw,
-        COMPAS_Z, COMPAS_delay_times, COMPAS_weights, Z_grid=Z_grid)
+        COMPAS_Z, COMPAS_delay_times, COMPAS_weights,
+        Z_grid=Z_grid, smooth_sigma=0)
     mean_mass_evolved = rate_unnorm[0] / expected_local_rate
     return mean_mass_evolved, rate_unnorm
 

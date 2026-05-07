@@ -253,6 +253,63 @@ def test_per_class_rates_partition_total_bns_2024():
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Calibration anchor: MEAN_MASS_EVOLVED must be redshift_step-invariant
+# ─────────────────────────────────────────────────────────────────────
+def test_calibrate_mean_mass_evolved_redshift_step_invariant():
+    """``MEAN_MASS_EVOLVED`` must not depend on ``redshift_step``.
+
+    Regression guard for the ``smooth_sigma`` boundary bias in
+    ``calibrate_mean_mass_evolved``.  Pre-fix the helper inherited
+    ``compute_merger_rate``'s default ``smooth_sigma=30`` in BIN units,
+    so the ``gaussian_filter1d`` ``mode='reflect'`` boundary at z = 0
+    mixed in a different physical width of the rising R(z) at different
+    ``redshift_step``.  ``MEAN_MASS_EVOLVED`` then drifted ~30 percent
+    across ``dz in [0.0025, 0.01]``; every downstream absolute rate
+    drifted with it.
+
+    The fix anchors the calibration to the sharp pointwise R(z=0)
+    (``smooth_sigma=0``), matching:
+
+    - Broekgaarden et al. (2021, arXiv:2103.02608) ``weights_intrinsic
+      / w_000``, the cosmic-integration weight at the z=0 slice with
+      no boundary kernel applied;
+    - the Neijssel et al. (2019, MNRAS 490, 3740, Eq. 2) MSSFR
+      convolution, which is pointwise;
+    - the upstream COMPAS ``find_formation_and_merger_rates``, which
+      is unsmoothed (cf. ``test_compute_merger_rate_matches_compas_shape``).
+    """
+    from grb_rates import calibrate_mean_mass_evolved
+
+    rng = np.random.default_rng(0)
+    N = 500
+    Z_grid = 10.0 ** np.linspace(-4, np.log10(0.03), 8)
+    Z = rng.choice(Z_grid, size=N)
+    delays = 10.0 ** rng.uniform(np.log10(10.0), np.log10(13000.0), size=N)
+    w = rng.uniform(0.1, 1.0, size=N)
+    expected = 33.0  # arbitrary positive; cancels in the dz-ratio assertion
+
+    def _calibrate(dz):
+        n_z = int(round(10.0 / dz)) + 1
+        redshifts = np.linspace(0.0, 10.0, n_z)
+        times = np.linspace(13700.0, 100.0, n_z)
+        sfr = np.full(n_z, 1e7)
+        mean_mass, _ = calibrate_mean_mass_evolved(
+            sfr, redshifts, times, time_first_SF=times.min() + 10.0,
+            p_draw=0.1, COMPAS_Z=Z, COMPAS_delay_times=delays,
+            COMPAS_weights=w, expected_local_rate=expected, Z_grid=Z_grid)
+        return mean_mass
+
+    m_coarse = _calibrate(0.01)
+    m_fine = _calibrate(0.005)
+    rel = abs(m_fine / m_coarse - 1.0)
+    assert rel < 1e-3, (
+        f"MEAN_MASS_EVOLVED drifted {rel * 100:.3f}% across dz=0.01 -> "
+        f"0.005 (m_coarse={m_coarse:.4e}, m_fine={m_fine:.4e}); "
+        f"calibrate_mean_mass_evolved must use smooth_sigma=0 so the "
+        f"z=0 anchor is sharp (Broekgaarden+ 2021 w_000 semantics).")
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Z_grid alignment guard inside compute_merger_rate
 # ─────────────────────────────────────────────────────────────────────
 def test_compute_merger_rate_rejects_misaligned_Z_grid():
