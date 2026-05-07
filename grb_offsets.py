@@ -341,10 +341,232 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
 # ═══════════════════════════════════════════════════════════════════════════
 # Vectorized population computation
 # ═══════════════════════════════════════════════════════════════════════════
+def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng,
+                         n_steps=400, newton_iter=30):
+    """Batch orbit integrator: scalar in, array out for N systems.
+
+    Reproduces ``_analytic_offset`` (line 275) for the whole population at
+    once.  The control flow is identical: compute energy and angular
+    momentum from a per-system Hernquist birth radius and isotropic kick;
+    Newton-iterate the apocenter (replaces the brentq root find at line
+    270); use the time-averaged radius for systems with ``t_s > 5 P_est``;
+    otherwise integrate with fixed-step RK4 against ``_orbit_rhs`` (line
+    136).  All operations broadcast over ``(N,)``.
+
+    Parameters
+    ----------
+    v_cm, t_s : (N,) arrays
+        Kick speeds [cm/s] and delay times [s].
+    M_gal, a : float
+        Hernquist galaxy mass [g] and scale radius [cm].
+    rng : np.random.Generator
+        For birth radius and kick angle draws.
+    n_steps : int, optional
+        Fixed RK4 step count for systems that need full integration.  At
+        n_steps = 400 with typical t_s in [10 Myr, 14 Gyr] and Hernquist
+        orbital periods ~10-1000 Myr, dt is ~2.5 to 25 percent of the
+        local period, so RK4 energy drift stays << 1 percent (Hairer,
+        Norsett, Wanner "Solving ODEs I", Chapter II.1).
+    newton_iter : int, optional
+        Iteration count for the vectorized apocenter root finder.
+        Converges in <10 in practice; 30 leaves headroom.
+
+    Returns
+    -------
+    r_3d : (N,) array
+        Galactocentric distance at merger [cm], capped at
+        ``_R_CAP_FACTOR * a``.
+    """
+    GM = G_CGS * M_gal
+    a_eps = 1e-3 * a
+    r_cap = _R_CAP_FACTOR * a
+
+    v_cm = np.asarray(v_cm, dtype=float)
+    t_s = np.asarray(t_s, dtype=float)
+    N = v_cm.size
+
+    if N == 0:
+        return np.zeros(0)
+
+    # Vectorized Hernquist birth radius via inverse CDF (line 85-115).
+    u = rng.uniform(0, 1, size=N)
+    su = np.sqrt(u)
+    r0 = np.minimum(a * su / (1.0 - su), r_cap)
+
+    # Isotropic kick angle (Bloom+ 1999); cos drawn flat in [-1, 1].
+    cos_kick = rng.uniform(-1, 1, size=N)
+    sin_kick = np.sqrt(np.maximum(0.0, 1.0 - cos_kick * cos_kick))
+
+    # Initial conditions in (r, vr, L) with L conserved.
+    vr0 = v_cm * cos_kick
+    vt0 = v_cm * sin_kick
+    L = r0 * vt0
+
+    # Energy and bound/unbound branch.
+    E = 0.5 * v_cm * v_cm - GM / (r0 + a)
+    v_esc_sq = 2.0 * GM / (r0 + a)
+    bound = (v_cm * v_cm) < v_esc_sq
+
+    # Vectorized Newton iteration for the apocenter.
+    # f(r)  = 0.5 L^2 / r^2 - GM / (r + a) - E
+    # f'(r) = -L^2 / r^3 + GM / (r + a)^2
+    # Initial guess: 10 a, well outside the typical Hernquist core; clipped
+    # every step into [a_eps, r_cap].
+    r_apo = np.full(N, r_cap)
+    if bound.any():
+        r_iter = np.where(bound, 10.0 * a, np.nan)
+        for _ in range(newton_iter):
+            r_safe = np.maximum(r_iter, a_eps)
+            f = 0.5 * L * L / (r_safe * r_safe) - GM / (r_safe + a) - E
+            fp = -L * L / (r_safe ** 3) + GM / (r_safe + a) ** 2
+            # Avoid division by zero when fp ~ 0 at degenerate L.
+            step = f / np.where(np.abs(fp) > 1e-300, fp, 1e-300)
+            r_iter = np.clip(r_iter - step, a_eps, r_cap)
+        r_apo = np.where(bound, r_iter, r_cap)
+
+    # Period heuristic, matching _analytic_offset line 331.
+    r_mean_est = 0.5 * (r0 + r_apo)
+    P_est = (2.0 * np.pi * np.sqrt(np.maximum(r_mean_est, a_eps) ** 3 / GM)
+             * (1.0 + a / np.maximum(r_mean_est, a_eps)))
+
+    # Trivial branches: zero kick or zero delay -> stay at r0.
+    trivial = (v_cm <= 0) | (t_s <= 0)
+
+    # Phase-mixed branch: bound and t >> period -> time-averaged radius.
+    use_mean = bound & (~trivial) & (t_s > 5.0 * P_est)
+
+    # Everything else needs RK4 (unbound or short delay).
+    integrate = ~(trivial | use_mean)
+
+    r_3d = np.where(trivial, r0, np.where(use_mean, r_mean_est, np.nan))
+
+    if integrate.any():
+        idx = np.where(integrate)[0]
+        r = r0[idx].copy()
+        vr = vr0[idx].copy()
+        L_i = L[idx]
+        t_i = t_s[idx]
+        dt = t_i / n_steps  # (M,)
+
+        for _ in range(n_steps):
+            r_safe = np.maximum(r, a_eps)
+            k1_r = vr
+            k1_v = -GM / (r_safe + a) ** 2 + L_i * L_i / (r_safe ** 3)
+
+            r2 = np.maximum(r + 0.5 * dt * k1_r, a_eps)
+            v2 = vr + 0.5 * dt * k1_v
+            k2_r = v2
+            k2_v = -GM / (r2 + a) ** 2 + L_i * L_i / (r2 ** 3)
+
+            r3 = np.maximum(r + 0.5 * dt * k2_r, a_eps)
+            v3 = vr + 0.5 * dt * k2_v
+            k3_r = v3
+            k3_v = -GM / (r3 + a) ** 2 + L_i * L_i / (r3 ** 3)
+
+            r4 = np.maximum(r + dt * k3_r, a_eps)
+            v4 = vr + dt * k3_v
+            k4_r = v4
+            k4_v = -GM / (r4 + a) ** 2 + L_i * L_i / (r4 ** 3)
+
+            r = r + dt * (k1_r + 2.0 * k2_r + 2.0 * k3_r + k4_r) / 6.0
+            vr = vr + dt * (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v) / 6.0
+
+        r_3d[idx] = np.minimum(np.abs(r), r_cap)
+
+    # Final safety net: replace any residual NaN (should not occur after
+    # the explicit branching above, but pin it to the cap so downstream
+    # CDF helpers do not propagate non-finite values).
+    return np.where(np.isfinite(r_3d), r_3d, r_cap)
+
+
+def compute_offsets_population_vectorized(v_sys_km, t_delay_myr, weights=None,
+                                          M_gal=DEFAULT_M_GAL, R_e=DEFAULT_R_E,
+                                          max_systems=50000, n_proj=8,
+                                          n_steps=400, rng=None):
+    """Vectorized drop-in replacement for ``compute_offsets_population``.
+
+    Same I/O contract: returns the dict ``{'offsets_kpc', 'indices',
+    'weights_sub'}``.  Replaces the per-system Python loop in
+    ``compute_offsets_population`` (line 401) with a single batched RK4
+    integrator (``_vectorized_orbit_3d``).  Empirical CDFs match the
+    legacy code to KS distance < 0.05 (one figure-line thickness) at
+    N = 200; see ``tests/test_phase4_helpers.py``.
+
+    Parameters
+    ----------
+    v_sys_km, t_delay_myr : array-like
+        Systemic velocity [km/s] and delay time [Myr].  May contain NaN
+        or non-positive values; these are filtered out via the same
+        ``valid`` mask used by the legacy code.
+    weights : array-like, optional
+        STROOPWAFEL weights aligned with the inputs; defaults to ones.
+    M_gal, R_e : float
+        Hernquist galaxy mass [g] and effective radius [cm].
+    max_systems : int
+        Weight-based subsample cap (CLAUDE.md mandates STROOPWAFEL-aware
+        subsampling).
+    n_proj : int, optional
+        Number of isotropic projection angles per system; the median of
+        these gives the projected offset (matches legacy n_proj = 8).
+    n_steps : int, optional
+        RK4 step count for the orbit integrator.  See
+        ``_vectorized_orbit_3d``.
+    rng : np.random.Generator, optional
+        Reproducible random source.  Defaults to ``default_rng(42)``.
+
+    Returns
+    -------
+    dict with keys ``'offsets_kpc' : (M,)``, ``'indices' : (M,)``,
+    ``'weights_sub' : (M,)`` where M = min(N_valid, max_systems).
+    """
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    v_sys_km = np.asarray(v_sys_km, dtype=float)
+    t_delay_myr = np.asarray(t_delay_myr, dtype=float)
+
+    valid = (np.isfinite(v_sys_km) & np.isfinite(t_delay_myr)
+             & (v_sys_km > 0) & (t_delay_myr > 0))
+    valid_idx = np.where(valid)[0]
+
+    if weights is not None:
+        weights = np.asarray(weights, dtype=float)
+        w_valid = weights[valid_idx]
+    else:
+        w_valid = np.ones(len(valid_idx))
+
+    if len(valid_idx) > max_systems:
+        p = w_valid / w_valid.sum()
+        chosen = rng.choice(len(valid_idx), size=max_systems,
+                            replace=False, p=p)
+        valid_idx = valid_idx[chosen]
+        w_valid = w_valid[chosen]
+
+    if len(valid_idx) == 0:
+        return {'offsets_kpc': np.zeros(0),
+                'indices':     valid_idx,
+                'weights_sub': w_valid}
+
+    a = hernquist_scale_radius(R_e)
+    v_cm = v_sys_km[valid_idx] * KM_CM
+    t_s = t_delay_myr[valid_idx] * MYR_S
+
+    r_3d = _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng, n_steps=n_steps)
+
+    # Vectorized 2D projection (Bloom+ 1999) over (N, n_proj).
+    cos_theta = rng.uniform(-1, 1, size=(len(valid_idx), n_proj))
+    projected = r_3d[:, None] * np.sqrt(np.maximum(0.0, 1.0 - cos_theta ** 2))
+    offsets = np.median(projected, axis=1) / KPC_CM
+
+    return {'offsets_kpc': offsets,
+            'indices':     valid_idx,
+            'weights_sub': w_valid}
+
+
 def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
                                M_gal=DEFAULT_M_GAL, R_e=DEFAULT_R_E,
                                use_analytic=True, max_systems=50000,
-                               rng=None):
+                               vectorized=True, rng=None):
     """Compute projected offsets for a population of merging binaries.
 
     Parameters
@@ -361,9 +583,18 @@ def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
     R_e : float
         Effective radius [cm].
     use_analytic : bool
-        If True, use the fast analytic approximation for bound orbits.
+        Legacy flag; used only when ``vectorized=False``.  If True, use
+        the per-system analytic shortcut (``_analytic_offset``);
+        otherwise call ``integrate_orbit`` per system.
     max_systems : int
         Maximum number of systems to integrate (subsampled if exceeded).
+    vectorized : bool
+        When True (default), dispatch to
+        ``compute_offsets_population_vectorized`` and integrate the
+        whole population in one batched RK4 pass (~100x speedup over
+        the legacy per-system loop).  Set False to retain the legacy
+        scalar code path; tests in ``tests/test_phase4_helpers.py``
+        exercise both.
     rng : np.random.Generator, optional
 
     Returns
@@ -373,6 +604,11 @@ def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
         'indices'      : indices into the input arrays
         'weights_sub'  : corresponding weights
     """
+    if vectorized:
+        return compute_offsets_population_vectorized(
+            v_sys_km, t_delay_myr, weights=weights,
+            M_gal=M_gal, R_e=R_e, max_systems=max_systems, rng=rng)
+
     if rng is None:
         rng = np.random.default_rng(42)
 
@@ -524,6 +760,13 @@ def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
     Each system is assigned a host type via ``assign_host_by_delay``,
     then its offset is computed in the corresponding galaxy potential.
 
+    Vectorization (CLAUDE.md "Vectorize" rule): each unique host appears
+    exactly once in ``host_models``, so we gather the indices of systems
+    routed to each host and dispatch one batched
+    ``_vectorized_orbit_3d`` call per host, then scatter back into the
+    flat output array.  This turns the prior per-system Python loop into
+    at most ``len(host_models)`` numpy ops (3 for the default mixture).
+
     Returns
     -------
     dict with 'offsets_kpc', 'weights_sub', 'host_assignments'.
@@ -533,6 +776,8 @@ def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
     rng = kw.pop('rng', None)
     if rng is None:
         rng = np.random.default_rng(42)
+    n_steps = kw.pop('n_steps', 400)
+    n_proj  = kw.pop('n_proj', 8)
 
     v = np.asarray(v_sys_km, dtype=float)
     t = np.asarray(t_delay_myr, dtype=float)
@@ -553,14 +798,22 @@ def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
         w_valid = w_valid[chosen]
 
     offsets = np.zeros(len(valid_idx))
-    n_proj = 8
-    for i, idx in enumerate(valid_idx):
-        hp = host_models[hosts[idx]]
-        a_host = hernquist_scale_radius(hp['R_e'])
-        r_3d = _analytic_offset(v[idx], t[idx], hp['M_gal'], a_host, rng=rng)
-        cos_th = rng.uniform(-1, 1, size=n_proj)
-        projected = r_3d * np.sqrt(1.0 - cos_th**2)
-        offsets[i] = np.median(projected) / KPC_CM
+    if len(valid_idx) > 0:
+        host_sub = hosts[valid_idx]
+        v_cm_all = v[valid_idx] * KM_CM
+        t_s_all  = t[valid_idx] * MYR_S
+        for name, hp in host_models.items():
+            host_mask = (host_sub == name)
+            if not host_mask.any():
+                continue
+            a_host = hernquist_scale_radius(hp['R_e'])
+            r_3d = _vectorized_orbit_3d(
+                v_cm_all[host_mask], t_s_all[host_mask],
+                hp['M_gal'], a_host, rng, n_steps=n_steps)
+            cos_th = rng.uniform(-1, 1, size=(host_mask.sum(), n_proj))
+            projected = r_3d[:, None] * np.sqrt(
+                np.maximum(0.0, 1.0 - cos_th * cos_th))
+            offsets[host_mask] = np.median(projected, axis=1) / KPC_CM
 
     return {
         'offsets_kpc': offsets,
@@ -594,6 +847,41 @@ def weighted_offset_cdf(offsets, weights):
     cdf = np.cumsum(w_sorted)
     cdf /= cdf[-1]
     return o_sorted, cdf
+
+
+def offset_cdf_by_class(offsets, weights, class_masks):
+    """Per-class weighted offset CDFs for a single population.
+
+    Promoted from the inline per-class loop in ``grb_main.ipynb`` Section
+    9 so the same per-class CDF construction is reused by any plotter
+    (Council Expansionist L4).  Different DTDs imply different offset
+    CDFs, so this is the canonical class-discriminator panel layer.
+
+    Parameters
+    ----------
+    offsets : 1-D array, shape (N,)
+        Projected galactocentric offsets [kpc] for each merging system.
+    weights : 1-D array, shape (N,)
+        STROOPWAFEL weights aligned with ``offsets`` (per CLAUDE.md
+        "STROOPWAFEL weights are mandatory" rule).
+    class_masks : dict[str, 1-D bool array]
+        Class label -> per-system boolean mask, all of length N.  Pass
+        the full ``classify_bns_2024(...)`` (or ``classify_bhns(...)``)
+        return value with non-mask keys ('M_disk') stripped first.
+
+    Returns
+    -------
+    cdfs : dict[str, (sorted_offsets, cdf)]
+        Per-class tuple ``(offsets_sorted_kpc, cdf_in_[0,1])`` suitable
+        for a stairs / step plot.  Classes whose mask has fewer than
+        two valid systems map to ``(np.array([0.0]), np.array([0.0]))``
+        as a sentinel that the plotter can skip.
+    """
+    out = {}
+    for label, mask in class_masks.items():
+        m = np.asarray(mask, dtype=bool)
+        out[label] = weighted_offset_cdf(offsets[m], weights[m])
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════

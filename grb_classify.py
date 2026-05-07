@@ -1,7 +1,7 @@
 """
 GRB and kilonova classification for compact binary mergers.
 
-Implements Gottlieb et al. (2023) three-class and (2024) five-class BNS schemes,
+Implements Gottlieb et al. (2023) three-class and (2024) four-class BNS schemes,
 BHNS disk-mass classification, and a unified mass-plane grid classifier.
 Also includes Broekgaarden-style formation channel classification.
 """
@@ -13,6 +13,7 @@ from grb_physics import (
     foucart_disk_mass,
     M_CRIT_BNS, Q_THRESH_BNS,
     M_TOV, M_THRESH, K_THRESH_DEFAULT, MDISK_SHORT, MDISK_LONG,
+    HMNS_FACTOR_DEFAULT,
 )
 
 
@@ -21,19 +22,21 @@ def _resolve_m_thresh(m_tov, m_thresh, k_thresh):
 
     If ``k_thresh`` is given, the prompt-collapse threshold is taken as
     ``k_thresh * m_tov`` so EOS sweeps that change ``m_tov`` move both
-    thresholds together.  Passing both ``k_thresh`` and an explicit
-    ``m_thresh`` is ambiguous; ``k_thresh`` wins and a warning is
-    emitted.
+    thresholds together.  Passing an inconsistent ``m_thresh`` alongside
+    ``k_thresh`` is ambiguous and now raises ``ValueError`` (was a
+    warning until 2026-05-06; the silent override silently broke EOS
+    sweep coherence when the caller forgot which value applied).
     """
     if k_thresh is None:
         return m_thresh
     derived = k_thresh * m_tov
     if m_thresh is not None and not np.isclose(m_thresh, derived):
-        warnings.warn(
-            f"Both k_thresh ({k_thresh}) and m_thresh ({m_thresh}) "
-            f"were provided; using k_thresh * m_tov = {derived:.3f} "
-            f"and ignoring the explicit m_thresh.",
-            stacklevel=3)
+        raise ValueError(
+            f"Inconsistent prompt-collapse thresholds: k_thresh={k_thresh} "
+            f"with m_tov={m_tov} implies m_thresh={derived:.3f}, but the "
+            f"caller passed m_thresh={m_thresh}.  Pass only one of "
+            f"(m_thresh, k_thresh) so EOS sweeps remain coherent."
+        )
     return derived
 
 
@@ -70,9 +73,18 @@ def classify_bns_2023(m1, m2, M_crit=M_CRIT_BNS, q_thresh=Q_THRESH_BNS):
 # BNS classification: Gottlieb et al. (2024) hybrid model
 # ═══════════════════════════════════════════════════════════════════════════
 def classify_bns_2024(m1, m2, m_tov=M_TOV, m_thresh=M_THRESH,
-                      q_thresh=Q_THRESH_BNS, hmns_factor=1.2,
+                      q_thresh=Q_THRESH_BNS,
+                      hmns_factor=HMNS_FACTOR_DEFAULT,
                       k_thresh=None):
     """Four-class BNS scheme (Gottlieb 2024).
+
+    .. warning::
+        ``hmns_factor`` (default 1.2) is a CODE HEURISTIC, not a value
+        published by Gottlieb (2024).  It splits the long-lived HMNS
+        (sbGRB) regime from the short-lived HMNS (lbGRB) regime at
+        ``hmns_factor * m_tov`` and is motivated by Margalit and
+        Metzger (2017, ApJL 850, L19, arXiv:1710.05938).  See
+        ``grb_physics.HMNS_FACTOR_DEFAULT`` for the full discussion.
 
     Classes
     -------
@@ -101,10 +113,16 @@ def classify_bns_2024(m1, m2, m_tov=M_TOV, m_thresh=M_THRESH,
     hmns_factor : float, optional
         Multiplier on ``m_tov`` setting the boundary between long-lived
         HMNS (sbGRB + blue KN) and short-lived HMNS (lbGRB + red KN).
-        Default 1.2 is heuristic; Gottlieb (2024) discusses this
-        boundary near ~2.7 Msun (close to ``M_THRESH`` for typical
-        ``M_TOV``).  Pass ``hmns_factor=1.0`` to fold the short-lived
-        HMNS class into prompt collapse entirely.
+        Default 1.2 is a code heuristic, NOT a value taken directly
+        from Gottlieb (2024).  Gottlieb (2024) sec 2.3.2 (Eq. 7) ties
+        the HMNS regime to ``M_tot <~ M_thresh`` and to the HMNS
+        lifetime (long-lived ~0.1 to 1 s, short-lived ~10 to 100 ms),
+        not to a fixed multiplier on ``M_TOV``.  The 1.2 fiducial is
+        motivated by Margalit and Metzger (2017, ApJL 850, L19,
+        arXiv:1710.05938) who argue that supramassive remnants
+        significantly above ``M_TOV`` collapse on viscous timescales.
+        Pass ``hmns_factor=1.0`` to fold the short-lived HMNS class
+        into prompt collapse entirely.
     k_thresh : float, optional
         If given, ``m_thresh`` is overridden to ``k_thresh * m_tov`` so
         that EOS sweeps move both thresholds together.  See
@@ -133,6 +151,41 @@ def classify_bns_2024(m1, m2, m_tov=M_TOV, m_thresh=M_THRESH,
         'lbGRB + red KN (HMNS)': (M_tot >= hmns_split) & (M_tot < m_thresh),
         'lbGRB + red KN (disk)': (M_tot >= m_thresh) & (q >= q_thresh),
         'Faint lbGRB':           (M_tot >= m_thresh) & (q < q_thresh),
+    }
+
+
+def bns_boundary_lines(m2, m_tov=M_TOV, m_thresh=M_THRESH,
+                       q_thresh=Q_THRESH_BNS,
+                       hmns_factor=HMNS_FACTOR_DEFAULT,
+                       k_thresh=None, m1_lim=None):
+    """Compute the three Gottlieb (2024) BNS boundary curves on (M2, M1).
+
+    Each line is parameterised by ``m2`` and clipped to the physically
+    valid region ``m1 >= m2``.  Optional ``m1_lim = (m1_lo, m1_hi)``
+    additionally clips to the figure's vertical range so callers do not
+    need to repeat the masking algebra.
+
+    Returns
+    -------
+    {'M_tot':   (m2_arr, m1_arr) for prompt-collapse boundary M_tot = M_thresh,
+     'HMNS':    (m2_arr, m1_arr) for HMNS-lifetime split M_tot = hmns_factor * M_TOV,
+     'q':       (m2_arr, m1_arr) for mass-ratio boundary m1 = q_thresh * m2}
+    """
+    m2 = np.asarray(m2, dtype=float)
+    m_thresh = _resolve_m_thresh(m_tov, m_thresh, k_thresh)
+    hmns_split = hmns_factor * m_tov
+
+    def _clip(m1):
+        ok = (m1 >= m2)
+        if m1_lim is not None:
+            lo, hi = m1_lim
+            ok &= (m1 >= lo) & (m1 <= hi)
+        return m2[ok], m1[ok]
+
+    return {
+        'M_tot': _clip(m_thresh - m2),
+        'HMNS':  _clip(hmns_split - m2),
+        'q':     _clip(q_thresh * m2),
     }
 
 
@@ -187,10 +240,17 @@ i.e. BBH).  ``0`` is intentionally absent from the label map so
 plotting code can mask it as background."""
 
 
+NS_MAX_FIDUCIAL = (2.0, 2.5, 3.0)
+"""Fiducial COMPAS ``M_NS_max`` values per Broekgaarden+ 2021
+(arXiv:2103.02608): Model J = 2.0, Model A = 2.5, Model K = 3.0 Msun.
+``classify_grid`` rejects any other value unless ``strict_ns_max=False``."""
+
+
 def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
                   q_thresh=Q_THRESH_BNS, a_bh=0.5,
-                  hmns_factor=1.2, k_thresh=None,
-                  ns_max=None, ns_min=1.1):
+                  hmns_factor=HMNS_FACTOR_DEFAULT, k_thresh=None,
+                  ns_max=None, ns_min=1.1,
+                  R_1p4_km=None, strict_ns_max=True):
     """Return an integer class map on a (M1, M2) grid.
 
     2024 Gottlieb hybrid model: all BH-powered jets produce lbGRBs;
@@ -237,6 +297,21 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
         matches the COMPAS rapid-mechanism NS minimum (Fryer+ 2012);
         pass ``ns_min=0.8`` to be inclusive of ECSN/USSN NS, which
         reproduces the pre-patch behaviour.
+    R_1p4_km : float, optional
+        NS radius at 1.4 Msun [km], passed to ``foucart_disk_mass``
+        for the BHNS branch.  If ``None`` and the grid contains BHNS
+        cells, a UserWarning fires noting that the BHNS class 6
+        (lbGRB + red KN, massive disk) inherits the ``foucart_disk_mass``
+        default of 12.0 km and is therefore implicitly EOS-dependent.
+        Pass an explicit value (e.g. ``EOS_MODELS['SFHo']['R_1p4']``)
+        to remove the implicit dependence and to suppress the warning.
+    strict_ns_max : bool, optional
+        If True (default), ``ns_max`` must be in ``NS_MAX_FIDUCIAL``
+        (2.0, 2.5, or 3.0 Msun) -- the only values used by published
+        Broekgaarden+ 2021 COMPAS Models (J, A, K respectively).
+        A typo such as ``ns_max=2.4`` would silently reshuffle the
+        BNS / BHNS boundary and is now rejected with ``ValueError``.
+        Pass ``strict_ns_max=False`` to opt out for sensitivity studies.
     """
     # Symmetrize the q convention so callers can pass either ordering
     # (or a rectangular meshgrid that includes both triangles).  This
@@ -270,6 +345,17 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
             f"fiducial; models J/K = 2.0/3.0).  Pass ns_max explicitly "
             f"to suppress this warning.",
             stacklevel=2)
+    elif strict_ns_max and not any(np.isclose(ns_max, fid)
+                                   for fid in NS_MAX_FIDUCIAL):
+        # A typo such as ns_max=2.4 silently reassigns NS-NS systems
+        # to BHNS or BBH; reject it.  Sensitivity studies that need
+        # off-fiducial values must opt out via strict_ns_max=False.
+        raise ValueError(
+            f"classify_grid: ns_max={ns_max} not in fiducial "
+            f"{NS_MAX_FIDUCIAL} Msun (Broekgaarden+ 2021 Models "
+            f"J/A/K = 2.0/2.5/3.0).  Pass strict_ns_max=False to "
+            f"override for sensitivity studies."
+        )
 
     # BNS region: both components below the NS-mass cap, and the
     # lighter component must have positive mass.  Without the
@@ -307,7 +393,26 @@ def classify_grid(m1g, m2g, m_tov=M_TOV, m_thresh=M_THRESH,
 
     is_bhns = bhns_candidate & (m_light >= ns_min)
     if np.any(is_bhns):
-        md = foucart_disk_mass(m_heavy[is_bhns], m_light[is_bhns], a_BH=a_bh)
+        if R_1p4_km is None:
+            # The BHNS branch inherits foucart_disk_mass's default
+            # R_1p4_km=12.0; this implicitly fixes the EOS softness for
+            # class 6 (lbGRB + red KN, massive disk).  Surface this as
+            # an EOS-implicit warning matching the ns_max style; pass
+            # R_1p4_km explicitly (e.g. EOS_MODELS['SFHo']['R_1p4'])
+            # to suppress.
+            warnings.warn(
+                "classify_grid: R_1p4_km not specified; BHNS branch "
+                "inherits foucart_disk_mass default R_1p4_km=12.0 km, "
+                "so class 6 (lbGRB + red KN, massive disk) is "
+                "implicitly EOS-dependent.  Pass R_1p4_km explicitly "
+                "(e.g. EOS_MODELS['SFHo']['R_1p4']) to suppress this "
+                "warning.",
+                stacklevel=2)
+            md = foucart_disk_mass(m_heavy[is_bhns], m_light[is_bhns],
+                                   a_BH=a_bh)
+        else:
+            md = foucart_disk_mass(m_heavy[is_bhns], m_light[is_bhns],
+                                   a_BH=a_bh, R_1p4_km=R_1p4_km)
         bhns_cls = np.zeros_like(md, dtype=int)
         bhns_cls[md >= MDISK_LONG] = 6
         bhns_cls[(md >= MDISK_SHORT) & (md < MDISK_LONG)] = 5
@@ -364,4 +469,166 @@ def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1,
         'III Single-core CE': ch_III,
         'IV  Double-core CE': ch_IV,
         'V   Other':          ch_other,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Channel-by-class joint contingency
+# ═══════════════════════════════════════════════════════════════════════════
+def channel_class_crosstab(channel_masks, class_masks, weights,
+                           normalise=None):
+    """STROOPWAFEL-weighted 5x4 (channel x GRB class) contingency table.
+
+    Closes Council Expansionist L3 by combining the outputs of
+    ``classify_formation_channels`` (Broekgaarden I to V) and
+    ``classify_bns_2024`` (Gottlieb 4-class) into a single matrix that
+    answers "which formation channels feed which GRB class?".
+
+    Parameters
+    ----------
+    channel_masks : dict[str, 1-D bool array]
+        Output of ``classify_formation_channels`` (5 keys, length N).
+    class_masks : dict[str, 1-D bool array]
+        4-key Gottlieb output, e.g. from ``classify_bns_2024``.  Any
+        non-mask keys (e.g. 'M_disk' from ``classify_bhns``) are
+        ignored automatically.
+    weights : 1-D array, shape (N,)
+        STROOPWAFEL weights aligned with the masks.
+    normalise : {None, 'channel', 'class', 'total'}, optional
+        Optional renormalisation of each cell:
+        - None (default): raw weighted counts (sum_w over mask & class).
+        - 'channel': each row sums to 1 (P(class | channel)).
+        - 'class': each column sums to 1 (P(channel | class)).
+        - 'total': all entries sum to 1 (joint distribution).
+
+    Returns
+    -------
+    crosstab : pandas.DataFrame
+        Rows are channel labels, columns are class labels.  Returned as
+        a DataFrame (not a bare ndarray) so the row / column ordering
+        is preserved for CSV export and heatmap labelling.
+    """
+    import pandas as pd
+
+    weights = np.asarray(weights, dtype=float)
+    class_keys = [k for k, v in class_masks.items()
+                  if isinstance(v, np.ndarray) and v.dtype == bool]
+    channel_keys = list(channel_masks.keys())
+
+    matrix = np.zeros((len(channel_keys), len(class_keys)), dtype=float)
+    for i, ch in enumerate(channel_keys):
+        ch_mask = np.asarray(channel_masks[ch], dtype=bool)
+        for j, cl in enumerate(class_keys):
+            cl_mask = np.asarray(class_masks[cl], dtype=bool)
+            matrix[i, j] = float(weights[ch_mask & cl_mask].sum())
+
+    crosstab = pd.DataFrame(matrix, index=channel_keys, columns=class_keys)
+
+    if normalise == 'channel':
+        row_sums = crosstab.sum(axis=1).replace(0.0, np.nan)
+        crosstab = crosstab.div(row_sums, axis=0).fillna(0.0)
+    elif normalise == 'class':
+        col_sums = crosstab.sum(axis=0).replace(0.0, np.nan)
+        crosstab = crosstab.div(col_sums, axis=1).fillna(0.0)
+    elif normalise == 'total':
+        total = crosstab.values.sum()
+        if total > 0:
+            crosstab = crosstab / total
+    elif normalise is not None:
+        raise ValueError(
+            f"normalise must be None, 'channel', 'class', or 'total'; "
+            f"got {normalise!r}"
+        )
+    return crosstab
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Observational classifier (Rastinejad et al. 2024 component decompositions)
+# ═══════════════════════════════════════════════════════════════════════════
+KN_RED_FRAC_BLUE_MAX = 0.30
+"""Boundary between blue-dominated (sbGRB + blue KN) and mixed kilonova
+ejecta in ``classify_observed_mergers``.  CODE HEURISTIC, not a value
+published by Gottlieb (2024) or Rastinejad et al. (2024).  Below this
+red-fraction the kilonova is interpreted as blue-dominated (long-lived
+HMNS engine, no significant red-component lanthanide-rich ejecta)."""
+
+KN_RED_FRAC_RED_MIN = 0.70
+"""Boundary between mixed and red-dominated kilonova ejecta in
+``classify_observed_mergers``.  CODE HEURISTIC; chosen symmetric
+about ``KN_RED_FRAC_BLUE_MAX``.  Above this red-fraction the kilonova
+is interpreted as red-dominated (post-merger disk wind from a prompt-
+collapse remnant)."""
+
+KN_M_EJ_FAINT_MAX = 0.01
+"""Total ejecta-mass threshold below which the source is mapped to
+'Faint lbGRB' [Msun].  Aligned with ``MDISK_SHORT`` (Gottlieb 2023,
+Sec. 4): below 0.01 Msun of available mass there is no engine fuel for
+a bright GRB or a detectable kilonova."""
+
+
+def classify_observed_mergers(M_B, M_P, M_R,
+                              red_max_for_blue=KN_RED_FRAC_BLUE_MAX,
+                              red_min_for_red=KN_RED_FRAC_RED_MIN,
+                              m_ej_faint=KN_M_EJ_FAINT_MAX):
+    """Map Rastinejad et al. (2024) ejecta decompositions to Gottlieb (2024) classes.
+
+    .. warning::
+        This is a phenomenological mapping that uses the kilonova
+        ejecta colour decomposition (M_B blue, M_P purple, M_R red) as
+        a proxy for the Gottlieb (2024) four-class engine taxonomy.
+        The thresholds ``KN_RED_FRAC_BLUE_MAX = 0.30``,
+        ``KN_RED_FRAC_RED_MIN = 0.70``, and ``KN_M_EJ_FAINT_MAX = 0.01``
+        are CODE HEURISTICS, not values published by Gottlieb (2024)
+        or Rastinejad et al. (2024).  Override per-call to test the
+        sensitivity of any class-fraction comparison to the choice.
+
+    Closes Council Expansionist L1 by giving the observational
+    cross-check a single named entry point.  Used by
+    ``comparison.ipynb`` to overlay observed-sample class fractions
+    on the model class-fraction predictions.
+
+    Parameters
+    ----------
+    M_B, M_P, M_R : array-like
+        Per-source posterior medians (or single-sample values) of the
+        blue / purple / red kilonova ejecta components [Msun],
+        following the Rastinejad et al. (2024, ApJ 970, 96) Table 3
+        column convention.  Negative or NaN entries are passed through
+        as NaN class labels.
+    red_max_for_blue : float, optional
+        Upper bound on the red fraction to count as 'sbGRB + blue KN'.
+    red_min_for_red : float, optional
+        Lower bound on the red fraction to count as 'lbGRB + red KN
+        (disk)'.  Must satisfy ``red_min_for_red > red_max_for_blue``.
+    m_ej_faint : float, optional
+        Total ejecta below which the source is 'Faint lbGRB' [Msun].
+
+    Returns
+    -------
+    dict of boolean arrays keyed by Gottlieb (2024) class label, plus
+    'M_ej_total' and 'f_red' diagnostic arrays.
+    """
+    if not red_min_for_red > red_max_for_blue:
+        raise ValueError(
+            f"red_min_for_red ({red_min_for_red}) must exceed "
+            f"red_max_for_blue ({red_max_for_blue})."
+        )
+    M_B = np.asarray(M_B, dtype=float)
+    M_P = np.asarray(M_P, dtype=float)
+    M_R = np.asarray(M_R, dtype=float)
+    M_ej = M_B + M_P + M_R
+    f_red = np.where(M_ej > 0, M_R / M_ej, np.nan)
+
+    is_faint = M_ej < m_ej_faint
+    is_blue_dom = (~is_faint) & (f_red < red_max_for_blue)
+    is_red_dom = (~is_faint) & (f_red >= red_min_for_red)
+    is_mixed = (~is_faint) & ~is_blue_dom & ~is_red_dom
+
+    return {
+        'sbGRB + blue KN':        is_blue_dom,
+        'lbGRB + red KN (HMNS)':  is_mixed,
+        'lbGRB + red KN (disk)':  is_red_dom,
+        'Faint lbGRB':            is_faint,
+        'M_ej_total':             M_ej,
+        'f_red':                  f_red,
     }

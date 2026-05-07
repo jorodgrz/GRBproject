@@ -25,6 +25,7 @@ dependencies:
   - jupyterlab>=4.0
   - ipykernel>=6.20
   - ipython>=8.10
+  - pytest>=7.4
   - pip
   - pip:
       - git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils

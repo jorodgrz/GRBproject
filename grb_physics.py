@@ -7,12 +7,16 @@ Gottlieb et al. (2023, 2024) classification thresholds.
 
 Cosmology
 ---------
-Throughout this pipeline I adopt the same cosmological parameters used
-by COMPAS ``FastCosmicIntegration`` (Planck 2015 / TNG-consistent):
+Throughout this pipeline I adopt the cosmological parameters pinned by
+COMPAS ``FastCosmicIntegration`` (Planck 2015, TNG-consistent):
   H0 = 67.74 km/s/Mpc,  Omega_m = 0.3089,  Omega_Lambda = 0.6911
-All lookback-time ↔ redshift conversions, comoving volumes, and SFR
-integrals use these values.  Mixing with Planck 2018 parameters would
-introduce ~2% inconsistencies at high z.
+All lookback-time to redshift conversions, comoving volumes, and SFR
+integrals use these values.  Neijssel et al. (2019) report the slightly
+rounded Planck 2015 values (H0 = 67.8, Omega_m = 0.308); the small
+offset is an intentional pin to the COMPAS code constants so that
+rates computed here match the COMPAS post-processing exactly.  Mixing
+with Planck 2018 parameters would introduce ~2 percent inconsistencies
+at high z.
 
 Supernova engine
 ----------------
@@ -40,10 +44,16 @@ from scipy.special import erf
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2023) classification thresholds
 # ---------------------------------------------------------------------------
-M_CRIT_BNS = 2.8       # BNS prompt-collapse total mass threshold [Msun]
-Q_THRESH_BNS = 1.2     # BNS mass ratio threshold (q = M_max / M_min >= 1)
-MDISK_SHORT = 0.01     # BHNS Short cbGRB disk mass threshold [Msun]
-MDISK_LONG = 0.1       # BHNS Long cbGRB disk mass threshold [Msun]
+# Source for all four constants: Gottlieb et al. (2023, arXiv:2309.00038),
+# Sec. 4 ("BHNS mergers") and Fig. 6, which set the disk-mass cuts that
+# split BHNS systems into the No-GRB / Short cbGRB / Long cbGRB classes.
+# The BNS total-mass and mass-ratio thresholds come from the same paper's
+# Sec. 3 (BNS classification) plus the Bauswein et al. (2013) prompt-
+# collapse line; see ``M_CRIT_BNS`` discussion below.
+M_CRIT_BNS = 2.8       # BNS prompt-collapse total mass [Msun] (Gottlieb 2023, Sec. 3)
+Q_THRESH_BNS = 1.2     # BNS mass ratio q = M_max / M_min >= 1 (Gottlieb 2023, Sec. 3)
+MDISK_SHORT = 0.01     # BHNS Short cbGRB disk mass [Msun] (Gottlieb 2023, Sec. 4 / Fig. 6)
+MDISK_LONG = 0.1       # BHNS Long cbGRB disk mass [Msun] (Gottlieb 2023, Sec. 4 / Fig. 6)
 
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2024) additions
@@ -54,12 +64,17 @@ arXiv:2105.06981) combined NICER + GW + KN: 2.23 +0.14/-0.23 (PP),
 2.11 +0.29/-0.16 (CS); 2.2 is a central estimate."""
 
 K_THRESH_DEFAULT = 1.27
-"""Default ratio M_THRESH / M_TOV.  With M_TOV = 2.2 this gives 2.794
-(~ 2.8, matching the Gottlieb+ 2023 fiducial).  Bauswein+ 2013, 2020
-and Koppel+ 2019 find ratios ~1.3-1.7 across EOSs (stiffer -> larger);
-1.27 is on the soft side.  Override per-EOS for sensitivity studies
-(see ``EOS_MODELS`` and the ``k_thresh`` kwarg of
-``grb_classify.classify_bns_2024`` / ``classify_grid``)."""
+"""Default ratio M_THRESH / M_TOV.  Chosen as a Gottlieb (2023, Eq. 1
+discussion) fiducial so that M_THRESH = K * M_TOV = 1.27 * 2.2 ~ 2.8
+Msun reproduces the M_CRIT_BNS = 2.8 prompt-collapse scale used in
+``classify_bns_2023``; it is NOT a value taken from the Bauswein
+Table I.  The original prompt-collapse threshold concept is from
+Bauswein et al. (2013, arXiv:1307.5191) and Bauswein et al. (2020,
+arXiv:2004.00846), who find EOS-dependent k = M_thresh / M_TOV in the
+range ~1.3-1.7 (stiffer EOS -> larger k); see also Koppel et al.
+(2019).  Override per-EOS for sensitivity studies via the ``k_thresh``
+kwarg of ``grb_classify.classify_bns_2024`` / ``classify_grid``
+(see ``EOS_MODELS`` for tabulated M_crit values per EOS)."""
 
 M_THRESH = K_THRESH_DEFAULT * M_TOV   # 2.794 ~ 2.8 by default
 """Prompt-collapse total-mass threshold [Msun], expressed as
@@ -69,13 +84,28 @@ separately as the Gottlieb (2023) hard-coded threshold for
 ``classify_bns_2023``; the 2024 hybrid model uses ``M_THRESH``."""
 
 # NOTE: The HMNS short/long-lived split used in the notebook is at
-# 1.2 * M_TOV ~ 2.64 M_sun (total gravitational mass).  Gottlieb (2024)
-# discusses this near ~2.7 M_sun (close to M_THRESH).  The 1.2 * M_TOV
-# choice captures the concept that remnants significantly above M_TOV but
-# below M_THRESH collapse on viscous timescales rather than surviving long
+# 1.2 * M_TOV ~ 2.64 M_sun (total gravitational mass).  This 1.2
+# multiplier is a CODE HEURISTIC, not a value taken from Gottlieb
+# (2024).  Gottlieb (2024) sec 2.3.2 (Eq. 7) places the HMNS regime at
+# M_tot <~ M_thresh, with the long-lived / short-lived distinction set
+# by the HMNS lifetime (~0.1 to 1 s vs ~10 to 100 ms), not by a fixed
+# multiplier on M_TOV.  The 1.2 fiducial captures the supramassive-
+# remnant argument of Margalit and Metzger (2017, ApJL 850, L19,
+# arXiv:1710.05938): remnants significantly above M_TOV but below
+# M_THRESH collapse on viscous timescales rather than surviving long
 # enough to power an extended GRB engine.  Configurable via the
 # ``hmns_factor`` kwarg in ``grb_classify.classify_bns_2024`` /
 # ``classify_grid``.
+HMNS_FACTOR_DEFAULT = 1.2
+"""Default multiplier on ``M_TOV`` setting the boundary between the
+long-lived HMNS regime (sbGRB + blue KN) and the short-lived HMNS
+regime (lbGRB + red KN, HMNS) in ``grb_classify.classify_bns_2024`` and
+``classify_grid``.
+
+CODE HEURISTIC, NOT a value taken from Gottlieb (2024).  See the NOTE
+block above for the supramassive-remnant motivation (Margalit and
+Metzger 2017, ApJL 850, L19, arXiv:1710.05938).  Centralized as a named
+constant so a single edit propagates to every classifier."""
 
 # ---------------------------------------------------------------------------
 # Legacy remnant-to-disk fraction (deprecated; kept for back-compat)
@@ -227,10 +257,12 @@ def mcrit_to_r14(mc):
 # ---------------------------------------------------------------------------
 # NS-mass quantile remap (Mandel & Muller 2020 style)
 # ---------------------------------------------------------------------------
-# Alsing, Silva & Berti (2018) MNRAS 478, 1377 double-Gaussian fit to the
-# Galactic NS mass distribution.  Component 1 captures the recycled +
-# slow-pulsar peak near 1.34 Msun; component 2 captures the high-mass
-# tail (e.g. PSR J0740+6620, J1614-2230) near 1.80 Msun.
+# Alsing, Silva and Berti (2018) MNRAS 478, 1377 (arXiv:1810.03548)
+# double-Gaussian fit to the Galactic NS mass distribution.  Component 1
+# captures the recycled + slow-pulsar peak near 1.34 Msun; component 2
+# captures the high-mass tail (e.g. PSR J0740+6620, J1614-2230) near
+# 1.80 Msun.  PDF not present in the project Papers/ folder; values
+# below are taken from arXiv:1810.03548 Table 3 (their two-Gaussian fit).
 NS_REMAP_W1 = 0.66
 NS_REMAP_MU1 = 1.34   # [Msun]
 NS_REMAP_SIG1 = 0.07  # [Msun]
@@ -664,12 +696,21 @@ def effective_aligned_spin(a_BH, theta_tilt):
 
 
 MISALIGNMENT_SYSTEMATIC_FACTOR = 0.5
-"""Population-averaged reduction in BHNS GRB fractions from spin-orbit
-misalignment.  Pop-synth suggests ~50% of BHNS systems have
-misalignment > 45 deg (Fragos+ 2010, arXiv:1001.1107; Gerosa+ 2018).
-Kawaguchi+ 2015 NR simulations show the BHNS disk mass drops to near
-zero for misalignment > 50-60 deg, so a population-averaged factor-of-2
-suppression of BHNS GRB rates is the canonical way to fold this in.
+"""Order-unity heuristic for the population-averaged reduction in BHNS
+GRB fractions from BH spin-orbit misalignment.  This is NOT a measured
+constant from a single paper; the value 0.5 combines two ingredients:
+
+- Population-synthesis tilt distributions (Fragos et al. 2010,
+  arXiv:1001.1107; Gerosa et al. 2018) suggest roughly half of BHNS
+  systems have spin-orbit misalignment > 45 deg.
+- Kawaguchi et al. (2015, ApJ 825, 52) numerical-relativity simulations
+  show the BHNS disk mass drops to near zero for misalignment angles
+  > 50 to 60 deg (their Fig. 4), so misaligned systems contribute
+  negligibly to the GRB rate.
+
+The 0.5 factor approximates the population-integrated suppression
+under these two inputs.  For a per-system treatment that propagates
+individual tilt angles instead, use ``effective_aligned_spin``.
 
 Two ways to apply this:
 
