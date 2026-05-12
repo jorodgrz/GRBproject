@@ -136,6 +136,39 @@ EOS_MODELS = {
 
 
 # ---------------------------------------------------------------------------
+# Chirp mass
+# ---------------------------------------------------------------------------
+def chirp_mass(m1, m2):
+    """Chirp mass M_chirp = (m1 m2)^(3/5) / (m1 + m2)^(1/5) [Msun].
+
+    Cleanest mass observable for a CBC inspiral: the gravitational-wave
+    amplitude and frequency evolution depend on M_chirp at leading
+    post-Newtonian order (Peters 1964, Phys. Rev. 136, B1224).  This
+    helper exists so the per-class chirp-mass diagnostic in
+    ``grb_main.ipynb`` Section 13, and any future GWTC / LIGO O4
+    observed-vs-predicted chirp-mass cross-check, share a single
+    definition.
+
+    Vectorises over arrays.  Symmetric in (m1, m2): the formula is
+    invariant under swap so callers do not need to enforce any ordering.
+
+    Parameters
+    ----------
+    m1, m2 : float or array-like
+        Component masses [Msun]; either ordering accepted.
+
+    Returns
+    -------
+    float or ndarray
+        Chirp mass [Msun] in the same shape as the broadcast of the
+        inputs.
+    """
+    m1 = np.asarray(m1, dtype=float)
+    m2 = np.asarray(m2, dtype=float)
+    return (m1 * m2) ** 0.6 / (m1 + m2) ** 0.2
+
+
+# ---------------------------------------------------------------------------
 # ISCO
 # ---------------------------------------------------------------------------
 def r_isco(a_BH):

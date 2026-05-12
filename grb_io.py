@@ -32,6 +32,15 @@ def _validate_hdf5_metadata(path, expected_kind=None,
     with un-annotated archives.  If they are present and contradict
     the caller's expectation, raise ``ValueError`` -- this is the
     Reviewer-3 defense against silent file mislabeling.
+
+    Returns
+    -------
+    (actual_model, actual_ns_max) : tuple
+        The values read from the HDF5 root attributes, or ``(None, None)``
+        if the file carries no metadata.  Loaders attach these to their
+        output dict so downstream code (e.g. ``classify_grid(ns_max=...)``)
+        does not need to re-open the HDF5 or maintain a per-letter literal
+        table.
     """
     with h5.File(path, 'r') as f:
         attrs = dict(f.attrs)
@@ -47,7 +56,7 @@ def _validate_hdf5_metadata(path, expected_kind=None,
                 f"`python tools/embed_model_metadata.py` once per "
                 f"download to enable validation.",
                 stacklevel=3)
-        return
+        return None, None
 
     actual_kind = str(attrs.get('kind', '')) or None
     actual_model = str(attrs.get('model', '')) or None
@@ -71,6 +80,7 @@ def _validate_hdf5_metadata(path, expected_kind=None,
             f"COMPAS HDF5 {os.path.basename(path)} has ns_max="
             f"{actual_ns_max}, expected {expected_ns_max}."
         )
+    return actual_model, actual_ns_max
 
 
 def _validate_delay_times(dt, label=""):
@@ -193,13 +203,20 @@ def load_bns(path=None, sort_masses=True, expected_model=None,
         'delay_time'       : tform + tc [Myr]
         'n_merging'        : number of merging systems
         'mask_merging'     : boolean mask over the full catalogue
+        'model'            : Broekgaarden+ 2021 model letter (or None
+                             if the file carries no embedded metadata)
+        'ns_max'           : maximum NS gravitational mass for this run
+                             (Models J / A / K = 2.0 / 2.5 / 3.0 Msun).
+                             Pass directly into ``classify_grid(ns_max=...)``
+                             rather than maintaining a per-letter literal.
     """
     if path is None:
         path = DEFAULT_BNS_PATH
 
-    _validate_hdf5_metadata(path, expected_kind='BNS',
-                            expected_model=expected_model,
-                            expected_ns_max=expected_ns_max)
+    actual_model, actual_ns_max = _validate_hdf5_metadata(
+        path, expected_kind='BNS',
+        expected_model=expected_model,
+        expected_ns_max=expected_ns_max)
 
     with h5.File(path, 'r') as f:
         dco = f['doubleCompactObjects']
@@ -234,12 +251,15 @@ def load_bns(path=None, sort_masses=True, expected_model=None,
         'n_merging':    int(mask.sum()),
         'mask_merging': mask,
         'population':   'BNS',
+        'model':        actual_model,
+        'ns_max':       actual_ns_max,
     }
     _validate_loader_dict(out, out['n_merging'], path)
     return out
 
 
-def load_bns_with_channels(path=None, sort_masses=True):
+def load_bns_with_channels(path=None, sort_masses=True,
+                           expected_model=None, expected_ns_max=None):
     """Load merging BNS with formation-channel columns.
 
     Returns the same dict as load_bns, plus additional keys for the
@@ -247,9 +267,16 @@ def load_bns_with_channels(path=None, sort_masses=True):
         'dblCE', 'fc_CEE', 'fc_mt_p1', 'fc_mt_s1',
         'fc_mt_p1_K1', 'fc_mt_s1_K2',
         'm1zams', 'm2zams', 'sep_preCE', 'sep_postCE'
+
+    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bns``.
     """
     if path is None:
         path = DEFAULT_BNS_PATH
+
+    actual_model, actual_ns_max = _validate_hdf5_metadata(
+        path, expected_kind='BNS',
+        expected_model=expected_model,
+        expected_ns_max=expected_ns_max)
 
     with h5.File(path, 'r') as f:
         dco = f['doubleCompactObjects']
@@ -313,6 +340,8 @@ def load_bns_with_channels(path=None, sort_masses=True):
         'fc_mt_s1_K2':  fc_mt_s1_K2[mask],
         'fc_CEE':       fc_CEE[mask],
         'population':   'BNS',
+        'model':        actual_model,
+        'ns_max':       actual_ns_max,
     }
     _validate_loader_dict(out, out['n_merging'], path)
     return out
@@ -346,13 +375,16 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         'delay_time'       : tform + tc [Myr]
         'n_merging'        : number of merging systems
         'mask_merging'     : boolean mask over the full catalogue
+        'model'            : Broekgaarden+ 2021 model letter (or None)
+        'ns_max'           : maximum NS gravitational mass for the run
     """
     if path is None:
         path = DEFAULT_BHNS_PATH
 
-    _validate_hdf5_metadata(path, expected_kind='BHNS',
-                            expected_model=expected_model,
-                            expected_ns_max=expected_ns_max)
+    actual_model, actual_ns_max = _validate_hdf5_metadata(
+        path, expected_kind='BHNS',
+        expected_model=expected_model,
+        expected_ns_max=expected_ns_max)
 
     with h5.File(path, 'r') as f:
         dco = f['doubleCompactObjects']
@@ -385,18 +417,27 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         'n_merging':    int(mask.sum()),
         'mask_merging': mask,
         'population':   'BHNS',
+        'model':        actual_model,
+        'ns_max':       actual_ns_max,
     }
     _validate_loader_dict(out, out['n_merging'], path)
     return out
 
 
-def load_bhns_with_channels(path=None):
+def load_bhns_with_channels(path=None,
+                            expected_model=None, expected_ns_max=None):
     """Load merging BHNS with formation-channel columns.
 
     Same as load_bhns plus formation-channel keys for classify_formation_channels.
+    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bhns``.
     """
     if path is None:
         path = DEFAULT_BHNS_PATH
+
+    actual_model, actual_ns_max = _validate_hdf5_metadata(
+        path, expected_kind='BHNS',
+        expected_model=expected_model,
+        expected_ns_max=expected_ns_max)
 
     with h5.File(path, 'r') as f:
         dco = f['doubleCompactObjects']
@@ -445,6 +486,8 @@ def load_bhns_with_channels(path=None):
         'fc_mt_s1_K2':  fc_mt_s1_K2[mask],
         'fc_CEE':       fc_CEE[mask],
         'population':   'BHNS',
+        'model':        actual_model,
+        'ns_max':       actual_ns_max,
     }
     _validate_loader_dict(out, out['n_merging'], path)
     return out
@@ -595,14 +638,22 @@ def _match_sn_to_dco(f):
     return vsys_out
 
 
-def load_bns_with_kicks(path=None, sort_masses=True):
+def load_bns_with_kicks(path=None, sort_masses=True,
+                        expected_model=None, expected_ns_max=None):
     """Load merging BNS with kick/velocity columns for offset analysis.
 
     Returns the standard load_bns dict plus:
         'drawnKick1', 'drawnKick2', 'v_sys', 'sep_DCO', 'ecc_DCO'
+
+    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bns``.
     """
     if path is None:
         path = DEFAULT_BNS_PATH
+
+    actual_model, actual_ns_max = _validate_hdf5_metadata(
+        path, expected_kind='BNS',
+        expected_model=expected_model,
+        expected_ns_max=expected_ns_max)
 
     with h5.File(path, 'r') as f:
         dco = f['doubleCompactObjects']
@@ -642,15 +693,25 @@ def load_bns_with_kicks(path=None, sort_masses=True):
         'drawnKick1': dk1[mask], 'drawnKick2': dk2[mask],
         'v_sys': vsys_all[mask], 'sep_DCO': sep[mask], 'ecc_DCO': ecc[mask],
         'population': 'BNS',
+        'model': actual_model, 'ns_max': actual_ns_max,
     }
     _validate_loader_dict(out, out['n_merging'], path)
     return out
 
 
-def load_bhns_with_kicks(path=None):
-    """Load merging BHNS with kick/velocity columns for offset analysis."""
+def load_bhns_with_kicks(path=None,
+                         expected_model=None, expected_ns_max=None):
+    """Load merging BHNS with kick/velocity columns for offset analysis.
+
+    ``expected_model`` / ``expected_ns_max`` behave as in ``load_bhns``.
+    """
     if path is None:
         path = DEFAULT_BHNS_PATH
+
+    actual_model, actual_ns_max = _validate_hdf5_metadata(
+        path, expected_kind='BHNS',
+        expected_model=expected_model,
+        expected_ns_max=expected_ns_max)
 
     with h5.File(path, 'r') as f:
         dco = f['doubleCompactObjects']
@@ -687,6 +748,7 @@ def load_bhns_with_kicks(path=None):
         'drawnKick1': dk1[mask], 'drawnKick2': dk2[mask],
         'v_sys': vsys_all[mask], 'sep_DCO': sep[mask], 'ecc_DCO': ecc[mask],
         'population': 'BHNS',
+        'model': actual_model, 'ns_max': actual_ns_max,
     }
     _validate_loader_dict(out, out['n_merging'], path)
     return out

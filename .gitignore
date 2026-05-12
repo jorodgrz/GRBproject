@@ -57,3 +57,9 @@ council/
 
 # Local PDF-extraction virtualenv
 .venv_pdf/
+
+# Local audit doc, not part of deliverable
+PHYSICS_AUDIT.md
+
+# Smoke-test marker written by tests/test_grb_main_notebook.py
+Plots/.smoke_marker
