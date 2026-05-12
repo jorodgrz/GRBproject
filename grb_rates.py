@@ -707,7 +707,7 @@ def kroupa_imf(m):
             lambda m: 0.04 * m ** (-2.3),
         ],
     )  # Kroupa 2001 Eq. 2: alpha_3 = 2.3
-    return float(result) if result.ndim == 0 or result.size == 1 else result
+    return result.item() if result.size == 1 else result
 
 
 def verify_mean_mass_evolved(

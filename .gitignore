@@ -60,3 +60,9 @@ council/
 
 # Smoke-test marker written by tests/test_grb_main_notebook.py
 Plots/.smoke_marker
+
+# Coverage.py / pytest-cov outputs
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
