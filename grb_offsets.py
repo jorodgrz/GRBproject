@@ -20,33 +20,33 @@ from scipy.optimize import brentq
 # ═══════════════════════════════════════════════════════════════════════════
 # Constants
 # ═══════════════════════════════════════════════════════════════════════════
-G_CGS = 6.674e-8            # cm^3 g^-1 s^-2
-MSUN_G = 1.989e33           # g
-KPC_CM = 3.0857e21          # cm
-MYR_S = 3.1557e13           # s
-KM_CM = 1e5                 # cm
+G_CGS = 6.674e-8  # cm^3 g^-1 s^-2
+MSUN_G = 1.989e33  # g
+KPC_CM = 3.0857e21  # cm
+MYR_S = 3.1557e13  # s
+KM_CM = 1e5  # cm
 
 # Default host galaxy: typical SGRB host (Fong & Berger 2013)
-DEFAULT_M_GAL = 10**10.5 * MSUN_G          # stellar mass [g]
-DEFAULT_R_E = 5.0 * KPC_CM                 # effective radius [cm]
+DEFAULT_M_GAL = 10**10.5 * MSUN_G  # stellar mass [g]
+DEFAULT_R_E = 5.0 * KPC_CM  # effective radius [cm]
 
 # Representative host galaxy types (Fong & Berger 2013).
 # sGRB hosts: ~75% star-forming, ~25% elliptical.
 HOST_MODELS = {
-    'SF_disk': {
-        'M_gal': 10**9.8 * MSUN_G,
-        'R_e': 3.6 * KPC_CM,
-        'weight': 0.50,
+    "SF_disk": {
+        "M_gal": 10**9.8 * MSUN_G,
+        "R_e": 3.6 * KPC_CM,
+        "weight": 0.50,
     },
-    'SF_massive': {
-        'M_gal': 10**10.5 * MSUN_G,
-        'R_e': 5.0 * KPC_CM,
-        'weight': 0.25,
+    "SF_massive": {
+        "M_gal": 10**10.5 * MSUN_G,
+        "R_e": 5.0 * KPC_CM,
+        "weight": 0.25,
     },
-    'Elliptical': {
-        'M_gal': 10**11.0 * MSUN_G,
-        'R_e': 8.0 * KPC_CM,
-        'weight': 0.25,
+    "Elliptical": {
+        "M_gal": 10**11.0 * MSUN_G,
+        "R_e": 8.0 * KPC_CM,
+        "weight": 0.25,
     },
 }
 
@@ -122,7 +122,7 @@ def hernquist_potential(r, M_gal, a):
 
 def hernquist_acceleration(r, M_gal, a):
     """Radial gravitational acceleration (inward, negative) for Hernquist profile."""
-    return -G_CGS * M_gal / (r + a)**2
+    return -G_CGS * M_gal / (r + a) ** 2
 
 
 def escape_velocity(r, M_gal, a):
@@ -145,8 +145,7 @@ def _orbit_rhs(t, y, M_gal, a):
     return [drdt, dvrdt, dLdt]
 
 
-def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=None,
-                    theta_launch=None, rng=None):
+def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=None, theta_launch=None, rng=None):
     """Integrate a single orbit in Hernquist potential.
 
     Parameters
@@ -198,10 +197,17 @@ def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=None,
     t_span = (0.0, t_delay_s)
 
     try:
-        sol = solve_ivp(_orbit_rhs, t_span, y0, args=(M_gal, a),
-                        method='RK45', rtol=1e-8, atol=1e-10,
-                        max_step=t_delay_s / 50.0,
-                        dense_output=False)
+        sol = solve_ivp(
+            _orbit_rhs,
+            t_span,
+            y0,
+            args=(M_gal, a),
+            method="RK45",
+            rtol=1e-8,
+            atol=1e-10,
+            max_step=t_delay_s / 50.0,
+            dense_output=False,
+        )
         if sol.success:
             r_final = abs(sol.y[0, -1])
             return min(r_final, _R_CAP_FACTOR * a)
@@ -210,8 +216,9 @@ def integrate_orbit(v_sys_cm, t_delay_s, M_gal, a, r0=None,
         return r_init
 
 
-def compute_offset_single(v_sys_km, t_delay_myr, M_gal=DEFAULT_M_GAL,
-                          R_e=DEFAULT_R_E, n_angles=8, rng=None):
+def compute_offset_single(
+    v_sys_km, t_delay_myr, M_gal=DEFAULT_M_GAL, R_e=DEFAULT_R_E, n_angles=8, rng=None
+):
     """Compute projected offset for a single binary [kpc].
 
     Launches the binary from a birthplace near the galaxy center and
@@ -308,10 +315,8 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
 
     if v_cm >= v_esc:
         r0_f = r0 / a
-        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f,
-                               theta_launch=theta_launch, rng=rng)
+        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f, theta_launch=theta_launch, rng=rng)
 
-    vr = v_cm * np.cos(theta_launch)
     vt = v_cm * np.sin(theta_launch)
     L = r0 * vt
 
@@ -334,15 +339,13 @@ def _analytic_offset(v_sys_km, t_delay_myr, M_gal, a, r0_frac=None, rng=None):
         return r_mean
     else:
         r0_f = r0 / a
-        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f,
-                               theta_launch=theta_launch, rng=rng)
+        return integrate_orbit(v_cm, t_s, M_gal, a, r0=r0_f, theta_launch=theta_launch, rng=rng)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Vectorized population computation
 # ═══════════════════════════════════════════════════════════════════════════
-def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng,
-                         n_steps=400, newton_iter=30):
+def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng, n_steps=400, newton_iter=30):
     """Batch orbit integrator: scalar in, array out for N systems.
 
     Reproduces ``_analytic_offset`` (line 275) for the whole population at
@@ -418,7 +421,7 @@ def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng,
         for _ in range(newton_iter):
             r_safe = np.maximum(r_iter, a_eps)
             f = 0.5 * L * L / (r_safe * r_safe) - GM / (r_safe + a) - E
-            fp = -L * L / (r_safe ** 3) + GM / (r_safe + a) ** 2
+            fp = -L * L / (r_safe**3) + GM / (r_safe + a) ** 2
             # Avoid division by zero when fp ~ 0 at degenerate L.
             step = f / np.where(np.abs(fp) > 1e-300, fp, 1e-300)
             r_iter = np.clip(r_iter - step, a_eps, r_cap)
@@ -426,8 +429,12 @@ def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng,
 
     # Period heuristic, matching _analytic_offset line 331.
     r_mean_est = 0.5 * (r0 + r_apo)
-    P_est = (2.0 * np.pi * np.sqrt(np.maximum(r_mean_est, a_eps) ** 3 / GM)
-             * (1.0 + a / np.maximum(r_mean_est, a_eps)))
+    P_est = (
+        2.0
+        * np.pi
+        * np.sqrt(np.maximum(r_mean_est, a_eps) ** 3 / GM)
+        * (1.0 + a / np.maximum(r_mean_est, a_eps))
+    )
 
     # Trivial branches: zero kick or zero delay -> stay at r0.
     trivial = (v_cm <= 0) | (t_s <= 0)
@@ -451,22 +458,22 @@ def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng,
         for _ in range(n_steps):
             r_safe = np.maximum(r, a_eps)
             k1_r = vr
-            k1_v = -GM / (r_safe + a) ** 2 + L_i * L_i / (r_safe ** 3)
+            k1_v = -GM / (r_safe + a) ** 2 + L_i * L_i / (r_safe**3)
 
             r2 = np.maximum(r + 0.5 * dt * k1_r, a_eps)
             v2 = vr + 0.5 * dt * k1_v
             k2_r = v2
-            k2_v = -GM / (r2 + a) ** 2 + L_i * L_i / (r2 ** 3)
+            k2_v = -GM / (r2 + a) ** 2 + L_i * L_i / (r2**3)
 
             r3 = np.maximum(r + 0.5 * dt * k2_r, a_eps)
             v3 = vr + 0.5 * dt * k2_v
             k3_r = v3
-            k3_v = -GM / (r3 + a) ** 2 + L_i * L_i / (r3 ** 3)
+            k3_v = -GM / (r3 + a) ** 2 + L_i * L_i / (r3**3)
 
             r4 = np.maximum(r + dt * k3_r, a_eps)
             v4 = vr + dt * k3_v
             k4_r = v4
-            k4_v = -GM / (r4 + a) ** 2 + L_i * L_i / (r4 ** 3)
+            k4_v = -GM / (r4 + a) ** 2 + L_i * L_i / (r4**3)
 
             r = r + dt * (k1_r + 2.0 * k2_r + 2.0 * k3_r + k4_r) / 6.0
             vr = vr + dt * (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v) / 6.0
@@ -479,10 +486,17 @@ def _vectorized_orbit_3d(v_cm, t_s, M_gal, a, rng,
     return np.where(np.isfinite(r_3d), r_3d, r_cap)
 
 
-def compute_offsets_population_vectorized(v_sys_km, t_delay_myr, weights=None,
-                                          M_gal=DEFAULT_M_GAL, R_e=DEFAULT_R_E,
-                                          max_systems=50000, n_proj=8,
-                                          n_steps=400, rng=None):
+def compute_offsets_population_vectorized(
+    v_sys_km,
+    t_delay_myr,
+    weights=None,
+    M_gal=DEFAULT_M_GAL,
+    R_e=DEFAULT_R_E,
+    max_systems=50000,
+    n_proj=8,
+    n_steps=400,
+    rng=None,
+):
     """Vectorized drop-in replacement for ``compute_offsets_population``.
 
     Same I/O contract: returns the dict ``{'offsets_kpc', 'indices',
@@ -490,7 +504,7 @@ def compute_offsets_population_vectorized(v_sys_km, t_delay_myr, weights=None,
     ``compute_offsets_population`` (line 401) with a single batched RK4
     integrator (``_vectorized_orbit_3d``).  Empirical CDFs match the
     legacy code to KS distance < 0.05 (one figure-line thickness) at
-    N = 200; see ``tests/test_phase4_helpers.py``.
+    N = 200; see ``tests/unit/test_phase4_helpers.py``.
 
     Parameters
     ----------
@@ -525,8 +539,7 @@ def compute_offsets_population_vectorized(v_sys_km, t_delay_myr, weights=None,
     v_sys_km = np.asarray(v_sys_km, dtype=float)
     t_delay_myr = np.asarray(t_delay_myr, dtype=float)
 
-    valid = (np.isfinite(v_sys_km) & np.isfinite(t_delay_myr)
-             & (v_sys_km > 0) & (t_delay_myr > 0))
+    valid = np.isfinite(v_sys_km) & np.isfinite(t_delay_myr) & (v_sys_km > 0) & (t_delay_myr > 0)
     valid_idx = np.where(valid)[0]
 
     if weights is not None:
@@ -537,15 +550,12 @@ def compute_offsets_population_vectorized(v_sys_km, t_delay_myr, weights=None,
 
     if len(valid_idx) > max_systems:
         p = w_valid / w_valid.sum()
-        chosen = rng.choice(len(valid_idx), size=max_systems,
-                            replace=False, p=p)
+        chosen = rng.choice(len(valid_idx), size=max_systems, replace=False, p=p)
         valid_idx = valid_idx[chosen]
         w_valid = w_valid[chosen]
 
     if len(valid_idx) == 0:
-        return {'offsets_kpc': np.zeros(0),
-                'indices':     valid_idx,
-                'weights_sub': w_valid}
+        return {"offsets_kpc": np.zeros(0), "indices": valid_idx, "weights_sub": w_valid}
 
     a = hernquist_scale_radius(R_e)
     v_cm = v_sys_km[valid_idx] * KM_CM
@@ -555,18 +565,23 @@ def compute_offsets_population_vectorized(v_sys_km, t_delay_myr, weights=None,
 
     # Vectorized 2D projection (Bloom+ 1999) over (N, n_proj).
     cos_theta = rng.uniform(-1, 1, size=(len(valid_idx), n_proj))
-    projected = r_3d[:, None] * np.sqrt(np.maximum(0.0, 1.0 - cos_theta ** 2))
+    projected = r_3d[:, None] * np.sqrt(np.maximum(0.0, 1.0 - cos_theta**2))
     offsets = np.median(projected, axis=1) / KPC_CM
 
-    return {'offsets_kpc': offsets,
-            'indices':     valid_idx,
-            'weights_sub': w_valid}
+    return {"offsets_kpc": offsets, "indices": valid_idx, "weights_sub": w_valid}
 
 
-def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
-                               M_gal=DEFAULT_M_GAL, R_e=DEFAULT_R_E,
-                               use_analytic=True, max_systems=50000,
-                               vectorized=True, rng=None):
+def compute_offsets_population(
+    v_sys_km,
+    t_delay_myr,
+    weights=None,
+    M_gal=DEFAULT_M_GAL,
+    R_e=DEFAULT_R_E,
+    use_analytic=True,
+    max_systems=50000,
+    vectorized=True,
+    rng=None,
+):
     """Compute projected offsets for a population of merging binaries.
 
     Parameters
@@ -593,7 +608,7 @@ def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
         ``compute_offsets_population_vectorized`` and integrate the
         whole population in one batched RK4 pass (~100x speedup over
         the legacy per-system loop).  Set False to retain the legacy
-        scalar code path; tests in ``tests/test_phase4_helpers.py``
+        scalar code path; tests in ``tests/unit/test_phase4_helpers.py``
         exercise both.
     rng : np.random.Generator, optional
 
@@ -606,8 +621,14 @@ def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
     """
     if vectorized:
         return compute_offsets_population_vectorized(
-            v_sys_km, t_delay_myr, weights=weights,
-            M_gal=M_gal, R_e=R_e, max_systems=max_systems, rng=rng)
+            v_sys_km,
+            t_delay_myr,
+            weights=weights,
+            M_gal=M_gal,
+            R_e=R_e,
+            max_systems=max_systems,
+            rng=rng,
+        )
 
     if rng is None:
         rng = np.random.default_rng(42)
@@ -648,15 +669,15 @@ def compute_offsets_population(v_sys_km, t_delay_myr, weights=None,
         offsets[i] = np.median(projected) / KPC_CM
 
     return {
-        'offsets_kpc': offsets,
-        'indices': valid_idx,
-        'weights_sub': w_valid,
+        "offsets_kpc": offsets,
+        "indices": valid_idx,
+        "weights_sub": w_valid,
     }
 
 
-def compute_offsets_mixed_hosts(v_sys_km, t_delay_myr, weights=None,
-                                host_models=None, max_systems=50000,
-                                rng=None, **kw):
+def compute_offsets_mixed_hosts(
+    v_sys_km, t_delay_myr, weights=None, host_models=None, max_systems=50000, rng=None, **kw
+):
     """Compute offsets for a population using a mixture of host galaxy types.
 
     A single shared subsample is drawn once and then each host potential
@@ -696,8 +717,7 @@ def compute_offsets_mixed_hosts(v_sys_km, t_delay_myr, weights=None,
 
     if len(valid_idx) > max_systems:
         p = w_valid / w_valid.sum()
-        chosen = rng.choice(len(valid_idx), size=max_systems,
-                            replace=False, p=p)
+        chosen = rng.choice(len(valid_idx), size=max_systems, replace=False, p=p)
         valid_idx = valid_idx[chosen]
         w_valid = w_valid[chosen]
 
@@ -705,17 +725,23 @@ def compute_offsets_mixed_hosts(v_sys_km, t_delay_myr, weights=None,
     all_off, all_w = [], []
     for name, hp in host_models.items():
         res = compute_offsets_population(
-            v[valid_idx], t[valid_idx], weights=w_valid,
-            M_gal=hp['M_gal'], R_e=hp['R_e'],
-            max_systems=len(valid_idx), rng=rng, **kw)
+            v[valid_idx],
+            t[valid_idx],
+            weights=w_valid,
+            M_gal=hp["M_gal"],
+            R_e=hp["R_e"],
+            max_systems=len(valid_idx),
+            rng=rng,
+            **kw,
+        )
         per_host[name] = res
-        all_off.append(res['offsets_kpc'])
-        all_w.append(res['weights_sub'] * hp['weight'])
+        all_off.append(res["offsets_kpc"])
+        all_w.append(res["weights_sub"] * hp["weight"])
 
     return {
-        'per_host': per_host,
-        'mixed_offsets': np.concatenate(all_off),
-        'mixed_weights': np.concatenate(all_w),
+        "per_host": per_host,
+        "mixed_offsets": np.concatenate(all_off),
+        "mixed_weights": np.concatenate(all_w),
     }
 
 
@@ -743,18 +769,19 @@ def assign_host_by_delay(t_delay_myr, t_sf_max=3000.0, rng=None):
         Host model key per system ('SF_disk', 'SF_massive', 'Elliptical').
     """
     t = np.asarray(t_delay_myr)
-    out = np.full(len(t), 'Elliptical', dtype='<U12')
+    out = np.full(len(t), "Elliptical", dtype="<U12")
     sf_mask = t < t_sf_max
     n_sf = sf_mask.sum()
     if rng is None:
         rng = np.random.default_rng(42)
     disk_frac = rng.random(n_sf) < 0.67
-    out[sf_mask] = np.where(disk_frac, 'SF_disk', 'SF_massive')
+    out[sf_mask] = np.where(disk_frac, "SF_disk", "SF_massive")
     return out
 
 
-def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
-                                t_sf_max=3000.0, host_models=None, **kw):
+def compute_offsets_delay_hosts(
+    v_sys_km, t_delay_myr, weights=None, t_sf_max=3000.0, host_models=None, **kw
+):
     """Compute offsets with delay-time-dependent host assignment.
 
     Each system is assigned a host type via ``assign_host_by_delay``,
@@ -773,11 +800,11 @@ def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
     """
     if host_models is None:
         host_models = HOST_MODELS
-    rng = kw.pop('rng', None)
+    rng = kw.pop("rng", None)
     if rng is None:
         rng = np.random.default_rng(42)
-    n_steps = kw.pop('n_steps', 400)
-    n_proj  = kw.pop('n_proj', 8)
+    n_steps = kw.pop("n_steps", 400)
+    n_proj = kw.pop("n_proj", 8)
 
     v = np.asarray(v_sys_km, dtype=float)
     t = np.asarray(t_delay_myr, dtype=float)
@@ -790,7 +817,7 @@ def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
     else:
         w_valid = np.ones(len(valid_idx))
 
-    max_systems = kw.pop('max_systems', 50000)
+    max_systems = kw.pop("max_systems", 50000)
     if len(valid_idx) > max_systems:
         p = w_valid / w_valid.sum()
         chosen = rng.choice(len(valid_idx), size=max_systems, replace=False, p=p)
@@ -801,24 +828,23 @@ def compute_offsets_delay_hosts(v_sys_km, t_delay_myr, weights=None,
     if len(valid_idx) > 0:
         host_sub = hosts[valid_idx]
         v_cm_all = v[valid_idx] * KM_CM
-        t_s_all  = t[valid_idx] * MYR_S
+        t_s_all = t[valid_idx] * MYR_S
         for name, hp in host_models.items():
-            host_mask = (host_sub == name)
+            host_mask = host_sub == name
             if not host_mask.any():
                 continue
-            a_host = hernquist_scale_radius(hp['R_e'])
+            a_host = hernquist_scale_radius(hp["R_e"])
             r_3d = _vectorized_orbit_3d(
-                v_cm_all[host_mask], t_s_all[host_mask],
-                hp['M_gal'], a_host, rng, n_steps=n_steps)
+                v_cm_all[host_mask], t_s_all[host_mask], hp["M_gal"], a_host, rng, n_steps=n_steps
+            )
             cos_th = rng.uniform(-1, 1, size=(host_mask.sum(), n_proj))
-            projected = r_3d[:, None] * np.sqrt(
-                np.maximum(0.0, 1.0 - cos_th * cos_th))
+            projected = r_3d[:, None] * np.sqrt(np.maximum(0.0, 1.0 - cos_th * cos_th))
             offsets[host_mask] = np.median(projected, axis=1) / KPC_CM
 
     return {
-        'offsets_kpc': offsets,
-        'weights_sub': w_valid,
-        'host_assignments': hosts[valid_idx],
+        "offsets_kpc": offsets,
+        "weights_sub": w_valid,
+        "host_assignments": hosts[valid_idx],
     }
 
 
@@ -850,32 +876,12 @@ def weighted_offset_cdf(offsets, weights):
 
 
 def offset_cdf_by_class(offsets, weights, class_masks):
-    """Per-class weighted offset CDFs for a single population.
+    """Per-class weighted offset CDFs.
 
-    Promoted from the inline per-class loop in ``grb_main.ipynb`` Section
-    9 so the same per-class CDF construction is reused by any plotter
-    (Council Expansionist L4).  Different DTDs imply different offset
-    CDFs, so this is the canonical class-discriminator panel layer.
-
-    Parameters
-    ----------
-    offsets : 1-D array, shape (N,)
-        Projected galactocentric offsets [kpc] for each merging system.
-    weights : 1-D array, shape (N,)
-        STROOPWAFEL weights aligned with ``offsets`` (per CLAUDE.md
-        "STROOPWAFEL weights are mandatory" rule).
-    class_masks : dict[str, 1-D bool array]
-        Class label -> per-system boolean mask, all of length N.  Pass
-        the full ``classify_bns_2024(...)`` (or ``classify_bhns(...)``)
-        return value with non-mask keys ('M_disk') stripped first.
-
-    Returns
-    -------
-    cdfs : dict[str, (sorted_offsets, cdf)]
-        Per-class tuple ``(offsets_sorted_kpc, cdf_in_[0,1])`` suitable
-        for a stairs / step plot.  Classes whose mask has fewer than
-        two valid systems map to ``(np.array([0.0]), np.array([0.0]))``
-        as a sentinel that the plotter can skip.
+    ``class_masks`` is the ``classify_bns_2024`` / ``classify_bhns``
+    output dict with non-mask keys (like ``'M_disk'``) stripped.
+    Classes with fewer than two valid systems return the sentinel
+    ``(np.array([0.0]), np.array([0.0]))``.
     """
     out = {}
     for label, mask in class_masks.items():
@@ -887,12 +893,38 @@ def offset_cdf_by_class(offsets, weights, class_masks):
 # ═══════════════════════════════════════════════════════════════════════════
 # Observed offset data (Fong & Berger 2013, Table 3)
 # ═══════════════════════════════════════════════════════════════════════════
-OBSERVED_SGRB_OFFSETS_KPC = np.array([
-    0.5, 0.7, 1.0, 1.3, 1.5, 2.0, 2.2, 3.0, 3.8, 4.2,
-    4.5, 5.0, 5.4, 7.0, 7.4, 8.0, 10.0, 14.6, 18.0, 29.0,
-    39.0, 73.0,
-])
+OBSERVED_SGRB_OFFSETS_KPC = np.array(
+    [
+        0.5,
+        0.7,
+        1.0,
+        1.3,
+        1.5,
+        2.0,
+        2.2,
+        3.0,
+        3.8,
+        4.2,
+        4.5,
+        5.0,
+        5.4,
+        7.0,
+        7.4,
+        8.0,
+        10.0,
+        14.6,
+        18.0,
+        29.0,
+        39.0,
+        73.0,
+    ]
+)
 
-OBSERVED_LGRB_MERGER_OFFSETS_KPC = np.array([
-    1.2, 2.3, 5.7, 14.7,
-])
+OBSERVED_LGRB_MERGER_OFFSETS_KPC = np.array(
+    [
+        1.2,
+        2.3,
+        5.7,
+        14.7,
+    ]
+)

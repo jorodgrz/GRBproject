@@ -7,13 +7,15 @@ This test module pins five end-to-end claims:
 
 1. ``test_per_model_R0_BNS_inside_LIGO_O4_band`` -- the calibrated BNS
    intrinsic local rate sits inside the LIGO O4 BNS 90 percent CR
-   ``[10, 1700]`` Gpc^-3 yr^-1 (Abbott et al. 2023) for every model.
-   Extends ``PHYSICS_AUDIT.md`` Sec. 5 from one model to five.
+   ``[10, 1700]`` Gpc^-3 yr^-1 (Abbott et al. 2023, GWTC-3) for every
+   model.  Generalises the Model A pin to all five Broekgaarden+ 2021
+   variations.
 
 2. ``test_per_model_R0_BHNS_inside_widened_band`` -- the calibrated BHNS
    intrinsic local rate sits inside the widened ``[1.0, 320]`` Gpc^-3 yr^-1
-   band (lower edge dropped from the LIGO 7.4 to admit the documented
-   Model A BHNS underprediction; see ``PHYSICS_AUDIT.md`` Sec. 5).
+   band (lower edge dropped from the LIGO 90 percent CR value 7.4 to
+   admit the Model A BHNS underprediction documented in Broekgaarden et al.
+   2021 Sec. 6).
 
 3. ``test_alpha_CE_monotonicity_BNS_rate`` -- R_BNS(G) > R_BNS(A) > R_BNS(F),
    the qualitative alpha_CE monotonicity from Broekgaarden et al. (2021)
@@ -36,11 +38,12 @@ The expensive per-model load + cosmic-integration calibration runs at
 most once per letter across the entire session via ``_get_model`` -- a
 module-level lazy cache that mirrors the Section 12.0 setup cell.
 
-CLAUDE.md vectorization mandate: the only Python loops are the
-five-iteration outer loop over ``MODEL_LETTERS`` (each iteration calls
-already-vectorized cosmic-integration code) and the small fraction
-matrix construction (``np.stack`` + matrix product).  No per-system
-loops anywhere.
+The only Python loops in this module are the five-iteration outer loop
+over ``MODEL_LETTERS`` (each iteration calls already-vectorized
+cosmic-integration code) and the small fraction-matrix construction
+(``np.stack`` + matrix product).  No per-system loops anywhere; all
+reductions over the ~10^6 COMPAS systems are weighted ``numpy``
+broadcasts.
 """
 
 from __future__ import annotations
@@ -52,7 +55,6 @@ from typing import Dict
 import numpy as np
 import pytest
 
-
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_THIS_DIR)
 if _REPO_ROOT not in sys.path:
@@ -60,7 +62,10 @@ if _REPO_ROOT not in sys.path:
 
 MODEL_LETTERS = ["A", "F", "G", "J", "K"]
 LIGO_BNS_90CR = (10.0, 1700.0)
-LIGO_BHNS_90CR_WIDENED = (1.0, 320.0)  # PHYSICS_AUDIT.md Sec. 5
+# Lower edge widened from the LIGO 90% CR value 7.4 to 1.0 to admit
+# the documented Model A BHNS underprediction (Broekgaarden et al.
+# 2021 Sec. 6); upper edge from Abbott et al. (2023) GWTC-3 BHNS 90% CR.
+LIGO_BHNS_90CR_WIDENED = (1.0, 320.0)
 
 # Module-level cache for the expensive per-model load + calibration.
 # pytest evaluates each parametrized test in its own call, but the cache
@@ -94,17 +99,22 @@ def _get_model(letter: str) -> dict:
         reason="compas_python_utils not installed in this environment",
     )
 
-    bns_path  = _data_path(f"COMPASCompactOutput_BNS_{letter}.h5")
+    bns_path = _data_path(f"COMPASCompactOutput_BNS_{letter}.h5")
     bhns_path = _data_path(f"COMPASCompactOutput_BHNS_{letter}.h5")
     for p in (bns_path, bhns_path):
         if not os.path.exists(p):
             pytest.skip(f"{os.path.basename(p)} not present in Data/")
 
     from astropy.cosmology import Planck15
+
     assert abs(Planck15.H0.value - 67.74) < 0.01
 
-    from grb_io import (load_bns_with_channels, load_bhns_with_kicks,
-                        read_expected_local_rate, METALLICITY_GRID)
+    from grb_io import (
+        METALLICITY_GRID,
+        load_bhns_with_kicks,
+        load_bns_with_channels,
+        read_expected_local_rate,
+    )
     from grb_physics import remap_ns_masses_double_gaussian
     from grb_rates import calibrate_mean_mass_evolved, compute_merger_rate
 
@@ -113,45 +123,79 @@ def _get_model(letter: str) -> dict:
 
     rng = np.random.default_rng(42 + MODEL_LETTERS.index(letter))
     bns["m1"], bns["m2"] = remap_ns_masses_double_gaussian(
-        bns["m1"], bns["m2"], weights=bns["weights"], rng=rng)
+        bns["m1"], bns["m2"], weights=bns["weights"], rng=rng
+    )
 
-    redshifts, _, times, time_first_SF, _, _ = (
-        fci.calculate_redshift_related_params(
-            max_redshift=10.0, redshift_step=0.01, cosmology=Planck15))
+    redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
+        max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
+    )
     sfr = fci.find_sfr(redshifts)
     _, _, p_draw = fci.find_metallicity_distribution(
         redshifts,
         min_logZ_COMPAS=float(np.log(METALLICITY_GRID[0])),
-        max_logZ_COMPAS=float(np.log(METALLICITY_GRID[-1])))
+        max_logZ_COMPAS=float(np.log(METALLICITY_GRID[-1])),
+    )
     p_draw = float(p_draw)
 
-    Z_grid_BNS  = np.unique(bns["metallicity"])
+    Z_grid_BNS = np.unique(bns["metallicity"])
     Z_grid_BHNS = np.unique(bhns["metallicity"])
 
-    mme_bns, _  = calibrate_mean_mass_evolved(
-        sfr, redshifts, times, time_first_SF, p_draw,
-        bns["metallicity"], bns["delay_time"], bns["weights"],
-        read_expected_local_rate(bns_path), Z_grid=Z_grid_BNS)
+    mme_bns, _ = calibrate_mean_mass_evolved(
+        sfr,
+        redshifts,
+        times,
+        time_first_SF,
+        p_draw,
+        bns["metallicity"],
+        bns["delay_time"],
+        bns["weights"],
+        read_expected_local_rate(bns_path),
+        Z_grid=Z_grid_BNS,
+    )
     mme_bhns, _ = calibrate_mean_mass_evolved(
-        sfr, redshifts, times, time_first_SF, p_draw,
-        bhns["metallicity"], bhns["delay_time"], bhns["weights"],
-        read_expected_local_rate(bhns_path), Z_grid=Z_grid_BHNS)
+        sfr,
+        redshifts,
+        times,
+        time_first_SF,
+        p_draw,
+        bhns["metallicity"],
+        bhns["delay_time"],
+        bhns["weights"],
+        read_expected_local_rate(bhns_path),
+        Z_grid=Z_grid_BHNS,
+    )
 
-    R_bns  = compute_merger_rate(
-        redshifts, times, time_first_SF, sfr / mme_bns, p_draw,
-        bns["metallicity"], bns["delay_time"], bns["weights"],
-        Z_grid=Z_grid_BNS, smooth_sigma=0)
+    R_bns = compute_merger_rate(
+        redshifts,
+        times,
+        time_first_SF,
+        sfr / mme_bns,
+        p_draw,
+        bns["metallicity"],
+        bns["delay_time"],
+        bns["weights"],
+        Z_grid=Z_grid_BNS,
+        smooth_sigma=0,
+    )
     R_bhns = compute_merger_rate(
-        redshifts, times, time_first_SF, sfr / mme_bhns, p_draw,
-        bhns["metallicity"], bhns["delay_time"], bhns["weights"],
-        Z_grid=Z_grid_BHNS, smooth_sigma=0)
+        redshifts,
+        times,
+        time_first_SF,
+        sfr / mme_bhns,
+        p_draw,
+        bhns["metallicity"],
+        bhns["delay_time"],
+        bhns["weights"],
+        Z_grid=Z_grid_BHNS,
+        smooth_sigma=0,
+    )
     iz0 = int(np.argmin(np.abs(redshifts)))
     out = {
-        "letter":  letter,
-        "bns":     bns,
-        "bhns":    bhns,
-        "ns_max":  bns["ns_max"],
-        "R0_bns":  float(R_bns[iz0]),
+        "letter": letter,
+        "bns": bns,
+        "bhns": bhns,
+        "ns_max": bns["ns_max"],
+        "R0_bns": float(R_bns[iz0]),
         "R0_bhns": float(R_bhns[iz0]),
     }
     _MODEL_CACHE[letter] = out
@@ -167,9 +211,9 @@ def _get_model(letter: str) -> dict:
 def test_per_model_R0_BNS_inside_LIGO_O4_band(letter):
     """R_BNS(z=0) sits inside the LIGO O4 BNS 90% CR for every model.
 
-    Extends PHYSICS_AUDIT.md Sec. 5 from one model to five.  Pins the
-    Broekgaarden+ 2021 BNS calibration end-to-end against Abbott et al.
-    (2023) GWTC-3.
+    Generalises the Model A pin to all five Broekgaarden+ 2021
+    variations; pins the BNS calibration end-to-end against
+    Abbott et al. (2023) GWTC-3.
     """
     mod = _get_model(letter)
     lo, hi = LIGO_BNS_90CR
@@ -185,9 +229,9 @@ def test_per_model_R0_BNS_inside_LIGO_O4_band(letter):
 def test_per_model_R0_BHNS_inside_widened_band(letter):
     """R_BHNS(z=0) sits inside the widened LIGO O4 BHNS band for every model.
 
-    Lower edge dropped from the LIGO 90% CR value 7.4 to 1.0 to admit the
-    documented Model A BHNS underprediction (PHYSICS_AUDIT.md Sec. 5;
-    Broekgaarden+ 2021 Sec. 6).
+    Lower edge dropped from the LIGO 90% CR value 7.4 to 1.0 to admit
+    the documented Model A BHNS underprediction (Broekgaarden et al.
+    2021 Sec. 6).  Upper edge from Abbott et al. (2023) GWTC-3.
     """
     mod = _get_model(letter)
     lo, hi = LIGO_BHNS_90CR_WIDENED
@@ -247,8 +291,7 @@ def test_HMNS_plus_disk_substantial_in_all_models(letter):
     mod = _get_model(letter)
     bns = mod["bns"]
     cls = classify_bns_2024(bns["m1"], bns["m2"])
-    masks = np.stack([cls["lbGRB + red KN (HMNS)"],
-                      cls["lbGRB + red KN (disk)"]])
+    masks = np.stack([cls["lbGRB + red KN (HMNS)"], cls["lbGRB + red KN (disk)"]])
     w = bns["weights"]
     f_hmns_plus_disk = float((masks * w).sum() / w.sum())
     assert f_hmns_plus_disk >= 0.45, (
@@ -279,28 +322,32 @@ def test_classify_grid_uses_per_model_ns_max(letter):
     if not os.path.exists(bns_path):
         pytest.skip(f"COMPASCompactOutput_BNS_{letter}.h5 not present")
 
-    from grb_io import load_bns
     from grb_classify import classify_grid
+    from grb_io import load_bns
 
     bns = load_bns(path=bns_path, expected_model=letter)
     assert bns["ns_max"] is not None, (
         f"Loader for {letter} did not return ns_max; the Section 12.0 "
-        f"setup cell would silently fall back to a hardcoded literal.")
+        f"setup cell would silently fall back to a hardcoded literal."
+    )
     expected_ns_max = {"J": 2.0, "K": 3.0}[letter]
     assert bns["ns_max"] == expected_ns_max, (
         f"Loader returned ns_max={bns['ns_max']} for Model {letter}, "
-        f"expected {expected_ns_max} per Broekgaarden+ 2021 Sec. 3.4.")
+        f"expected {expected_ns_max} per Broekgaarden+ 2021 Sec. 3.4."
+    )
 
     # Build a small (m1, m2) grid that spans the BNS region for this ns_max
     # and assert classify_grid produces only valid integer labels.  The grid
     # is intentionally coarse so the test runs in <1 s.
-    m1g, m2g = np.meshgrid(np.linspace(1.0, bns["ns_max"], 30),
-                           np.linspace(1.0, bns["ns_max"], 30),
-                           indexing="ij")
+    m1g, m2g = np.meshgrid(
+        np.linspace(1.0, bns["ns_max"], 30), np.linspace(1.0, bns["ns_max"], 30), indexing="ij"
+    )
     labels = classify_grid(m1g, m2g, ns_max=bns["ns_max"])
     assert labels.dtype.kind in ("i", "u"), (
-        f"classify_grid returned non-integer dtype {labels.dtype}.")
+        f"classify_grid returned non-integer dtype {labels.dtype}."
+    )
     assert labels.min() >= 0 and labels.max() <= 6, (
         f"classify_grid returned out-of-range label "
         f"[{labels.min()}, {labels.max()}] for Model {letter} "
-        f"(ns_max={bns['ns_max']}); valid range is [0, 6].")
+        f"(ns_max={bns['ns_max']}); valid range is [0, 6]."
+    )

@@ -1,6 +1,5 @@
 """Tabulated checks of grb_physics.r_isco against Bardeen et al. (1972) Eq. 2.21.
 
-Resolves the only HIGH-severity finding from the 2026-05-06 LLM Council.
 The ISCO sits at the base of the BHNS Foucart (2018) disk-mass formula,
 so a 4 to 8 percent error here would propagate into every spin sweep.
 
@@ -33,8 +32,7 @@ from grb_physics import r_isco
 # rather than transcribed from a table, so the test self-documents.
 def _bardeen_closed_form(a):
     """Eq. 2.21 evaluated at |a| < 1 (no clipping)."""
-    Z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0)
-                                              + (1.0 - a) ** (1.0 / 3.0))
+    Z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0))
     Z2 = np.sqrt(3.0 * a**2 + Z1**2)
     sign = 1.0 if a >= 0 else -1.0
     return 3.0 + Z2 - sign * np.sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2))

@@ -8,44 +8,44 @@ merging systems (mergesInHubbleTimeFlag == 1) and return plain numpy arrays.
 
 import os
 import warnings
-import numpy as np
+
 import h5py as h5
+import numpy as np
 
-_DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data')
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "Data")
 
-DEFAULT_BNS_PATH  = os.path.join(_DATA_DIR, 'COMPASCompactOutput_BNS_A.h5')
-DEFAULT_BHNS_PATH = os.path.join(_DATA_DIR, 'COMPASCompactOutput_BHNS_A.h5')
-DEFAULT_BNS_K_PATH = os.path.join(_DATA_DIR, 'COMPASCompactOutput_BNS_K.h5')
+DEFAULT_BNS_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BNS_A.h5")
+DEFAULT_BHNS_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BHNS_A.h5")
+DEFAULT_BNS_K_PATH = os.path.join(_DATA_DIR, "COMPASCompactOutput_BNS_K.h5")
 
 # Track which paths we've already complained about so the "no metadata"
 # warning fires once per file per process instead of on every loader call.
 _METADATA_WARN_CACHE: set[str] = set()
 
 
-def _validate_hdf5_metadata(path, expected_kind=None,
-                            expected_model=None, expected_ns_max=None):
+def _validate_hdf5_metadata(path, expected_kind=None, expected_model=None, expected_ns_max=None):
     """Validate Broekgaarden+ 2021 model metadata embedded by
     ``tools/embed_model_metadata.py``.
 
     If the attributes are absent, emit a one-time UserWarning per path
     and return without raising; this preserves backward compatibility
     with un-annotated archives.  If they are present and contradict
-    the caller's expectation, raise ``ValueError`` -- this is the
-    Reviewer-3 defense against silent file mislabeling.
+    the caller's expectation, raise ``ValueError`` so a mislabeled or
+    renamed file fails loudly.
 
     Returns
     -------
     (actual_model, actual_ns_max) : tuple
         The values read from the HDF5 root attributes, or ``(None, None)``
         if the file carries no metadata.  Loaders attach these to their
-        output dict so downstream code (e.g. ``classify_grid(ns_max=...)``)
+        output dict so downstream code (``classify_grid(ns_max=...)``)
         does not need to re-open the HDF5 or maintain a per-letter literal
         table.
     """
-    with h5.File(path, 'r') as f:
+    with h5.File(path, "r") as f:
         attrs = dict(f.attrs)
 
-    if not attrs.get('model') and not attrs.get('ns_max'):
+    if not attrs.get("model") and not attrs.get("ns_max"):
         if path not in _METADATA_WARN_CACHE:
             _METADATA_WARN_CACHE.add(path)
             warnings.warn(
@@ -55,12 +55,13 @@ def _validate_hdf5_metadata(path, expected_kind=None,
                 f"ns_max={expected_ns_max}).  Run "
                 f"`python tools/embed_model_metadata.py` once per "
                 f"download to enable validation.",
-                stacklevel=3)
+                stacklevel=3,
+            )
         return None, None
 
-    actual_kind = str(attrs.get('kind', '')) or None
-    actual_model = str(attrs.get('model', '')) or None
-    actual_ns_max = float(attrs['ns_max']) if 'ns_max' in attrs else None
+    actual_kind = str(attrs.get("kind", "")) or None
+    actual_model = str(attrs.get("model", "")) or None
+    actual_ns_max = float(attrs["ns_max"]) if "ns_max" in attrs else None
 
     if expected_kind and actual_kind and actual_kind != expected_kind:
         raise ValueError(
@@ -74,8 +75,11 @@ def _validate_hdf5_metadata(path, expected_kind=None,
             f"COMPAS HDF5 {os.path.basename(path)} is model "
             f"{actual_model!r}, expected {expected_model!r}."
         )
-    if (expected_ns_max is not None and actual_ns_max is not None
-            and not np.isclose(actual_ns_max, expected_ns_max)):
+    if (
+        expected_ns_max is not None
+        and actual_ns_max is not None
+        and not np.isclose(actual_ns_max, expected_ns_max)
+    ):
         raise ValueError(
             f"COMPAS HDF5 {os.path.basename(path)} has ns_max="
             f"{actual_ns_max}, expected {expected_ns_max}."
@@ -92,16 +96,16 @@ def _validate_delay_times(dt, label=""):
     if dt.max() > 1e5 or dt.min() < 0:
         raise ValueError(
             f"delay_time range [{dt.min():.1f}, {dt.max():.1f}]{label} "
-            "looks wrong; expected Myr (typical range 1-14000)")
+            "looks wrong; expected Myr (typical range 1-14000)"
+        )
 
 
 def _check_weights_no_nan(w_masked, path):
     """Hard fail if STROOPWAFEL weights contain NaN after the merging mask.
 
-    CLAUDE.md treats weights as mandatory for every reduction over the
-    sample.  A silent NaN here propagates into ``np.average`` and
-    weighted histograms as ``nan`` outputs, so we refuse to return
-    poisoned weights rather than warn (council Contrarian #1).
+    A silent NaN propagates into ``np.average`` and weighted histograms
+    as ``nan`` outputs, biasing every downstream rate, so we raise rather
+    than warn.
     """
     if np.any(np.isnan(w_masked)):
         raise ValueError(
@@ -119,13 +123,12 @@ def _validate_loader_dict(out, n_merging, path):
     ``n_merging`` int) are skipped via the ``isinstance`` filter.
 
     Catches the copy-paste typo where one column is returned without
-    ``[mask]`` (council Contrarian #4 / Chairman fix #3).
+    ``[mask]``.
     """
     lengths = {
-        k: len(v) for k, v in out.items()
-        if isinstance(v, np.ndarray) and k != 'mask_merging'
+        k: len(v) for k, v in out.items() if isinstance(v, np.ndarray) and k != "mask_merging"
     }
-    bad = {k: L for k, L in lengths.items() if L != n_merging}
+    bad = {k: L for k, L in lengths.items() if n_merging != L}
     assert not bad, (
         f"Loader dict shape mismatch in {os.path.basename(path)}: "
         f"keys {bad} have wrong length, expected n_merging={n_merging}."
@@ -143,7 +146,8 @@ def verify_shared_metallicity_prior(path_a, path_b):
     if r_a != r_b:
         raise ValueError(
             f"Metallicity ranges differ: {r_a} vs {r_b}; "
-            "need separate dPdlogZ / p_draw per population")
+            "need separate dPdlogZ / p_draw per population"
+        )
     return r_a
 
 
@@ -159,22 +163,21 @@ def read_expected_local_rate(path):
     Gpc^-3 yr^-1.  This value is used to calibrate the per-population
     ``MEAN_MASS_EVOLVED`` normalization constant.
     """
-    with h5.File(path, 'r') as f:
-        return float(f['weights_intrinsic']['w_000'][...].sum())
+    with h5.File(path, "r") as f:
+        return float(f["weights_intrinsic"]["w_000"][...].sum())
 
 
 def read_metallicity_range(path):
     """Return (Z_min, Z_max) of birth metallicities in the HDF5 file."""
-    with h5.File(path, 'r') as f:
-        Z = f['systems']['Metallicity1'][...].squeeze()
+    with h5.File(path, "r") as f:
+        Z = f["systems"]["Metallicity1"][...].squeeze()
     return float(Z.min()), float(Z.max())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # BNS data loading
 # ═══════════════════════════════════════════════════════════════════════════
-def load_bns(path=None, sort_masses=True, expected_model=None,
-             expected_ns_max=None):
+def load_bns(path=None, sort_masses=True, expected_model=None, expected_ns_max=None):
     """Load merging BNS population from COMPAS HDF5 file.
 
     Parameters
@@ -214,21 +217,20 @@ def load_bns(path=None, sort_masses=True, expected_model=None,
         path = DEFAULT_BNS_PATH
 
     actual_model, actual_ns_max = _validate_hdf5_metadata(
-        path, expected_kind='BNS',
-        expected_model=expected_model,
-        expected_ns_max=expected_ns_max)
+        path, expected_kind="BNS", expected_model=expected_model, expected_ns_max=expected_ns_max
+    )
 
-    with h5.File(path, 'r') as f:
-        dco = f['doubleCompactObjects']
-        m1    = dco['M1'][...].squeeze()
-        m2    = dco['M2'][...].squeeze()
-        w     = dco['weight'][...].squeeze()
-        Z     = dco['Metallicity1'][...].squeeze()
-        mh    = dco['mergesInHubbleTimeFlag'][...].squeeze()
-        tc    = dco['tc'][...].squeeze()
-        tform = dco['tform'][...].squeeze()
+    with h5.File(path, "r") as f:
+        dco = f["doubleCompactObjects"]
+        m1 = dco["M1"][...].squeeze()
+        m2 = dco["M2"][...].squeeze()
+        w = dco["weight"][...].squeeze()
+        Z = dco["Metallicity1"][...].squeeze()
+        mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        tc = dco["tc"][...].squeeze()
+        tform = dco["tform"][...].squeeze()
 
-    mask = (mh == 1)
+    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bns")
 
@@ -243,23 +245,22 @@ def load_bns(path=None, sort_masses=True, expected_model=None,
         m1_out, m2_out = m1_m, m2_m
 
     out = {
-        'm1':           m1_out,
-        'm2':           m2_out,
-        'weights':      w_out,
-        'metallicity':  Z[mask],
-        'delay_time':   delay,
-        'n_merging':    int(mask.sum()),
-        'mask_merging': mask,
-        'population':   'BNS',
-        'model':        actual_model,
-        'ns_max':       actual_ns_max,
+        "m1": m1_out,
+        "m2": m2_out,
+        "weights": w_out,
+        "metallicity": Z[mask],
+        "delay_time": delay,
+        "n_merging": int(mask.sum()),
+        "mask_merging": mask,
+        "population": "BNS",
+        "model": actual_model,
+        "ns_max": actual_ns_max,
     }
-    _validate_loader_dict(out, out['n_merging'], path)
+    _validate_loader_dict(out, out["n_merging"], path)
     return out
 
 
-def load_bns_with_channels(path=None, sort_masses=True,
-                           expected_model=None, expected_ns_max=None):
+def load_bns_with_channels(path=None, sort_masses=True, expected_model=None, expected_ns_max=None):
     """Load merging BNS with formation-channel columns.
 
     Returns the same dict as load_bns, plus additional keys for the
@@ -274,33 +275,32 @@ def load_bns_with_channels(path=None, sort_masses=True,
         path = DEFAULT_BNS_PATH
 
     actual_model, actual_ns_max = _validate_hdf5_metadata(
-        path, expected_kind='BNS',
-        expected_model=expected_model,
-        expected_ns_max=expected_ns_max)
+        path, expected_kind="BNS", expected_model=expected_model, expected_ns_max=expected_ns_max
+    )
 
-    with h5.File(path, 'r') as f:
-        dco = f['doubleCompactObjects']
-        m1    = dco['M1'][...].squeeze()
-        m2    = dco['M2'][...].squeeze()
-        w     = dco['weight'][...].squeeze()
-        Z     = dco['Metallicity1'][...].squeeze()
-        mh    = dco['mergesInHubbleTimeFlag'][...].squeeze()
-        tc    = dco['tc'][...].squeeze()
-        tform = dco['tform'][...].squeeze()
-        m1z   = dco['M1ZAMS'][...].squeeze()
-        m2z   = dco['M2ZAMS'][...].squeeze()
-        dblCE = dco['doubleCommonEnvelopeFlag'][...].squeeze()
-        sep_pre  = dco['SemiMajorAxisPreCEE'][...].squeeze()
-        sep_post = dco['SemiMajorAxisPostCEE'][...].squeeze()
+    with h5.File(path, "r") as f:
+        dco = f["doubleCompactObjects"]
+        m1 = dco["M1"][...].squeeze()
+        m2 = dco["M2"][...].squeeze()
+        w = dco["weight"][...].squeeze()
+        Z = dco["Metallicity1"][...].squeeze()
+        mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        tc = dco["tc"][...].squeeze()
+        tform = dco["tform"][...].squeeze()
+        m1z = dco["M1ZAMS"][...].squeeze()
+        m2z = dco["M2ZAMS"][...].squeeze()
+        dblCE = dco["doubleCommonEnvelopeFlag"][...].squeeze()
+        sep_pre = dco["SemiMajorAxisPreCEE"][...].squeeze()
+        sep_post = dco["SemiMajorAxisPostCEE"][...].squeeze()
 
-        fc = f['formationChannels']
-        fc_mt_p1    = fc['mt_primary_ep1'][...].squeeze()
-        fc_mt_p1_K1 = fc['mt_primary_ep1_K1'][...].squeeze()
-        fc_mt_s1    = fc['mt_secondary_ep1'][...].squeeze()
-        fc_mt_s1_K2 = fc['mt_secondary_ep1_K2'][...].squeeze()
-        fc_CEE      = fc['CEE'][...].squeeze()
+        fc = f["formationChannels"]
+        fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
+        fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
+        fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
+        fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
+        fc_CEE = fc["CEE"][...].squeeze()
 
-    mask = (mh == 1)
+    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bns_with_channels")
 
@@ -322,28 +322,28 @@ def load_bns_with_channels(path=None, sort_masses=True,
     # COMPAS primary/secondary), but callers must not assume that
     # fc_mt_p1 corresponds to the heavier compact remnant.
     out = {
-        'm1':           m1_out,
-        'm2':           m2_out,
-        'weights':      w_out,
-        'metallicity':  Z[mask],
-        'delay_time':   delay,
-        'n_merging':    int(mask.sum()),
-        'mask_merging': mask,
-        'm1zams':       m1z[mask],
-        'm2zams':       m2z[mask],
-        'dblCE':        dblCE[mask],
-        'sep_preCE':    sep_pre[mask],
-        'sep_postCE':   sep_post[mask],
-        'fc_mt_p1':     fc_mt_p1[mask],
-        'fc_mt_p1_K1':  fc_mt_p1_K1[mask],
-        'fc_mt_s1':     fc_mt_s1[mask],
-        'fc_mt_s1_K2':  fc_mt_s1_K2[mask],
-        'fc_CEE':       fc_CEE[mask],
-        'population':   'BNS',
-        'model':        actual_model,
-        'ns_max':       actual_ns_max,
+        "m1": m1_out,
+        "m2": m2_out,
+        "weights": w_out,
+        "metallicity": Z[mask],
+        "delay_time": delay,
+        "n_merging": int(mask.sum()),
+        "mask_merging": mask,
+        "m1zams": m1z[mask],
+        "m2zams": m2z[mask],
+        "dblCE": dblCE[mask],
+        "sep_preCE": sep_pre[mask],
+        "sep_postCE": sep_post[mask],
+        "fc_mt_p1": fc_mt_p1[mask],
+        "fc_mt_p1_K1": fc_mt_p1_K1[mask],
+        "fc_mt_s1": fc_mt_s1[mask],
+        "fc_mt_s1_K2": fc_mt_s1_K2[mask],
+        "fc_CEE": fc_CEE[mask],
+        "population": "BNS",
+        "model": actual_model,
+        "ns_max": actual_ns_max,
     }
-    _validate_loader_dict(out, out['n_merging'], path)
+    _validate_loader_dict(out, out["n_merging"], path)
     return out
 
 
@@ -361,8 +361,7 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         HDF5 path; defaults to Data/COMPASCompactOutput_BHNS_A.h5.
     expected_model : str, optional
         See ``load_bns``.  When the embedded ``model`` attribute is
-        present and differs, raises ``ValueError`` (Reviewer-3 defense
-        against silent file mislabeling).
+        present and differs, raises ``ValueError``.
     expected_ns_max : float, optional
         See ``load_bns``.
 
@@ -382,26 +381,25 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
         path = DEFAULT_BHNS_PATH
 
     actual_model, actual_ns_max = _validate_hdf5_metadata(
-        path, expected_kind='BHNS',
-        expected_model=expected_model,
-        expected_ns_max=expected_ns_max)
+        path, expected_kind="BHNS", expected_model=expected_model, expected_ns_max=expected_ns_max
+    )
 
-    with h5.File(path, 'r') as f:
-        dco = f['doubleCompactObjects']
-        m1    = dco['M1'][...].squeeze()
-        m2    = dco['M2'][...].squeeze()
-        w     = dco['weight'][...].squeeze()
-        Z     = dco['Metallicity1'][...].squeeze()
-        mh    = dco['mergesInHubbleTimeFlag'][...].squeeze()
-        tc    = dco['tc'][...].squeeze()
-        tform = dco['tform'][...].squeeze()
-        st1   = dco['stellarType1'][...].squeeze()
+    with h5.File(path, "r") as f:
+        dco = f["doubleCompactObjects"]
+        m1 = dco["M1"][...].squeeze()
+        m2 = dco["M2"][...].squeeze()
+        w = dco["weight"][...].squeeze()
+        Z = dco["Metallicity1"][...].squeeze()
+        mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        tc = dco["tc"][...].squeeze()
+        tform = dco["tform"][...].squeeze()
+        st1 = dco["stellarType1"][...].squeeze()
 
-    is_BH1 = (st1 == 14)
+    is_BH1 = st1 == 14
     M_BH = np.where(is_BH1, m1, m2)
     M_NS = np.where(is_BH1, m2, m1)
 
-    mask = (mh == 1)
+    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bhns")
 
@@ -409,23 +407,22 @@ def load_bhns(path=None, expected_model=None, expected_ns_max=None):
     _check_weights_no_nan(w_out, path)
 
     out = {
-        'M_BH':         M_BH[mask],
-        'M_NS':         M_NS[mask],
-        'weights':      w_out,
-        'metallicity':  Z[mask],
-        'delay_time':   delay,
-        'n_merging':    int(mask.sum()),
-        'mask_merging': mask,
-        'population':   'BHNS',
-        'model':        actual_model,
-        'ns_max':       actual_ns_max,
+        "M_BH": M_BH[mask],
+        "M_NS": M_NS[mask],
+        "weights": w_out,
+        "metallicity": Z[mask],
+        "delay_time": delay,
+        "n_merging": int(mask.sum()),
+        "mask_merging": mask,
+        "population": "BHNS",
+        "model": actual_model,
+        "ns_max": actual_ns_max,
     }
-    _validate_loader_dict(out, out['n_merging'], path)
+    _validate_loader_dict(out, out["n_merging"], path)
     return out
 
 
-def load_bhns_with_channels(path=None,
-                            expected_model=None, expected_ns_max=None):
+def load_bhns_with_channels(path=None, expected_model=None, expected_ns_max=None):
     """Load merging BHNS with formation-channel columns.
 
     Same as load_bhns plus formation-channel keys for classify_formation_channels.
@@ -435,35 +432,34 @@ def load_bhns_with_channels(path=None,
         path = DEFAULT_BHNS_PATH
 
     actual_model, actual_ns_max = _validate_hdf5_metadata(
-        path, expected_kind='BHNS',
-        expected_model=expected_model,
-        expected_ns_max=expected_ns_max)
+        path, expected_kind="BHNS", expected_model=expected_model, expected_ns_max=expected_ns_max
+    )
 
-    with h5.File(path, 'r') as f:
-        dco = f['doubleCompactObjects']
-        m1    = dco['M1'][...].squeeze()
-        m2    = dco['M2'][...].squeeze()
-        w     = dco['weight'][...].squeeze()
-        Z     = dco['Metallicity1'][...].squeeze()
-        mh    = dco['mergesInHubbleTimeFlag'][...].squeeze()
-        tc    = dco['tc'][...].squeeze()
-        tform = dco['tform'][...].squeeze()
-        st1   = dco['stellarType1'][...].squeeze()
-        dblCE = dco['doubleCommonEnvelopeFlag'][...].squeeze()
-        sep_pre = dco['SemiMajorAxisPreCEE'][...].squeeze()
+    with h5.File(path, "r") as f:
+        dco = f["doubleCompactObjects"]
+        m1 = dco["M1"][...].squeeze()
+        m2 = dco["M2"][...].squeeze()
+        w = dco["weight"][...].squeeze()
+        Z = dco["Metallicity1"][...].squeeze()
+        mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        tc = dco["tc"][...].squeeze()
+        tform = dco["tform"][...].squeeze()
+        st1 = dco["stellarType1"][...].squeeze()
+        dblCE = dco["doubleCommonEnvelopeFlag"][...].squeeze()
+        sep_pre = dco["SemiMajorAxisPreCEE"][...].squeeze()
 
-        fc = f['formationChannels']
-        fc_mt_p1    = fc['mt_primary_ep1'][...].squeeze()
-        fc_mt_p1_K1 = fc['mt_primary_ep1_K1'][...].squeeze()
-        fc_mt_s1    = fc['mt_secondary_ep1'][...].squeeze()
-        fc_mt_s1_K2 = fc['mt_secondary_ep1_K2'][...].squeeze()
-        fc_CEE      = fc['CEE'][...].squeeze()
+        fc = f["formationChannels"]
+        fc_mt_p1 = fc["mt_primary_ep1"][...].squeeze()
+        fc_mt_p1_K1 = fc["mt_primary_ep1_K1"][...].squeeze()
+        fc_mt_s1 = fc["mt_secondary_ep1"][...].squeeze()
+        fc_mt_s1_K2 = fc["mt_secondary_ep1_K2"][...].squeeze()
+        fc_CEE = fc["CEE"][...].squeeze()
 
-    is_BH1 = (st1 == 14)
+    is_BH1 = st1 == 14
     M_BH = np.where(is_BH1, m1, m2)
     M_NS = np.where(is_BH1, m2, m1)
 
-    mask = (mh == 1)
+    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bhns_with_channels")
 
@@ -471,25 +467,25 @@ def load_bhns_with_channels(path=None,
     _check_weights_no_nan(w_out, path)
 
     out = {
-        'M_BH':         M_BH[mask],
-        'M_NS':         M_NS[mask],
-        'weights':      w_out,
-        'metallicity':  Z[mask],
-        'delay_time':   delay,
-        'n_merging':    int(mask.sum()),
-        'mask_merging': mask,
-        'dblCE':        dblCE[mask],
-        'sep_preCE':    sep_pre[mask],
-        'fc_mt_p1':     fc_mt_p1[mask],
-        'fc_mt_p1_K1':  fc_mt_p1_K1[mask],
-        'fc_mt_s1':     fc_mt_s1[mask],
-        'fc_mt_s1_K2':  fc_mt_s1_K2[mask],
-        'fc_CEE':       fc_CEE[mask],
-        'population':   'BHNS',
-        'model':        actual_model,
-        'ns_max':       actual_ns_max,
+        "M_BH": M_BH[mask],
+        "M_NS": M_NS[mask],
+        "weights": w_out,
+        "metallicity": Z[mask],
+        "delay_time": delay,
+        "n_merging": int(mask.sum()),
+        "mask_merging": mask,
+        "dblCE": dblCE[mask],
+        "sep_preCE": sep_pre[mask],
+        "fc_mt_p1": fc_mt_p1[mask],
+        "fc_mt_p1_K1": fc_mt_p1_K1[mask],
+        "fc_mt_s1": fc_mt_s1[mask],
+        "fc_mt_s1_K2": fc_mt_s1_K2[mask],
+        "fc_CEE": fc_CEE[mask],
+        "population": "BHNS",
+        "model": actual_model,
+        "ns_max": actual_ns_max,
     }
-    _validate_loader_dict(out, out['n_merging'], path)
+    _validate_loader_dict(out, out["n_merging"], path)
     return out
 
 
@@ -499,24 +495,66 @@ def load_bhns_with_channels(path=None,
 # 53-element grid extracted from the Broekgaarden et al. (2021) Zenodo
 # files (5189849 / 5178777, Models A and K, BNS and BHNS).  All four
 # archives share this identical grid; verified by
-# ``tests/test_grb_io_realdata.py::test_metallicity_grid_matches_data``.
-#
-# The previous literal carried two errors caught by the council audit
-# (chairman fix #5): a slow drift away from the data starting near
-# index 20 (e.g. 0.00091 vs the true 0.0009, 0.00102 vs 0.00101) and a
-# spurious duplicate ``0.03`` at the tail.  The actual data has 53
-# unique values; do not re-introduce the duplicate.
-METALLICITY_GRID = np.array([
-    0.0001,  0.00011, 0.00012, 0.00014, 0.00016, 0.00017,
-    0.00019, 0.00022, 0.00024, 0.00027, 0.0003,  0.00034,
-    0.00037, 0.00042, 0.00047, 0.00052, 0.00058, 0.00065,
-    0.00073, 0.00081, 0.0009,  0.00101, 0.00113, 0.00126,
-    0.0014,  0.00157, 0.00175, 0.00195, 0.00218, 0.00243,
-    0.00272, 0.00303, 0.00339, 0.00378, 0.00422, 0.00471,
-    0.00526, 0.00587, 0.00655, 0.00732, 0.00817, 0.00912,
-    0.01018, 0.01137, 0.01269, 0.01416, 0.01581, 0.01765,
-    0.01971, 0.022,   0.0244,  0.02705, 0.03,
-])
+# ``tests/integration/test_grb_io_realdata.py::test_metallicity_grid_matches_data``.
+# The grid has 53 unique values (no duplicate at 0.03); do not
+# reintroduce one when copy-editing.
+METALLICITY_GRID = np.array(
+    [
+        0.0001,
+        0.00011,
+        0.00012,
+        0.00014,
+        0.00016,
+        0.00017,
+        0.00019,
+        0.00022,
+        0.00024,
+        0.00027,
+        0.0003,
+        0.00034,
+        0.00037,
+        0.00042,
+        0.00047,
+        0.00052,
+        0.00058,
+        0.00065,
+        0.00073,
+        0.00081,
+        0.0009,
+        0.00101,
+        0.00113,
+        0.00126,
+        0.0014,
+        0.00157,
+        0.00175,
+        0.00195,
+        0.00218,
+        0.00243,
+        0.00272,
+        0.00303,
+        0.00339,
+        0.00378,
+        0.00422,
+        0.00471,
+        0.00526,
+        0.00587,
+        0.00655,
+        0.00732,
+        0.00817,
+        0.00912,
+        0.01018,
+        0.01137,
+        0.01269,
+        0.01416,
+        0.01581,
+        0.01765,
+        0.01971,
+        0.022,
+        0.0244,
+        0.02705,
+        0.03,
+    ]
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -529,15 +567,15 @@ METALLICITY_GRID = np.array([
 # Each entry pairs the mass values with a single citation so plotting
 # code never needs to inline a hard-coded mass without a source.
 OBSERVED_GW_EVENTS = {
-    'GW170817': {
-        'M1': 1.46,
-        'M2': 1.27,
-        'reference': 'Abbott+ 2019, PRX 9, 011001 (Table I, low-spin prior)',
+    "GW170817": {
+        "M1": 1.46,
+        "M2": 1.27,
+        "reference": "Abbott+ 2019, PRX 9, 011001 (Table I, low-spin prior)",
     },
-    'GW190425': {
-        'M1': 1.61,
-        'M2': 1.50,
-        'reference': 'Abbott+ 2020, ApJL 892, L3 (Table 2, low-spin prior)',
+    "GW190425": {
+        "M1": 1.61,
+        "M2": 1.50,
+        "reference": "Abbott+ 2020, ApJL 892, L3 (Table 2, low-spin prior)",
     },
 }
 
@@ -556,7 +594,7 @@ def save_efficiencies(filepath, arrays, labels=None):
 def save_rates(filepath, redshifts, rate_dict):
     """Save merger rate arrays (redshifts + named rates) as .npy stack."""
     rows = [redshifts] + [rate_dict[k] for k in rate_dict]
-    labels = ['redshifts'] + list(rate_dict.keys())
+    labels = ["redshifts"] + list(rate_dict.keys())
     np.save(filepath, np.array(rows))
     print(f"Saved {filepath}: rows = {labels}")
 
@@ -573,7 +611,7 @@ def weighted_sample(mask, weight, n_target=12000, rng=None):
         return idx
     w = weight[idx]
     if w.sum() == 0:
-        return idx[:min(n_target, len(idx))]
+        return idx[: min(n_target, len(idx))]
     w = w / w.sum()
     n = min(n_target, len(idx))
     return rng.choice(idx, size=n, replace=False, p=w)
@@ -597,13 +635,13 @@ def _match_sn_to_dco(f):
 
     Vectorized with numpy for performance on large populations.
     """
-    sn = f['supernovae']
-    sn_seed = sn['randomSeed'][...].squeeze()
-    sn_vsys = sn['systemicVelocity'][...].squeeze()
-    sn_time = sn['time'][...].squeeze()
+    sn = f["supernovae"]
+    sn_seed = sn["randomSeed"][...].squeeze()
+    sn_vsys = sn["systemicVelocity"][...].squeeze()
+    sn_time = sn["time"][...].squeeze()
 
-    dco = f['doubleCompactObjects']
-    dco_seed_key = 'seed' if 'seed' in dco else 'm_randomSeed'
+    dco = f["doubleCompactObjects"]
+    dco_seed_key = "seed" if "seed" in dco else "m_randomSeed"
     dco_seed = dco[dco_seed_key][...].squeeze()
 
     order = np.lexsort((sn_time, sn_seed))
@@ -622,10 +660,9 @@ def _match_sn_to_dco(f):
 
     n_unmatched = int((~found).sum())
     if n_unmatched > 0:
-        # Council Contrarian #3: NaN in v_sys silently disappears via
-        # np.isfinite(v_sys_km) in compute_offsets_population
-        # (grb_offsets.py); surface it at load time so the count is
-        # auditable in the notebook log.
+        # NaN in v_sys silently disappears via np.isfinite(v_sys_km) in
+        # compute_offsets_population (grb_offsets.py); surface it at
+        # load time so the count is auditable in the notebook log.
         warnings.warn(
             f"_match_sn_to_dco ({os.path.basename(f.filename)}): "
             f"{n_unmatched} of {len(dco_seed)} DCO seeds had no matching "
@@ -638,8 +675,7 @@ def _match_sn_to_dco(f):
     return vsys_out
 
 
-def load_bns_with_kicks(path=None, sort_masses=True,
-                        expected_model=None, expected_ns_max=None):
+def load_bns_with_kicks(path=None, sort_masses=True, expected_model=None, expected_ns_max=None):
     """Load merging BNS with kick/velocity columns for offset analysis.
 
     Returns the standard load_bns dict plus:
@@ -651,27 +687,26 @@ def load_bns_with_kicks(path=None, sort_masses=True,
         path = DEFAULT_BNS_PATH
 
     actual_model, actual_ns_max = _validate_hdf5_metadata(
-        path, expected_kind='BNS',
-        expected_model=expected_model,
-        expected_ns_max=expected_ns_max)
+        path, expected_kind="BNS", expected_model=expected_model, expected_ns_max=expected_ns_max
+    )
 
-    with h5.File(path, 'r') as f:
-        dco = f['doubleCompactObjects']
-        m1    = dco['M1'][...].squeeze()
-        m2    = dco['M2'][...].squeeze()
-        w     = dco['weight'][...].squeeze()
-        Z     = dco['Metallicity1'][...].squeeze()
-        mh    = dco['mergesInHubbleTimeFlag'][...].squeeze()
-        tc    = dco['tc'][...].squeeze()
-        tform = dco['tform'][...].squeeze()
-        dk1   = dco['drawnKick1'][...].squeeze()
-        dk2   = dco['drawnKick2'][...].squeeze()
-        sep   = dco['separationDCOFormation'][...].squeeze()
-        ecc   = dco['eccentricityDCOFormation'][...].squeeze()
+    with h5.File(path, "r") as f:
+        dco = f["doubleCompactObjects"]
+        m1 = dco["M1"][...].squeeze()
+        m2 = dco["M2"][...].squeeze()
+        w = dco["weight"][...].squeeze()
+        Z = dco["Metallicity1"][...].squeeze()
+        mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        tc = dco["tc"][...].squeeze()
+        tform = dco["tform"][...].squeeze()
+        dk1 = dco["drawnKick1"][...].squeeze()
+        dk2 = dco["drawnKick2"][...].squeeze()
+        sep = dco["separationDCOFormation"][...].squeeze()
+        ecc = dco["eccentricityDCOFormation"][...].squeeze()
 
         vsys_all = _match_sn_to_dco(f)
 
-    mask = (mh == 1)
+    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bns_with_kicks")
 
@@ -686,21 +721,27 @@ def load_bns_with_kicks(path=None, sort_masses=True,
         m1_out, m2_out = m1_m, m2_m
 
     out = {
-        'm1': m1_out, 'm2': m2_out,
-        'weights': w_out, 'metallicity': Z[mask],
-        'delay_time': delay,
-        'n_merging': int(mask.sum()), 'mask_merging': mask,
-        'drawnKick1': dk1[mask], 'drawnKick2': dk2[mask],
-        'v_sys': vsys_all[mask], 'sep_DCO': sep[mask], 'ecc_DCO': ecc[mask],
-        'population': 'BNS',
-        'model': actual_model, 'ns_max': actual_ns_max,
+        "m1": m1_out,
+        "m2": m2_out,
+        "weights": w_out,
+        "metallicity": Z[mask],
+        "delay_time": delay,
+        "n_merging": int(mask.sum()),
+        "mask_merging": mask,
+        "drawnKick1": dk1[mask],
+        "drawnKick2": dk2[mask],
+        "v_sys": vsys_all[mask],
+        "sep_DCO": sep[mask],
+        "ecc_DCO": ecc[mask],
+        "population": "BNS",
+        "model": actual_model,
+        "ns_max": actual_ns_max,
     }
-    _validate_loader_dict(out, out['n_merging'], path)
+    _validate_loader_dict(out, out["n_merging"], path)
     return out
 
 
-def load_bhns_with_kicks(path=None,
-                         expected_model=None, expected_ns_max=None):
+def load_bhns_with_kicks(path=None, expected_model=None, expected_ns_max=None):
     """Load merging BHNS with kick/velocity columns for offset analysis.
 
     ``expected_model`` / ``expected_ns_max`` behave as in ``load_bhns``.
@@ -709,31 +750,30 @@ def load_bhns_with_kicks(path=None,
         path = DEFAULT_BHNS_PATH
 
     actual_model, actual_ns_max = _validate_hdf5_metadata(
-        path, expected_kind='BHNS',
-        expected_model=expected_model,
-        expected_ns_max=expected_ns_max)
+        path, expected_kind="BHNS", expected_model=expected_model, expected_ns_max=expected_ns_max
+    )
 
-    with h5.File(path, 'r') as f:
-        dco = f['doubleCompactObjects']
-        m1    = dco['M1'][...].squeeze()
-        m2    = dco['M2'][...].squeeze()
-        w     = dco['weight'][...].squeeze()
-        Z     = dco['Metallicity1'][...].squeeze()
-        mh    = dco['mergesInHubbleTimeFlag'][...].squeeze()
-        tc    = dco['tc'][...].squeeze()
-        tform = dco['tform'][...].squeeze()
-        st1   = dco['stellarType1'][...].squeeze()
-        dk1   = dco['drawnKick1'][...].squeeze()
-        dk2   = dco['drawnKick2'][...].squeeze()
-        sep   = dco['separationDCOFormation'][...].squeeze()
-        ecc   = dco['eccentricityDCOFormation'][...].squeeze()
+    with h5.File(path, "r") as f:
+        dco = f["doubleCompactObjects"]
+        m1 = dco["M1"][...].squeeze()
+        m2 = dco["M2"][...].squeeze()
+        w = dco["weight"][...].squeeze()
+        Z = dco["Metallicity1"][...].squeeze()
+        mh = dco["mergesInHubbleTimeFlag"][...].squeeze()
+        tc = dco["tc"][...].squeeze()
+        tform = dco["tform"][...].squeeze()
+        st1 = dco["stellarType1"][...].squeeze()
+        dk1 = dco["drawnKick1"][...].squeeze()
+        dk2 = dco["drawnKick2"][...].squeeze()
+        sep = dco["separationDCOFormation"][...].squeeze()
+        ecc = dco["eccentricityDCOFormation"][...].squeeze()
 
         vsys_all = _match_sn_to_dco(f)
 
-    is_BH1 = (st1 == 14)
+    is_BH1 = st1 == 14
     M_BH = np.where(is_BH1, m1, m2)
     M_NS = np.where(is_BH1, m2, m1)
-    mask = (mh == 1)
+    mask = mh == 1
     delay = (tform + tc)[mask]
     _validate_delay_times(delay, " in load_bhns_with_kicks")
 
@@ -741,14 +781,21 @@ def load_bhns_with_kicks(path=None,
     _check_weights_no_nan(w_out, path)
 
     out = {
-        'M_BH': M_BH[mask], 'M_NS': M_NS[mask],
-        'weights': w_out, 'metallicity': Z[mask],
-        'delay_time': delay,
-        'n_merging': int(mask.sum()), 'mask_merging': mask,
-        'drawnKick1': dk1[mask], 'drawnKick2': dk2[mask],
-        'v_sys': vsys_all[mask], 'sep_DCO': sep[mask], 'ecc_DCO': ecc[mask],
-        'population': 'BHNS',
-        'model': actual_model, 'ns_max': actual_ns_max,
+        "M_BH": M_BH[mask],
+        "M_NS": M_NS[mask],
+        "weights": w_out,
+        "metallicity": Z[mask],
+        "delay_time": delay,
+        "n_merging": int(mask.sum()),
+        "mask_merging": mask,
+        "drawnKick1": dk1[mask],
+        "drawnKick2": dk2[mask],
+        "v_sys": vsys_all[mask],
+        "sep_DCO": sep[mask],
+        "ecc_DCO": ecc[mask],
+        "population": "BHNS",
+        "model": actual_model,
+        "ns_max": actual_ns_max,
     }
-    _validate_loader_dict(out, out['n_merging'], path)
+    _validate_loader_dict(out, out["n_merging"], path)
     return out

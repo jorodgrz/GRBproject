@@ -24,7 +24,7 @@ import pytest
 # ─────────────────────────────────────────────────────────────────────
 def test_beaming_round_trip_sbgrb():
     """sbGRB fiducial: theta_j = 13 deg => f_beam ~ 0.0256."""
-    from grb_rates import beamed_rate, CLASS_THETA_J
+    from grb_rates import CLASS_THETA_J, beamed_rate
 
     theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
     expected = 100.0 * (1.0 - np.cos(np.radians(theta_fid)))
@@ -35,7 +35,7 @@ def test_beaming_round_trip_sbgrb():
 
 def test_beaming_round_trip_lbgrb():
     """lbGRB fiducial: theta_j = 6.5 deg => f_beam ~ 0.00643."""
-    from grb_rates import beamed_rate, CLASS_THETA_J
+    from grb_rates import CLASS_THETA_J, beamed_rate
 
     theta_fid = CLASS_THETA_J["lbGRB"]["fid"]
     got = beamed_rate(100.0, theta_fid)
@@ -43,28 +43,31 @@ def test_beaming_round_trip_lbgrb():
 
 
 def test_beamed_rate_mixed_matches_per_class_sum():
-    """Mixed-population beaming must equal the per-class sum, NOT
-    beamed_rate(R_total, <theta_j>): the latter would silently
+    """Mixed-population beaming must equal the per-class sum.
+
+    Calling ``beamed_rate(R_total, <theta_j>)`` instead would silently
     overestimate observed rates because ``1 - cos`` is non-linear in
-    theta_j.  This is the council Trap 3 (per-class beaming)
-    regression.
+    theta_j.
     """
-    from grb_rates import beamed_rate, beamed_rate_mixed, CLASS_THETA_J
+    from grb_rates import CLASS_THETA_J, beamed_rate, beamed_rate_mixed
 
     rates = {"sbGRB": 50.0, "lbGRB": 50.0}
     angles = {k: CLASS_THETA_J[k]["fid"] for k in rates}
 
-    expected = (beamed_rate(50.0, CLASS_THETA_J["sbGRB"]["fid"])
-                + beamed_rate(50.0, CLASS_THETA_J["lbGRB"]["fid"]))
+    expected = beamed_rate(50.0, CLASS_THETA_J["sbGRB"]["fid"]) + beamed_rate(
+        50.0, CLASS_THETA_J["lbGRB"]["fid"]
+    )
     got = beamed_rate_mixed(rates, angles)
     assert np.isclose(got, expected, rtol=1e-12)
 
     # Sanity: this is NOT what scalar averaging would give
-    naive = beamed_rate(100.0, 0.5 * (CLASS_THETA_J["sbGRB"]["fid"]
-                                       + CLASS_THETA_J["lbGRB"]["fid"]))
+    naive = beamed_rate(
+        100.0, 0.5 * (CLASS_THETA_J["sbGRB"]["fid"] + CLASS_THETA_J["lbGRB"]["fid"])
+    )
     assert not np.isclose(got, naive, rtol=1e-3), (
         "beamed_rate_mixed agrees with the naive scalar average; the "
-        "non-linearity of (1 - cos) should make these differ.")
+        "non-linearity of (1 - cos) should make these differ."
+    )
 
 
 def test_beamed_rate_mixed_missing_class_raises():
@@ -78,7 +81,7 @@ def test_beamed_rate_mixed_missing_class_raises():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Cosmology pin: Planck 2015 (CLAUDE.md mandate, COMPAS Planck18 default)
+# Cosmology pin: Planck 2015 (Ade et al. 2016, A&A 594, A13).
 # ─────────────────────────────────────────────────────────────────────
 def test_cosmology_planck15_h0():
     """Planck 2015 H0 = 67.74 km/s/Mpc (Planck Collaboration 2016
@@ -114,13 +117,13 @@ def test_dPdlogZ_normalization_z0():
     from grb_rates import _bin_averaged_dPdlogZ
 
     Z_grid = 10.0 ** np.linspace(-2, 0, 53)
-    dPdlogZ_binned, _ = _bin_averaged_dPdlogZ(
-        np.array([0.0]), Z_grid, Z_grid=Z_grid)
+    dPdlogZ_binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_grid, Z_grid=Z_grid)
     integral = dPdlogZ_binned[0].sum()
     assert 0.98 < integral < 1.02, (
         f"dPdlogZ integral at z=0 is {integral:.4f}; expected ~1 because "
         "the COMPAS Z grid covers the bulk of the Neijssel+ 2019 "
-        "log-normal at z=0.")
+        "log-normal at z=0."
+    )
 
 
 @pytest.mark.requires_compas
@@ -168,8 +171,8 @@ def test_per_class_rates_partition_total_bns_2024():
     each subset's Voronoi cells and high-z renormalisation range collapse
     to its own metallicity range, producing class-shape bias.
     """
-    from grb_rates import compute_merger_rate
     from grb_classify import classify_bns_2024
+    from grb_rates import compute_merger_rate
 
     rng = np.random.default_rng(0)
 
@@ -179,21 +182,26 @@ def test_per_class_rates_partition_total_bns_2024():
     #   HMNS:   2.64 <= M_tot < 2.794
     #   disk:   M_tot >= 2.794 and q >= 1.2
     #   Faint:  M_tot >= 2.794 and q < 1.2
-    m1 = np.concatenate([
-        np.full(15, 1.20),  # sbGRB:  M_tot = 2.40
-        np.full(15, 1.40),  # HMNS:   M_tot = 2.70
-        np.full(10, 2.10),  # disk:   M_tot = 3.50, q = 1.50
-        np.full(10, 1.55),  # Faint:  M_tot = 3.00, q = 1.07
-    ])
-    m2 = np.concatenate([
-        np.full(15, 1.20),
-        np.full(15, 1.30),
-        np.full(10, 1.40),
-        np.full(10, 1.45),
-    ])
+    m1 = np.concatenate(
+        [
+            np.full(15, 1.20),  # sbGRB:  M_tot = 2.40
+            np.full(15, 1.40),  # HMNS:   M_tot = 2.70
+            np.full(10, 2.10),  # disk:   M_tot = 3.50, q = 1.50
+            np.full(10, 1.55),  # Faint:  M_tot = 3.00, q = 1.07
+        ]
+    )
+    m2 = np.concatenate(
+        [
+            np.full(15, 1.20),
+            np.full(15, 1.30),
+            np.full(10, 1.40),
+            np.full(10, 1.45),
+        ]
+    )
     cls = classify_bns_2024(m1, m2)
     assert sum(int(c.sum()) for c in cls.values()) == len(m1), (
-        "synthetic masses do not partition cleanly across classify_bns_2024")
+        "synthetic masses do not partition cleanly across classify_bns_2024"
+    )
     for label, c in cls.items():
         assert int(c.sum()) > 0, f"no test systems land in class {label!r}"
 
@@ -203,10 +211,16 @@ def test_per_class_rates_partition_total_bns_2024():
     # set then the no-Z_grid path would coincide with the Z_grid path.
     Z_full = np.array([1e-4, 1e-3, 1e-2, 3e-2])
     Z_compas = np.empty(len(m1))
-    Z_compas[cls['sbGRB + blue KN']]       = rng.choice(Z_full[:2], size=int(cls['sbGRB + blue KN'].sum()))
-    Z_compas[cls['lbGRB + red KN (HMNS)']] = rng.choice(Z_full[1:3], size=int(cls['lbGRB + red KN (HMNS)'].sum()))
-    Z_compas[cls['lbGRB + red KN (disk)']] = rng.choice(Z_full[2:],  size=int(cls['lbGRB + red KN (disk)'].sum()))
-    Z_compas[cls['Faint lbGRB']]           = rng.choice(Z_full,      size=int(cls['Faint lbGRB'].sum()))
+    Z_compas[cls["sbGRB + blue KN"]] = rng.choice(
+        Z_full[:2], size=int(cls["sbGRB + blue KN"].sum())
+    )
+    Z_compas[cls["lbGRB + red KN (HMNS)"]] = rng.choice(
+        Z_full[1:3], size=int(cls["lbGRB + red KN (HMNS)"].sum())
+    )
+    Z_compas[cls["lbGRB + red KN (disk)"]] = rng.choice(
+        Z_full[2:], size=int(cls["lbGRB + red KN (disk)"].sum())
+    )
+    Z_compas[cls["Faint lbGRB"]] = rng.choice(Z_full, size=int(cls["Faint lbGRB"].sum()))
     delays = rng.uniform(50.0, 5000.0, size=len(m1))
     weights = rng.uniform(0.5, 2.0, size=len(m1))
 
@@ -215,24 +229,43 @@ def test_per_class_rates_partition_total_bns_2024():
     sfr = np.full_like(redshifts, 1e7)
 
     common = dict(
-        redshifts=redshifts, times=times, time_first_SF=100.0,
-        n_formed=sfr, p_draw=0.1, smooth_sigma=0)
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=100.0,
+        n_formed=sfr,
+        p_draw=0.1,
+        smooth_sigma=0,
+    )
 
     R_total = compute_merger_rate(
-        COMPAS_Z=Z_compas, COMPAS_delay_times=delays,
-        COMPAS_weights=weights, Z_grid=Z_full, **common)
+        COMPAS_Z=Z_compas,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=weights,
+        Z_grid=Z_full,
+        **common,
+    )
 
     R_per_class = {}
     for label, mask in cls.items():
         R_per_class[label] = compute_merger_rate(
-            COMPAS_Z=Z_compas[mask], COMPAS_delay_times=delays[mask],
-            COMPAS_weights=weights[mask], Z_grid=Z_full, **common)
+            COMPAS_Z=Z_compas[mask],
+            COMPAS_delay_times=delays[mask],
+            COMPAS_weights=weights[mask],
+            Z_grid=Z_full,
+            **common,
+        )
     R_sum = sum(R_per_class.values())
 
     np.testing.assert_allclose(
-        R_total, R_sum, rtol=1e-12, atol=0,
-        err_msg=("classify_bns_2024 partition does not sum to total; "
-                 "compute_merger_rate may have lost additivity over binaries"))
+        R_total,
+        R_sum,
+        rtol=1e-12,
+        atol=0,
+        err_msg=(
+            "classify_bns_2024 partition does not sum to total; "
+            "compute_merger_rate may have lost additivity over binaries"
+        ),
+    )
 
     # Regression guard for the Z_grid alignment requirement
     # (grb_rates.py:67-78).  Without Z_grid each subset's Voronoi cells
@@ -241,15 +274,20 @@ def test_per_class_rates_partition_total_bns_2024():
     # unique-Z sets (which the construction above enforces).
     R_per_class_nogrid = {
         label: compute_merger_rate(
-            COMPAS_Z=Z_compas[mask], COMPAS_delay_times=delays[mask],
-            COMPAS_weights=weights[mask], Z_grid=None, **common)
+            COMPAS_Z=Z_compas[mask],
+            COMPAS_delay_times=delays[mask],
+            COMPAS_weights=weights[mask],
+            Z_grid=None,
+            **common,
+        )
         for label, mask in cls.items()
     }
     R_sum_nogrid = sum(R_per_class_nogrid.values())
     assert not np.allclose(R_total, R_sum_nogrid, rtol=1e-3, atol=0), (
         "per-class sum still matches R_total without Z_grid; the cross-"
         "class Voronoi alignment failure documented at grb_rates.py:67-78 "
-        "is supposed to make these differ.")
+        "is supposed to make these differ."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -294,9 +332,17 @@ def test_calibrate_mean_mass_evolved_redshift_step_invariant():
         times = np.linspace(13700.0, 100.0, n_z)
         sfr = np.full(n_z, 1e7)
         mean_mass, _ = calibrate_mean_mass_evolved(
-            sfr, redshifts, times, time_first_SF=times.min() + 10.0,
-            p_draw=0.1, COMPAS_Z=Z, COMPAS_delay_times=delays,
-            COMPAS_weights=w, expected_local_rate=expected, Z_grid=Z_grid)
+            sfr,
+            redshifts,
+            times,
+            time_first_SF=times.min() + 10.0,
+            p_draw=0.1,
+            COMPAS_Z=Z,
+            COMPAS_delay_times=delays,
+            COMPAS_weights=w,
+            expected_local_rate=expected,
+            Z_grid=Z_grid,
+        )
         return mean_mass
 
     m_coarse = _calibrate(0.01)
@@ -306,24 +352,24 @@ def test_calibrate_mean_mass_evolved_redshift_step_invariant():
         f"MEAN_MASS_EVOLVED drifted {rel * 100:.3f}% across dz=0.01 -> "
         f"0.005 (m_coarse={m_coarse:.4e}, m_fine={m_fine:.4e}); "
         f"calibrate_mean_mass_evolved must use smooth_sigma=0 so the "
-        f"z=0 anchor is sharp (Broekgaarden+ 2021 w_000 semantics).")
+        f"z=0 anchor is sharp (Broekgaarden+ 2021 w_000 semantics)."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
 # Z_grid alignment guard inside compute_merger_rate
 # ─────────────────────────────────────────────────────────────────────
 def test_compute_merger_rate_rejects_misaligned_Z_grid():
-    """Reviewer 1's missing cross-module assert: passing a Z_grid that
-    does not contain every COMPAS_Z value must raise rather than
-    silently producing biased per-class rates."""
+    """Passing a Z_grid that does not contain every COMPAS_Z value
+    must raise rather than silently producing biased per-class rates."""
     from grb_rates import compute_merger_rate
 
     redshifts = np.linspace(0.0, 1.0, 51)
     times = np.linspace(13.7e3, 5.0e3, 51)
     sfr = np.full_like(redshifts, 1e7)
 
-    Z_full = np.array([1e-4, 1e-3, 1e-2, 3e-2])
-    Z_subset = np.array([1e-4, 1e-3, 1e-2])
+    Z_full = np.array([1e-4, 1e-3, 1e-2, 3e-2])  # noqa: F841 (documents the bad-grid contrast)
+    Z_subset = np.array([1e-4, 1e-3, 1e-2])  # noqa: F841 (documents the bad-grid contrast)
     delays = np.array([100.0, 200.0, 300.0])
     weights = np.array([1.0, 1.0, 1.0])
 
@@ -332,10 +378,16 @@ def test_compute_merger_rate_rejects_misaligned_Z_grid():
 
     with pytest.raises(ValueError, match="not present in Z_grid"):
         compute_merger_rate(
-            redshifts, times, time_first_SF=13.5e3, n_formed=sfr,
+            redshifts,
+            times,
+            time_first_SF=13.5e3,
+            n_formed=sfr,
             p_draw=0.1,
-            COMPAS_Z=COMPAS_Z, COMPAS_delay_times=delays,
-            COMPAS_weights=weights, Z_grid=Z_grid_bad)
+            COMPAS_Z=COMPAS_Z,
+            COMPAS_delay_times=delays,
+            COMPAS_weights=weights,
+            Z_grid=Z_grid_bad,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -359,21 +411,30 @@ def test_wanderman_piran_2015_peak_at_z_peak():
 # ─────────────────────────────────────────────────────────────────────
 # Vectorized compute_merger_rate: legacy-loop equivalence
 # ─────────────────────────────────────────────────────────────────────
-def _legacy_loop_rate(redshifts, times, time_first_SF, n_formed, p_draw,
-                      COMPAS_Z, COMPAS_delay_times, COMPAS_weights,
-                      smooth_sigma, Z_grid):
+def _legacy_loop_rate(
+    redshifts,
+    times,
+    time_first_SF,
+    n_formed,
+    p_draw,
+    COMPAS_Z,
+    COMPAS_delay_times,
+    COMPAS_weights,
+    smooth_sigma,
+    Z_grid,
+):
     """Reference implementation of the pre-vectorization per-binary loop
     used by ``compute_merger_rate`` prior to the chunked rewrite.  Kept
     here so the regression test can compare element-wise."""
     from scipy.interpolate import interp1d
     from scipy.ndimage import gaussian_filter1d
+
     from grb_rates import _bin_averaged_dPdlogZ, _interp_formation_rate
 
     n_z = len(redshifts)
     redshift_step = redshifts[1] - redshifts[0]
     times_to_z = interp1d(times, redshifts)
-    dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(
-        redshifts, COMPAS_Z, Z_grid=Z_grid)
+    dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(redshifts, COMPAS_Z, Z_grid=Z_grid)
     t_min = max(time_first_SF, times.min())
     total = np.zeros(n_z)
     for i in range(len(COMPAS_delay_times)):
@@ -384,8 +445,14 @@ def _legacy_loop_rate(redshifts, times, time_first_SF, n_formed, p_draw,
         j_idx = np.where(valid)[0]
         z_form = times_to_z(t_form[j_idx])
         total[j_idx] += _interp_formation_rate(
-            n_formed, dPdlogZ_binned[:, sys_col[i]], p_draw,
-            COMPAS_weights[i], z_form, redshift_step, n_z)
+            n_formed,
+            dPdlogZ_binned[:, sys_col[i]],
+            p_draw,
+            COMPAS_weights[i],
+            z_form,
+            redshift_step,
+            n_z,
+        )
     if smooth_sigma > 0:
         total = gaussian_filter1d(total, sigma=smooth_sigma)
     return total
@@ -398,11 +465,9 @@ def _make_synth_population_for_rates(N, n_z, rng):
     n_formed = sfr / 1.5e8
     Z_grid = 10.0 ** np.linspace(-4, np.log10(0.03), 8)
     COMPAS_Z = rng.choice(Z_grid, size=N)
-    COMPAS_delays = 10.0 ** rng.uniform(np.log10(10.0),
-                                         np.log10(13000.0), size=N)
+    COMPAS_delays = 10.0 ** rng.uniform(np.log10(10.0), np.log10(13000.0), size=N)
     COMPAS_w = rng.uniform(0.1, 1.0, size=N)
-    return (redshifts, times, sfr, n_formed, Z_grid,
-            COMPAS_Z, COMPAS_delays, COMPAS_w)
+    return (redshifts, times, sfr, n_formed, Z_grid, COMPAS_Z, COMPAS_delays, COMPAS_w)
 
 
 def test_compute_merger_rate_vectorized_matches_legacy_loop():
@@ -412,22 +477,42 @@ def test_compute_merger_rate_vectorized_matches_legacy_loop():
     from grb_rates import compute_merger_rate
 
     rng = np.random.default_rng(2024)
-    (redshifts, times, _, n_formed, Z_grid,
-     Z, delays, w) = _make_synth_population_for_rates(N=500, n_z=200, rng=rng)
+    (redshifts, times, _, n_formed, Z_grid, Z, delays, w) = _make_synth_population_for_rates(
+        N=500, n_z=200, rng=rng
+    )
 
     R_vec = compute_merger_rate(
-        redshifts, times, time_first_SF=times.min() + 10.0,
-        n_formed=n_formed, p_draw=0.1,
-        COMPAS_Z=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
-        smooth_sigma=0, Z_grid=Z_grid)
+        redshifts,
+        times,
+        time_first_SF=times.min() + 10.0,
+        n_formed=n_formed,
+        p_draw=0.1,
+        COMPAS_Z=Z,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=w,
+        smooth_sigma=0,
+        Z_grid=Z_grid,
+    )
     R_loop = _legacy_loop_rate(
-        redshifts, times, times.min() + 10.0, n_formed, 0.1,
-        Z, delays, w, smooth_sigma=0, Z_grid=Z_grid)
+        redshifts,
+        times,
+        times.min() + 10.0,
+        n_formed,
+        0.1,
+        Z,
+        delays,
+        w,
+        smooth_sigma=0,
+        Z_grid=Z_grid,
+    )
 
     np.testing.assert_allclose(
-        R_vec, R_loop, rtol=1e-6, atol=1e-12,
-        err_msg=("vectorized compute_merger_rate disagrees with the "
-                 "reference per-binary loop"))
+        R_vec,
+        R_loop,
+        rtol=1e-6,
+        atol=1e-12,
+        err_msg=("vectorized compute_merger_rate disagrees with the reference per-binary loop"),
+    )
 
 
 def test_compute_merger_rate_empty_population_returns_zeros():
@@ -438,11 +523,16 @@ def test_compute_merger_rate_empty_population_returns_zeros():
     times = np.linspace(13700.0, 100.0, 100)
     n_formed = np.full(100, 1e7 / 1.5e8)
     R = compute_merger_rate(
-        redshifts, times, time_first_SF=times.min() + 10.0,
-        n_formed=n_formed, p_draw=0.1,
-        COMPAS_Z=np.array([]), COMPAS_delay_times=np.array([]),
+        redshifts,
+        times,
+        time_first_SF=times.min() + 10.0,
+        n_formed=n_formed,
+        p_draw=0.1,
+        COMPAS_Z=np.array([]),
+        COMPAS_delay_times=np.array([]),
         COMPAS_weights=np.array([]),
-        smooth_sigma=30)
+        smooth_sigma=30,
+    )
     assert R.shape == redshifts.shape
     assert np.all(R == 0)
 
@@ -452,31 +542,45 @@ def test_compute_merger_rate_smoothing_intact():
     rate; the smoothed L2 deviation from the unsmoothed curve must be
     monotonic in the kernel width and small (< 50 percent of the L2
     norm) at the production sigma=30 default."""
-    from grb_rates import compute_merger_rate
     from scipy.ndimage import gaussian_filter1d
 
+    from grb_rates import compute_merger_rate
+
     rng = np.random.default_rng(2025)
-    (redshifts, times, _, n_formed, Z_grid,
-     Z, delays, w) = _make_synth_population_for_rates(N=300, n_z=200, rng=rng)
+    (redshifts, times, _, n_formed, Z_grid, Z, delays, w) = _make_synth_population_for_rates(
+        N=300, n_z=200, rng=rng
+    )
 
-    common = dict(redshifts=redshifts, times=times,
-                  time_first_SF=times.min() + 10.0,
-                  n_formed=n_formed, p_draw=0.1,
-                  COMPAS_Z=Z, COMPAS_delay_times=delays,
-                  COMPAS_weights=w, Z_grid=Z_grid)
+    common = dict(
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=times.min() + 10.0,
+        n_formed=n_formed,
+        p_draw=0.1,
+        COMPAS_Z=Z,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=w,
+        Z_grid=Z_grid,
+    )
 
-    R_unsmoothed = compute_merger_rate(smooth_sigma=0,  **common)
-    R_smoothed   = compute_merger_rate(smooth_sigma=30, **common)
+    R_unsmoothed = compute_merger_rate(smooth_sigma=0, **common)
+    R_smoothed = compute_merger_rate(smooth_sigma=30, **common)
     np.testing.assert_allclose(
-        R_smoothed, gaussian_filter1d(R_unsmoothed, sigma=30),
-        rtol=1e-12, atol=1e-12,
-        err_msg=("smooth_sigma path no longer applies the same Gaussian "
-                 "kernel to the unsmoothed rate; check the smoothing tail"))
+        R_smoothed,
+        gaussian_filter1d(R_unsmoothed, sigma=30),
+        rtol=1e-12,
+        atol=1e-12,
+        err_msg=(
+            "smooth_sigma path no longer applies the same Gaussian "
+            "kernel to the unsmoothed rate; check the smoothing tail"
+        ),
+    )
     l2_diff = np.linalg.norm(R_smoothed - R_unsmoothed)
     l2_norm = np.linalg.norm(R_unsmoothed)
     assert l2_diff < 0.5 * l2_norm, (
         f"smoothing changed the rate too much (||smoothed - raw|| / ||raw||"
-        f" = {l2_diff / max(l2_norm, 1e-30):.3f}, expected < 0.5)")
+        f" = {l2_diff / max(l2_norm, 1e-30):.3f}, expected < 0.5)"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -517,7 +621,7 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
     well below the order-of-magnitude divergence that a structural bug
     (cosmology drift, missing weight, p_draw mismatch) would produce.
 
-    Cosmology is pinned to Planck 2015 on both sides per CLAUDE.md.
+    Cosmology is pinned to Planck 2015 (Ade et al. 2016) on both sides.
     """
     fci = pytest.importorskip(
         "compas_python_utils.cosmic_integration.FastCosmicIntegration",
@@ -532,8 +636,8 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
 
     from grb_io import load_bns, read_expected_local_rate
     from grb_rates import (
-        compute_merger_rate,
         calibrate_mean_mass_evolved,
+        compute_merger_rate,
     )
 
     # Load the COMPAS HDF5 once via grb_io (matches notebook usage).
@@ -546,7 +650,8 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
     # cosmology pinned to Planck15 on both sides so the redshift-time
     # map is identical.
     redshifts, _, times, time_first_SF, _, _ = calculate_redshift_related_params(
-        max_redshift=10.0, redshift_step=0.01, cosmology=Planck15)
+        max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
+    )
     sfr = find_sfr(redshifts)
 
     dPdlogZ, metallicities, p_draw = find_metallicity_distribution(
@@ -555,14 +660,23 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
         max_logZ_COMPAS=np.log(np.max(Z)),
     )
 
-    # Calibrate MEAN_MASS_EVOLVED against the pre-computed local rate
-    # in the HDF5; this is the discipline CLAUDE.md mandates per
-    # population.
+    # Calibrate MEAN_MASS_EVOLVED against the pre-computed local rate in
+    # the HDF5 (per-population: each population has its own STROOPWAFEL
+    # prior, so reusing a calibration across populations biases the rate).
     expected_local_rate = read_expected_local_rate(bns_a_path)
     Z_grid = np.unique(Z)
     mean_mass, _ = calibrate_mean_mass_evolved(
-        sfr, redshifts, times, time_first_SF, p_draw,
-        Z, delays, w, expected_local_rate, Z_grid=Z_grid)
+        sfr,
+        redshifts,
+        times,
+        time_first_SF,
+        p_draw,
+        Z,
+        delays,
+        w,
+        expected_local_rate,
+        Z_grid=Z_grid,
+    )
     n_formed = sfr / mean_mass
 
     # Our pipeline.  Disable the default Gaussian smoothing so the
@@ -572,8 +686,17 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
     # into R(z=0), inflating the denominator of the shape ratio and
     # making R_ours(z)/R_ours(0) look artificially flatter.
     R_ours = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        Z, delays, w, Z_grid=Z_grid, smooth_sigma=0)
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        Z,
+        delays,
+        w,
+        Z_grid=Z_grid,
+        smooth_sigma=0,
+    )
 
     # COMPAS reference, same inputs.  Average_SF_mass_needed plays the
     # role of MEAN_MASS_EVOLVED inside the demo; since we pass the
@@ -581,8 +704,18 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
     # vs point-sampled dPdlogZ.
     n_binaries = len(Z)
     formation_rate, merger_rate = find_formation_and_merger_rates(
-        n_binaries, redshifts, times, time_first_SF, n_formed,
-        dPdlogZ, metallicities, p_draw, Z, delays, COMPAS_weights=w)
+        n_binaries,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        dPdlogZ,
+        metallicities,
+        p_draw,
+        Z,
+        delays,
+        COMPAS_weights=w,
+    )
     R_compas = merger_rate.sum(axis=0)
 
     iz0 = int(np.argmin(np.abs(redshifts)))
@@ -606,16 +739,14 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
     for z_check in z_checkpoints:
         iz = int(np.argmin(np.abs(redshifts - z_check)))
         delta = abs(shape_ours[iz] - shape_compas[iz]) / shape_compas[iz]
-        deltas.append((z_check, delta, float(shape_ours[iz]),
-                       float(shape_compas[iz])))
+        deltas.append((z_check, delta, float(shape_ours[iz]), float(shape_compas[iz])))
 
     failures = [d for d in deltas if d[1] > tol_shape]
     assert not failures, (
         "compute_merger_rate R(z) shape disagrees with COMPAS reference "
         f"by more than {tol_shape * 100:.0f}% at: "
         + "; ".join(
-            f"z={z:.1f} ({delta * 100:.1f}%, ours/R0={so:.4f}, "
-            f"COMPAS/R0={sc:.4f})"
+            f"z={z:.1f} ({delta * 100:.1f}%, ours/R0={so:.4f}, COMPAS/R0={sc:.4f})"
             for (z, delta, so, sc) in failures
         )
         + ".  A structural bug (cosmology drift, missing weight, p_draw "

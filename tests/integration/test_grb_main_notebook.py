@@ -1,7 +1,6 @@
 """End-to-end smoke test for `grb_main.ipynb`.
 
-Council 2026-05-08 selected option B (anchors plus notebook smoke):
-the literature-anchor tests in `test_literature_anchors.py` lock the
+The literature-anchor tests in `test_literature_anchors.py` lock the
 module-level constants and pure-function physics; this file locks the
 *production-pipeline* output by re-running the master notebook through
 `nbclient` and checking class-fraction summary lines, the rate
@@ -26,14 +25,11 @@ machines without the COMPAS HDF5 catalogues or the upstream
 
 from __future__ import annotations
 
-import os
 import re
-import shutil
 import time
 from pathlib import Path
 
 import pytest
-
 
 # Section 7 of the notebook prints `R_loc expected` lines using
 # ``rate_label`` formatting which truncates >= 1 to "{int:,}" and < 1 to
@@ -67,11 +63,11 @@ _R_LOC_BHNS_RE = re.compile(
 )
 
 
-# Files the notebook is expected to (re)generate.  Both .pdf and .png
-# variants per CLAUDE.md plotting standards (vector for paper, raster
-# for previews).  `channels_x_classes.csv` is included because the
-# Section 11 follow-up cell exports the cross-tab to CSV alongside
-# the heatmap.
+# Files the notebook is expected to (re)generate.  Both .pdf (vector,
+# for paper) and .png (raster, 300 dpi, for previews) variants per the
+# project plotting standards.  `channels_x_classes.csv` is included
+# because the Section 11 follow-up cell exports the cross-tab to CSV
+# alongside the heatmap.
 _REQUIRED_PLOT_FILES = (
     "mass_plane_bhns.pdf",
     "mass_plane_bhns.png",
@@ -143,9 +139,10 @@ def _parse_class_table(stdout: str, header_re: re.Pattern) -> dict[str, float]:
         raise AssertionError(
             f"Population summary header not found in notebook stdout "
             f"(regex {header_re.pattern!r}); the notebook may have "
-            f"failed before the _summary helper printed.")
+            f"failed before the _summary helper printed."
+        )
 
-    tail = stdout[m.end():]
+    tail = stdout[m.end() :]
     out: dict[str, float] = {}
     for cm in _CLASS_LINE_RE.finditer(tail):
         label = cm.group(1).strip()
@@ -154,7 +151,7 @@ def _parse_class_table(stdout: str, header_re: re.Pattern) -> dict[str, float]:
         # Stop at the first blank line: the next summary block starts
         # after a newline gap.
         end = cm.end()
-        if "\n\n" in tail[end:end + 4]:
+        if "\n\n" in tail[end : end + 4]:
             break
     return out
 
@@ -243,7 +240,8 @@ def test_grb_main_bns_class_fractions_in_published_band(executed_notebook):
     bns = _parse_class_table(stdout, _BNS_SUMMARY_RE)
     assert bns, (
         f"Failed to parse BNS class fractions from notebook stdout. "
-        f"First 2000 chars of stdout:\n{stdout[:2000]}")
+        f"First 2000 chars of stdout:\n{stdout[:2000]}"
+    )
 
     sb = bns.get("sbGRB + blue KN (long-lived HMNS)", 0.0)
     hmns = bns.get("lbGRB + red KN  (short-lived HMNS)", 0.0)
@@ -255,14 +253,19 @@ def test_grb_main_bns_class_fractions_in_published_band(executed_notebook):
     # within rounding, since classify_bns_2024 returns disjoint masks.
     assert 95.0 <= total <= 102.0, (
         f"BNS class fractions sum to {total:.1f}%, expected ~100% "
-        f"for the Gottlieb (2024) four-class partition.  Parsed: {bns}")
+        f"for the Gottlieb (2024) four-class partition.  Parsed: {bns}"
+    )
     # Each class non-trivial (catches "all systems collapsed into one
     # class" failure modes, e.g. M_TOV silently set to inf).
-    for label, value in (("sbGRB", sb), ("lbGRB+HMNS", hmns),
-                          ("lbGRB+disk", disk), ("Faint", faint)):
+    for label, value in (
+        ("sbGRB", sb),
+        ("lbGRB+HMNS", hmns),
+        ("lbGRB+disk", disk),
+        ("Faint", faint),
+    ):
         assert 1.0 <= value <= 75.0, (
-            f"BNS {label} fraction = {value:.1f}% outside non-trivial "
-            f"sanity band [1, 75]%.")
+            f"BNS {label} fraction = {value:.1f}% outside non-trivial sanity band [1, 75]%."
+        )
     # sbGRB + blue KN must NOT dominate the population for Model A
     # after the Alsing remap: hmns_split = 1.2 * 2.2 = 2.64 Msun is
     # below the typical M_tot ~ 2.7-3.0 Msun; if it suddenly does
@@ -271,7 +274,8 @@ def test_grb_main_bns_class_fractions_in_published_band(executed_notebook):
         f"sbGRB + blue KN fraction = {sb:.1f}% > 50%; for Model A "
         f"with Alsing remap, the long-lived HMNS class should be "
         f"sub-dominant (hmns_split = 1.2 * M_TOV = 2.64 Msun is "
-        f"below typical post-remap M_tot ~ 2.7 to 3.0 Msun).")
+        f"below typical post-remap M_tot ~ 2.7 to 3.0 Msun)."
+    )
 
 
 @pytest.mark.slow
@@ -297,7 +301,8 @@ def test_grb_main_bhns_class_fractions_in_foucart_band(executed_notebook):
     bhns = _parse_class_table(stdout, _BHNS_SUMMARY_RE)
     assert bhns, (
         f"Failed to parse BHNS class fractions from notebook stdout. "
-        f"First 2000 chars of stdout:\n{stdout[:2000]}")
+        f"First 2000 chars of stdout:\n{stdout[:2000]}"
+    )
 
     no_grb = bhns.get("No GRB / KN    (NS swallowed)", 0.0)
     short = bhns.get("Faint lbGRB    (small disk)", 0.0)
@@ -309,15 +314,18 @@ def test_grb_main_bhns_class_fractions_in_foucart_band(executed_notebook):
     assert 70.0 <= total <= 102.0, (
         f"BHNS class fractions sum to {total:.1f}%, expected in "
         f"[70, 102]% for classify_bhns three-class with Foucart "
-        f"validity-cap unclassified residual.  Parsed: {bhns}")
+        f"validity-cap unclassified residual.  Parsed: {bhns}"
+    )
     assert no_grb >= 50.0, (
         f"No GRB fraction = {no_grb:.1f}% < 50% lower band; Foucart "
         f"(2018) at a_BH = 0.5 expects most BHNS systems to swallow "
-        f"the NS.")
+        f"the NS."
+    )
     assert (short + long_grb) <= 25.0, (
         f"GRB-producing BHNS fraction = {short + long_grb:.1f}% > 25% "
         f"upper band at a_BH = 0.5; Foucart (2018) calibration "
-        f"prefers the bulk to swallow the NS.")
+        f"prefers the bulk to swallow the NS."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -326,8 +334,7 @@ def test_grb_main_bhns_class_fractions_in_foucart_band(executed_notebook):
 @pytest.mark.slow
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
-def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(
-        executed_notebook, repo_root: Path):
+def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(executed_notebook, repo_root: Path):
     """Section 4 `R_loc expected` lines must equal `read_expected_local_rate`.
 
     The notebook prints
@@ -344,6 +351,7 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(
     `rate_label` formatting which rounds to 2 sig figs).
     """
     import sys
+
     sys.path.insert(0, str(repo_root))
     from grb_io import read_expected_local_rate
 
@@ -353,19 +361,17 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(
     m_bns = _R_LOC_BNS_RE.search(stdout)
     m_bhns = _R_LOC_BHNS_RE.search(stdout)
     assert m_bns is not None, (
-        f"BNS R_loc expected line not in notebook stdout. "
-        f"First 2000 chars:\n{stdout[:2000]}")
+        f"BNS R_loc expected line not in notebook stdout. First 2000 chars:\n{stdout[:2000]}"
+    )
     assert m_bhns is not None, (
-        f"BHNS R_loc expected line not in notebook stdout. "
-        f"First 2000 chars:\n{stdout[:2000]}")
+        f"BHNS R_loc expected line not in notebook stdout. First 2000 chars:\n{stdout[:2000]}"
+    )
 
     R_bns_printed = float(m_bns.group(1).replace(",", ""))
     R_bhns_printed = float(m_bhns.group(1).replace(",", ""))
 
-    R_bns_expected = read_expected_local_rate(
-        repo_root / "Data" / "COMPASCompactOutput_BNS_A.h5")
-    R_bhns_expected = read_expected_local_rate(
-        repo_root / "Data" / "COMPASCompactOutput_BHNS_A.h5")
+    R_bns_expected = read_expected_local_rate(repo_root / "Data" / "COMPASCompactOutput_BNS_A.h5")
+    R_bhns_expected = read_expected_local_rate(repo_root / "Data" / "COMPASCompactOutput_BHNS_A.h5")
 
     rel_bns = abs(R_bns_printed - R_bns_expected) / R_bns_expected
     rel_bhns = abs(R_bhns_printed - R_bhns_expected) / R_bhns_expected
@@ -373,11 +379,13 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(
     assert rel_bns < 0.05, (
         f"Notebook BNS R_loc = {R_bns_printed:.2f} drifted from "
         f"Broekgaarden Table 3 anchor {R_bns_expected:.2f} by "
-        f"{rel_bns * 100:.1f}% (>5% relative).")
+        f"{rel_bns * 100:.1f}% (>5% relative)."
+    )
     assert rel_bhns < 0.05, (
         f"Notebook BHNS R_loc = {R_bhns_printed:.2f} drifted from "
         f"Broekgaarden Table 3 anchor {R_bhns_expected:.2f} by "
-        f"{rel_bhns * 100:.1f}% (>5% relative).")
+        f"{rel_bhns * 100:.1f}% (>5% relative)."
+    )
 
     # Local-rate physical bands per Broekgaarden+ 2021 Sec. 4.
     # BNS: Models A/J/K range 10 to 300 Gpc^-3 yr^-1 across MSSFR /
@@ -392,8 +400,7 @@ def test_grb_main_local_rate_anchor_matches_broekgaarden_table3(
 @pytest.mark.slow
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
-def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook,
-                                                       repo_root: Path):
+def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook, repo_root: Path):
     """All `_REQUIRED_PLOT_FILES` must exist, have non-zero size, and be fresh.
 
     Catches three failure modes:
@@ -425,4 +432,5 @@ def test_grb_main_plots_regenerated_with_recent_mtime(executed_notebook,
     assert not empty, f"Empty Plots/ files after notebook run: {empty}"
     assert not stale, (
         f"Stale Plots/ files (mtime older than pre-run marker): {stale}; "
-        f"the notebook may not have regenerated them.")
+        f"the notebook may not have regenerated them."
+    )

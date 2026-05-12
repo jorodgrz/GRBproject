@@ -67,12 +67,15 @@ def compas_data_available() -> bool:
     new tests should consume ``compas_file`` (parametrize-friendly)
     or ``bns_a_path`` / ``bhns_a_path`` (per-file skip).
     """
-    return all(os.path.exists(_data_path(name)) for name in (
-        "COMPASCompactOutput_BNS_A.h5",
-        "COMPASCompactOutput_BNS_K.h5",
-        "COMPASCompactOutput_BHNS_A.h5",
-        "COMPASCompactOutput_BHNS_K.h5",
-    ))
+    return all(
+        os.path.exists(_data_path(name))
+        for name in (
+            "COMPASCompactOutput_BNS_A.h5",
+            "COMPASCompactOutput_BNS_K.h5",
+            "COMPASCompactOutput_BHNS_A.h5",
+            "COMPASCompactOutput_BHNS_K.h5",
+        )
+    )
 
 
 @pytest.fixture(scope="session")
@@ -112,3 +115,39 @@ def rastinejad_csv_path() -> str:
     if not os.path.exists(path):
         pytest.skip("Data/rastinejad_2024.csv not present")
     return path
+
+
+_AUTO_FOLDER_MARKERS = {
+    "unit": "unit",
+    "sections": None,  # populated per-file from filename below
+    "integration": "integration",
+    "anchors": "anchors",
+}
+
+_SECTION_RE = "test_section_"
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-apply ``unit`` / ``integration`` / ``anchors`` / ``section_<N>``
+    markers based on a test's parent folder and filename.
+
+    Authors do not have to repeat the marker on every test; the layout
+    on disk is the source of truth.  Manual marker decorations stack on
+    top of the auto-applied ones.
+    """
+    for item in items:
+        rel = os.path.relpath(str(item.fspath), _REPO_ROOT)
+        parts = rel.replace(os.sep, "/").split("/")
+        if len(parts) < 2 or parts[0] != "tests":
+            continue
+        folder = parts[1]
+        marker_name = _AUTO_FOLDER_MARKERS.get(folder)
+        if marker_name is not None:
+            item.add_marker(getattr(pytest.mark, marker_name))
+        if folder == "sections":
+            stem = os.path.splitext(parts[-1])[0]
+            if stem.startswith(_SECTION_RE):
+                tail = stem[len(_SECTION_RE) :]
+                num = tail.split("_", 1)[0]
+                if num.isdigit():
+                    item.add_marker(getattr(pytest.mark, f"section_{int(num)}"))

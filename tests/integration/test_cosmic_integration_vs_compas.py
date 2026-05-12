@@ -8,7 +8,7 @@ intermediate quantities (SFR, log-normal MSSFR parameters, dPdlogZ at
 z = 0, calibrated R(z = 0)) and the absolute z = 0 merger rate density
 agree to the documented tolerance.
 
-The pre-existing ``tests/test_rates.py::test_compute_merger_rate_matches_compas_shape``
+The pre-existing ``tests/unit/test_rates.py::test_compute_merger_rate_matches_compas_shape``
 does a *shape-only* comparison (R(z) / R(0) at z = 0.5, 1.0, 2.0).  This
 file complements it with the pieces a shape ratio cannot catch:
 
@@ -40,7 +40,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from scipy.integrate import quad
-from scipy.stats import norm as _NormDist
 
 
 @pytest.fixture(scope="module")
@@ -69,8 +68,8 @@ def compas_xcheck_pipeline(bns_a_path):
 
     from grb_io import load_bns, read_expected_local_rate
     from grb_rates import (
-        compute_merger_rate,
         calibrate_mean_mass_evolved,
+        compute_merger_rate,
     )
 
     data = load_bns(path=bns_a_path)
@@ -78,9 +77,8 @@ def compas_xcheck_pipeline(bns_a_path):
     delays = data["delay_time"]
     w = data["weights"]
 
-    redshifts, _, times, time_first_SF, _, _ = (
-        fci.calculate_redshift_related_params(
-            max_redshift=10.0, redshift_step=0.01, cosmology=Planck15)
+    redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
+        max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
     )
     sfr = fci.find_sfr(redshifts)
 
@@ -93,20 +91,45 @@ def compas_xcheck_pipeline(bns_a_path):
     expected_local_rate = read_expected_local_rate(bns_a_path)
     Z_grid = np.unique(Z)
     mean_mass, _ = calibrate_mean_mass_evolved(
-        sfr, redshifts, times, time_first_SF, p_draw,
-        Z, delays, w, expected_local_rate, Z_grid=Z_grid)
+        sfr,
+        redshifts,
+        times,
+        time_first_SF,
+        p_draw,
+        Z,
+        delays,
+        w,
+        expected_local_rate,
+        Z_grid=Z_grid,
+    )
     n_formed = sfr / mean_mass
 
     R_ours = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        Z, delays, w, Z_grid=Z_grid, smooth_sigma=0)
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        Z,
+        delays,
+        w,
+        Z_grid=Z_grid,
+        smooth_sigma=0,
+    )
 
     n_binaries = len(Z)
-    formation_rate_compas, merger_rate_compas = (
-        fci.find_formation_and_merger_rates(
-            n_binaries, redshifts, times, time_first_SF, n_formed,
-            dPdlogZ_compas, metallicities, p_draw, Z, delays,
-            COMPAS_weights=w)
+    formation_rate_compas, merger_rate_compas = fci.find_formation_and_merger_rates(
+        n_binaries,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        dPdlogZ_compas,
+        metallicities,
+        p_draw,
+        Z,
+        delays,
+        COMPAS_weights=w,
     )
     R_compas_z = merger_rate_compas.sum(axis=0)
 
@@ -161,14 +184,15 @@ def test_madau_dickinson_sfr_z0_value():
     )
     sfr0 = float(fci.find_sfr(np.array([0.0]))[0])
 
-    a, b, c, d = 0.01, 2.77, 2.90, 4.70
+    a, b, c, d = 0.01, 2.77, 2.90, 4.70  # noqa: F841 (Neijssel 2019 / M&D 2014 coefficients)
     expected_per_Mpc3 = a / (1.0 + (1.0 / c) ** d)
     expected_per_Gpc3 = expected_per_Mpc3 * 1.0e9
     assert sfr0 == pytest.approx(expected_per_Gpc3, rel=1e-3), (
         f"COMPAS find_sfr(z=0) = {sfr0:.4e} Msun/yr/Gpc^3 disagrees "
         f"with Neijssel 2019 / M&D 2014 closed form "
         f"{expected_per_Gpc3:.4e}.  Coefficients (a, b, c, d) drifted "
-        f"from (0.01, 2.77, 2.90, 4.70).")
+        f"from (0.01, 2.77, 2.90, 4.70)."
+    )
 
     # Loose paper anchor: Madau-Dickinson (2014) Eq. (15) at z = 0 with
     # their original coefficients (a=0.015, b=2.7, d=5.6) gives
@@ -181,7 +205,8 @@ def test_madau_dickinson_sfr_z0_value():
     md_paper_per_Gpc3 = 0.015 * 1.0e9
     assert abs(sfr0 - md_paper_per_Gpc3) <= 0.50 * md_paper_per_Gpc3, (
         f"COMPAS find_sfr(z=0) = {sfr0:.4e} more than 50 percent away "
-        f"from Madau-Dickinson 2014 paper value {md_paper_per_Gpc3:.4e}.")
+        f"from Madau-Dickinson 2014 paper value {md_paper_per_Gpc3:.4e}."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -220,13 +245,17 @@ def test_dPdlogZ_lognormal_parameters_match_neijssel():
     # Use a wide [-12, 0] log-Z window so the truncation does not bias
     # the recovered moments; the paper Eq. (2) is unbounded.
     dPdlogZ, metallicities, _ = fci.find_metallicity_distribution(
-        redshifts, min_logZ_COMPAS=-12.0, max_logZ_COMPAS=0.0,
-        min_logZ=-12.0, max_logZ=0.0, step_logZ=0.005,
+        redshifts,
+        min_logZ_COMPAS=-12.0,
+        max_logZ_COMPAS=0.0,
+        min_logZ=-12.0,
+        max_logZ=0.0,
+        step_logZ=0.005,
     )
 
     log_Z = np.log(metallicities)
     # dPdlogZ is per d(ln Z) (not per d(log10 Z)); see Neijssel+ 2019
-    # Eq. (2) and CLAUDE.md.  Integration uses Delta(ln Z).
+    # Eq. (2).  Integration uses Delta(ln Z).
     dlogZ = np.diff(log_Z, prepend=log_Z[0] - (log_Z[1] - log_Z[0]))
     p = dPdlogZ[0] * dlogZ
     p = p / p.sum()
@@ -238,16 +267,18 @@ def test_dPdlogZ_lognormal_parameters_match_neijssel():
     # Neijssel 2019 Eq. (2) closed form at z = 0.
     mu0 = 0.035
     sigma_0 = 0.39
-    mean_lnZ_paper = float(np.log(mu0) - 0.5 * sigma_0 ** 2)
+    mean_lnZ_paper = float(np.log(mu0) - 0.5 * sigma_0**2)
     std_lnZ_paper = sigma_0
 
     assert abs(mean_lnZ - mean_lnZ_paper) <= 0.02, (
         f"Recovered <ln Z>(z=0) = {mean_lnZ:.4f} disagrees with "
         f"Neijssel 2019 Eq. (2) closed form {mean_lnZ_paper:.4f} "
-        f"(mu_0 = 0.035 with sigma^2/2 correction).")
+        f"(mu_0 = 0.035 with sigma^2/2 correction)."
+    )
     assert abs(std_lnZ - std_lnZ_paper) <= 0.02, (
         f"Recovered std(ln Z)(z=0) = {std_lnZ:.4f} disagrees with "
-        f"Neijssel 2019 sigma_0 = {std_lnZ_paper}.")
+        f"Neijssel 2019 sigma_0 = {std_lnZ_paper}."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -292,8 +323,9 @@ def test_dPdlogZ_matches_upstream_at_z0(compas_xcheck_pipeline):
     # COMPAS pointwise integral over the same window:
     #   sum_i dPdlogZ[i] * step_logZ , for i in [Z_min, Z_max].
     log_metallicities = np.log(metallicities)
-    in_window = ((log_metallicities >= np.log(Z_grid.min()))
-                 & (log_metallicities <= np.log(Z_grid.max())))
+    in_window = (log_metallicities >= np.log(Z_grid.min())) & (
+        log_metallicities <= np.log(Z_grid.max())
+    )
     if in_window.sum() < 2:
         pytest.skip("COMPAS metallicity grid does not cover the Z window")
     log_in = log_metallicities[in_window]
@@ -306,7 +338,8 @@ def test_dPdlogZ_matches_upstream_at_z0(compas_xcheck_pipeline):
         f"disagrees with COMPAS pointwise window-integral "
         f"{int_compas:.6f} by more than {rtol * 100:.0f} percent.  "
         f"Either the Voronoi cell construction or the COMPAS Z-window "
-        f"renormalisation drifted.")
+        f"renormalisation drifted."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -315,8 +348,7 @@ def test_dPdlogZ_matches_upstream_at_z0(compas_xcheck_pipeline):
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_compute_merger_rate_vs_compas_absolute_ratio_in_documented_band(
-        compas_xcheck_pipeline):
+def test_compute_merger_rate_vs_compas_absolute_ratio_in_documented_band(compas_xcheck_pipeline):
     """The (calibrated R_ours / raw R_compas) z = 0 ratio sits in the documented band.
 
     The two pipelines do NOT produce identical absolute z = 0 numbers
@@ -337,7 +369,7 @@ def test_compute_merger_rate_vs_compas_absolute_ratio_in_documented_band(
     band (e.g. ratio < 0.01 or > 1.0) would indicate a bug.
 
     For a *shape* (R(z) / R(0)) cross-check at multiple redshifts see
-    ``tests/test_rates.py::test_compute_merger_rate_matches_compas_shape``.
+    ``tests/unit/test_rates.py::test_compute_merger_rate_matches_compas_shape``.
 
     Reference: Neijssel et al. (2019) MNRAS 490, 3740, Eq. (2);
     Broekgaarden et al. (2021) arXiv:2103.02608 Sec. 5.
@@ -363,7 +395,8 @@ def test_compute_merger_rate_vs_compas_absolute_ratio_in_documented_band(
         f"(a) Voronoi vs point-sampled dPdlogZ, (b) the "
         f"Broekgaarden 2021 w_000 calibration anchor, and (c) the "
         f"COMPAS Z-window renormalisation.  Drift outside the band "
-        f"signals a structural change to one of those three.")
+        f"signals a structural change to one of those three."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -398,7 +431,8 @@ def test_calibrated_R0_matches_w_000_within_1pct(compas_xcheck_pipeline):
         f"from the Broekgaarden 2021 w_000 reference {expected:.4f} by "
         f"{rel * 100:.2f} percent.  The calibration discipline in "
         f"calibrate_mean_mass_evolved should pin this to floating-point "
-        f"precision.")
+        f"precision."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -445,20 +479,17 @@ def test_compas_kroupa_mean_stellar_mass_matches_grb_rates():
         out = kroupa_imf(np.array([m]))
         return float(out)
 
-    num_up, _ = quad(lambda m: m * _imf_upstream(m), m_lo, m_hi,
-                     limit=200, points=[0.08, 0.5])
-    den_up, _ = quad(_imf_upstream, m_lo, m_hi, limit=200,
-                     points=[0.08, 0.5])
+    num_up, _ = quad(lambda m: m * _imf_upstream(m), m_lo, m_hi, limit=200, points=[0.08, 0.5])
+    den_up, _ = quad(_imf_upstream, m_lo, m_hi, limit=200, points=[0.08, 0.5])
     mean_up = num_up / den_up
 
-    num_pj, _ = quad(lambda m: m * _imf_project(m), m_lo, m_hi,
-                     limit=200, points=[0.08, 0.5])
-    den_pj, _ = quad(_imf_project, m_lo, m_hi, limit=200,
-                     points=[0.08, 0.5])
+    num_pj, _ = quad(lambda m: m * _imf_project(m), m_lo, m_hi, limit=200, points=[0.08, 0.5])
+    den_pj, _ = quad(_imf_project, m_lo, m_hi, limit=200, points=[0.08, 0.5])
     mean_pj = num_pj / den_pj
 
     rel = abs(mean_up - mean_pj) / mean_up
     assert rel <= 1e-3, (
         f"Kroupa (2001) <m> from grb_rates.kroupa_imf = {mean_pj:.5f} "
         f"disagrees with COMPAS totalMassEvolvedPerZ.IMF = {mean_up:.5f} "
-        f"by {rel * 100:.4f} percent (rel tol 1e-3).")
+        f"by {rel * 100:.4f} percent (rel tol 1e-3)."
+    )

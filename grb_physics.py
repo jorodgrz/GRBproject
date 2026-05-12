@@ -22,8 +22,8 @@ Supernova engine
 ----------------
 The COMPAS simulations (Broekgaarden et al. 2021, Model A and K) use the
 Fryer et al. (2012) *rapid* supernova explosion mechanism.  This produces
-a narrow NS mass distribution peaked near 1.26–1.28 M_sun with a gap
-around 2–5 M_sun. The delayed mechanism yields broader NS masses and a
+a narrow NS mass distribution peaked near 1.26-1.28 M_sun with a gap
+around 2-5 M_sun. The delayed mechanism yields broader NS masses and a
 less pronounced mass gap, which would shift GRB class fractions
 (especially the sbGRB + blue KN boundary at 1.2 × M_TOV).
 
@@ -38,6 +38,7 @@ should therefore be interpreted as *upper bounds*.
 """
 
 import warnings
+
 import numpy as np
 from scipy.special import erf
 
@@ -50,10 +51,10 @@ from scipy.special import erf
 # The BNS total-mass and mass-ratio thresholds come from the same paper's
 # Sec. 3 (BNS classification) plus the Bauswein et al. (2013) prompt-
 # collapse line; see ``M_CRIT_BNS`` discussion below.
-M_CRIT_BNS = 2.8       # BNS prompt-collapse total mass [Msun] (Gottlieb 2023, Sec. 3)
-Q_THRESH_BNS = 1.2     # BNS mass ratio q = M_max / M_min >= 1 (Gottlieb 2023, Sec. 3)
-MDISK_SHORT = 0.01     # BHNS Short cbGRB disk mass [Msun] (Gottlieb 2023, Sec. 4 / Fig. 6)
-MDISK_LONG = 0.1       # BHNS Long cbGRB disk mass [Msun] (Gottlieb 2023, Sec. 4 / Fig. 6)
+M_CRIT_BNS = 2.8  # BNS prompt-collapse total mass [Msun] (Gottlieb 2023, Sec. 3)
+Q_THRESH_BNS = 1.2  # BNS mass ratio q = M_max / M_min >= 1 (Gottlieb 2023, Sec. 3)
+MDISK_SHORT = 0.01  # BHNS Short cbGRB disk mass [Msun] (Gottlieb 2023, Sec. 4 / Fig. 6)
+MDISK_LONG = 0.1  # BHNS Long cbGRB disk mass [Msun] (Gottlieb 2023, Sec. 4 / Fig. 6)
 
 # ---------------------------------------------------------------------------
 # Gottlieb et al. (2024) additions
@@ -76,36 +77,20 @@ range ~1.3-1.7 (stiffer EOS -> larger k); see also Koppel et al.
 kwarg of ``grb_classify.classify_bns_2024`` / ``classify_grid``
 (see ``EOS_MODELS`` for tabulated M_crit values per EOS)."""
 
-M_THRESH = K_THRESH_DEFAULT * M_TOV   # 2.794 ~ 2.8 by default
+M_THRESH = K_THRESH_DEFAULT * M_TOV  # 2.794 ~ 2.8 by default
 """Prompt-collapse total-mass threshold [Msun], expressed as
-``K_THRESH_DEFAULT * M_TOV`` so that EOS sweeps that change ``M_TOV``
-also move ``M_THRESH``.  Note: ``M_CRIT_BNS = 2.8`` is retained
-separately as the Gottlieb (2023) hard-coded threshold for
-``classify_bns_2023``; the 2024 hybrid model uses ``M_THRESH``."""
+``K_THRESH_DEFAULT * M_TOV`` so EOS sweeps that change ``M_TOV`` also
+move ``M_THRESH``.  ``M_CRIT_BNS = 2.8`` is retained separately as the
+Gottlieb (2023) hard-coded threshold for ``classify_bns_2023``; the
+2024 hybrid uses ``M_THRESH``."""
 
-# NOTE: The HMNS short/long-lived split used in the notebook is at
-# 1.2 * M_TOV ~ 2.64 M_sun (total gravitational mass).  This 1.2
-# multiplier is a CODE HEURISTIC, not a value taken from Gottlieb
-# (2024).  Gottlieb (2024) sec 2.3.2 (Eq. 7) places the HMNS regime at
-# M_tot <~ M_thresh, with the long-lived / short-lived distinction set
-# by the HMNS lifetime (~0.1 to 1 s vs ~10 to 100 ms), not by a fixed
-# multiplier on M_TOV.  The 1.2 fiducial captures the supramassive-
-# remnant argument of Margalit and Metzger (2017, ApJL 850, L19,
-# arXiv:1710.05938): remnants significantly above M_TOV but below
-# M_THRESH collapse on viscous timescales rather than surviving long
-# enough to power an extended GRB engine.  Configurable via the
-# ``hmns_factor`` kwarg in ``grb_classify.classify_bns_2024`` /
-# ``classify_grid``.
 HMNS_FACTOR_DEFAULT = 1.2
-"""Default multiplier on ``M_TOV`` setting the boundary between the
-long-lived HMNS regime (sbGRB + blue KN) and the short-lived HMNS
-regime (lbGRB + red KN, HMNS) in ``grb_classify.classify_bns_2024`` and
-``classify_grid``.
-
-CODE HEURISTIC, NOT a value taken from Gottlieb (2024).  See the NOTE
-block above for the supramassive-remnant motivation (Margalit and
-Metzger 2017, ApJL 850, L19, arXiv:1710.05938).  Centralized as a named
-constant so a single edit propagates to every classifier."""
+"""Multiplier on ``M_TOV`` for the long-lived / short-lived HMNS split,
+1.2 * M_TOV ~ 2.64 Msun.  Code heuristic, not a Gottlieb (2024) number:
+Gottlieb sets the split by HMNS lifetime, not a fixed factor on
+``M_TOV``.  The 1.2 fiducial follows the supramassive-remnant argument
+of Margalit and Metzger (2017, ApJL 850, L19), and is overrideable
+through the ``hmns_factor`` kwarg in ``grb_classify``."""
 
 # ---------------------------------------------------------------------------
 # Legacy remnant-to-disk fraction (deprecated; kept for back-compat)
@@ -128,10 +113,10 @@ _MEAN_MASS_EVOLVED_VALUE = 77708655
 # R_1p4  : NS radius at 1.4 Msun [km]  (Read et al. 2009, Table III)
 # M_TOV  : maximum non-rotating NS mass [Msun]  (Read et al. 2009)
 EOS_MODELS = {
-    'APR4':  {'M_crit': 2.88, 'R_1p4': 11.1, 'M_TOV': 2.20},
-    'SFHo':  {'M_crit': 2.60, 'R_1p4': 11.9, 'M_TOV': 2.06},
-    'LS220': {'M_crit': 2.72, 'R_1p4': 12.7, 'M_TOV': 2.04},
-    'DD2':   {'M_crit': 3.35, 'R_1p4': 13.2, 'M_TOV': 2.42},
+    "APR4": {"M_crit": 2.88, "R_1p4": 11.1, "M_TOV": 2.20},
+    "SFHo": {"M_crit": 2.60, "R_1p4": 11.9, "M_TOV": 2.06},
+    "LS220": {"M_crit": 2.72, "R_1p4": 12.7, "M_TOV": 2.04},
+    "DD2": {"M_crit": 3.35, "R_1p4": 13.2, "M_TOV": 2.42},
 }
 
 
@@ -139,29 +124,9 @@ EOS_MODELS = {
 # Chirp mass
 # ---------------------------------------------------------------------------
 def chirp_mass(m1, m2):
-    """Chirp mass M_chirp = (m1 m2)^(3/5) / (m1 + m2)^(1/5) [Msun].
+    """Chirp mass (m1 m2)^(3/5) / (m1 + m2)^(1/5) [Msun].
 
-    Cleanest mass observable for a CBC inspiral: the gravitational-wave
-    amplitude and frequency evolution depend on M_chirp at leading
-    post-Newtonian order (Peters 1964, Phys. Rev. 136, B1224).  This
-    helper exists so the per-class chirp-mass diagnostic in
-    ``grb_main.ipynb`` Section 13, and any future GWTC / LIGO O4
-    observed-vs-predicted chirp-mass cross-check, share a single
-    definition.
-
-    Vectorises over arrays.  Symmetric in (m1, m2): the formula is
-    invariant under swap so callers do not need to enforce any ordering.
-
-    Parameters
-    ----------
-    m1, m2 : float or array-like
-        Component masses [Msun]; either ordering accepted.
-
-    Returns
-    -------
-    float or ndarray
-        Chirp mass [Msun] in the same shape as the broadcast of the
-        inputs.
+    Symmetric in (m1, m2); vectorises over arrays.
     """
     m1 = np.asarray(m1, dtype=float)
     m2 = np.asarray(m2, dtype=float)
@@ -190,12 +155,13 @@ def r_isco(a_BH):
             f"r_isco received {n_bad} spin values with |a| >= 1 "
             f"(max |a|={float(np.max(np.abs(a))):.6f}); clipping to "
             f"+/- (1 - 1e-9). Physical Kerr spins satisfy |a| < 1.",
-            stacklevel=2)
+            stacklevel=2,
+        )
     a = np.clip(a, -1.0 + 1e-9, 1.0 - 1e-9)
-    Z1 = 1 + (1 - a**2)**(1/3) * ((1 + a)**(1/3) + (1 - a)**(1/3))
-    Z2 = np.sqrt(3*a**2 + Z1**2)
+    Z1 = 1 + (1 - a**2) ** (1 / 3) * ((1 + a) ** (1 / 3) + (1 - a) ** (1 / 3))
+    Z2 = np.sqrt(3 * a**2 + Z1**2)
     sign = np.where(a >= 0, 1.0, -1.0)
-    return 3 + Z2 - sign * np.sqrt((3 - Z1)*(3 + Z1 + 2*Z2))
+    return 3 + Z2 - sign * np.sqrt((3 - Z1) * (3 + Z1 + 2 * Z2))
 
 
 # ---------------------------------------------------------------------------
@@ -250,10 +216,8 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     # plateau below 1.4 Msun is made explicit via np.where rather than
     # buried in a clip; see the docstring for the modeling rationale.
     x = (M_NS - 1.4) / (M_TOV_local - 1.4)
-    R = np.where(M_NS >= 1.4,
-                 R_1p4_km * (1.0 - 0.15 * np.clip(x, 0.0, 1.0)**3),
-                 R_1p4_km)
-    R = np.where(M_NS > M_TOV_local, np.nan, R)
+    R = np.where(M_NS >= 1.4, R_1p4_km * (1.0 - 0.15 * np.clip(x, 0.0, 1.0) ** 3), R_1p4_km)
+    R = np.where(M_TOV_local < M_NS, np.nan, R)
     return R
 
 
@@ -271,7 +235,7 @@ def ns_radius_from_eos(M_NS, eos_name):
         Key in ``EOS_MODELS`` (e.g. 'APR4', 'SFHo', 'DD2').
     """
     eos = EOS_MODELS[eos_name]
-    return ns_radius(M_NS, R_1p4_km=eos['R_1p4'], M_TOV_local=eos['M_TOV'])
+    return ns_radius(M_NS, R_1p4_km=eos["R_1p4"], M_TOV_local=eos["M_TOV"])
 
 
 def mcrit_to_r14(mc):
@@ -280,11 +244,11 @@ def mcrit_to_r14(mc):
     Anchored at APR4 (M_crit=2.46, R_{1.4}=11.1 km) and
     DD2 (M_crit=3.35, R_{1.4}=13.2 km) from Read et al. (2008).
     """
-    apr4 = EOS_MODELS['APR4']
-    dd2 = EOS_MODELS['DD2']
-    return apr4['R_1p4'] + ((dd2['R_1p4'] - apr4['R_1p4'])
-                            / (dd2['M_crit'] - apr4['M_crit'])
-                            * (mc - apr4['M_crit']))
+    apr4 = EOS_MODELS["APR4"]
+    dd2 = EOS_MODELS["DD2"]
+    return apr4["R_1p4"] + (
+        (dd2["R_1p4"] - apr4["R_1p4"]) / (dd2["M_crit"] - apr4["M_crit"]) * (mc - apr4["M_crit"])
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -297,10 +261,10 @@ def mcrit_to_r14(mc):
 # 1.80 Msun.  PDF not present in the project Papers/ folder; values
 # below are taken from arXiv:1810.03548 Table 3 (their two-Gaussian fit).
 NS_REMAP_W1 = 0.66
-NS_REMAP_MU1 = 1.34   # [Msun]
+NS_REMAP_MU1 = 1.34  # [Msun]
 NS_REMAP_SIG1 = 0.07  # [Msun]
 NS_REMAP_W2 = 0.34
-NS_REMAP_MU2 = 1.80   # [Msun]
+NS_REMAP_MU2 = 1.80  # [Msun]
 NS_REMAP_SIG2 = 0.21  # [Msun]
 NS_REMAP_M_MIN = 1.10  # [Msun] lower truncation
 
@@ -311,20 +275,25 @@ def _truncated_double_gauss_cdf(x, m_min, m_max):
     Computed analytically from the Gaussian erf, then renormalised so
     F(m_min) = 0 and F(m_max) = 1.
     """
+
     def _g_cdf(t, mu, sig):
         return 0.5 * (1.0 + erf((t - mu) / (sig * np.sqrt(2.0))))
-    raw = (NS_REMAP_W1 * _g_cdf(x, NS_REMAP_MU1, NS_REMAP_SIG1)
-           + NS_REMAP_W2 * _g_cdf(x, NS_REMAP_MU2, NS_REMAP_SIG2))
-    raw_lo = (NS_REMAP_W1 * _g_cdf(m_min, NS_REMAP_MU1, NS_REMAP_SIG1)
-              + NS_REMAP_W2 * _g_cdf(m_min, NS_REMAP_MU2, NS_REMAP_SIG2))
-    raw_hi = (NS_REMAP_W1 * _g_cdf(m_max, NS_REMAP_MU1, NS_REMAP_SIG1)
-              + NS_REMAP_W2 * _g_cdf(m_max, NS_REMAP_MU2, NS_REMAP_SIG2))
+
+    raw = NS_REMAP_W1 * _g_cdf(x, NS_REMAP_MU1, NS_REMAP_SIG1) + NS_REMAP_W2 * _g_cdf(
+        x, NS_REMAP_MU2, NS_REMAP_SIG2
+    )
+    raw_lo = NS_REMAP_W1 * _g_cdf(m_min, NS_REMAP_MU1, NS_REMAP_SIG1) + NS_REMAP_W2 * _g_cdf(
+        m_min, NS_REMAP_MU2, NS_REMAP_SIG2
+    )
+    raw_hi = NS_REMAP_W1 * _g_cdf(m_max, NS_REMAP_MU1, NS_REMAP_SIG1) + NS_REMAP_W2 * _g_cdf(
+        m_max, NS_REMAP_MU2, NS_REMAP_SIG2
+    )
     return (raw - raw_lo) / (raw_hi - raw_lo)
 
 
-def remap_ns_masses_double_gaussian(m1, m2, weights=None, m_tov=None,
-                                     m_min=NS_REMAP_M_MIN, n_grid=10000,
-                                     rng=None):
+def remap_ns_masses_double_gaussian(
+    m1, m2, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_grid=10000, rng=None
+):
     """Quantile-remap NS gravitational masses to an empirical Galactic-NS PDF.
 
     The Fryer (2012) *rapid* SN engine used in the Broekgaarden et al.
@@ -431,15 +400,18 @@ def remap_ns_masses_double_gaussian(m1, m2, weights=None, m_tov=None,
 # ---------------------------------------------------------------------------
 def _compactness(M_NS, R_km):
     """Dimensionless NS compactness C = G*M/(R*c^2)."""
-    G = 6.674e-11; c = 2.99792458e8; Msun = 1.989e30
+    G = 6.674e-11
+    c = 2.99792458e8
+    Msun = 1.989e30
     return G * np.asarray(M_NS, dtype=float) * Msun / (np.asarray(R_km, dtype=float) * 1e3 * c**2)
 
 
 # ---------------------------------------------------------------------------
 # Foucart et al. (2018) total remnant baryon mass
 # ---------------------------------------------------------------------------
-def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
-                          clip_Q=None, clip_chi=None):
+def foucart_remnant_mass(
+    M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0, clip_Q=None, clip_chi=None
+):
     """Foucart et al. (2018) Eq. (4) & (6) [arXiv:1807.00011].
 
     Returns the *total* baryon mass outside the BH after merger (disk +
@@ -451,8 +423,8 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
         Stay within these bounds for the documented ~15% accuracy.
       - *Data range* (Table II coverage):
             individual NR simulations extend to chi_BH = 0.97, but with
-            larger residuals (e.g. Q=3, chi=0.97 underestimates the NR
-            disk mass by ~30%).
+            larger residuals (Q=3, chi=0.97 underestimates the NR disk
+            mass by ~30%).
 
     A warning is emitted when Q > 7 OR |a_BH| > 0.9 (count and max
     value reported per call).  Use ``clip_Q`` and ``clip_chi`` to zero
@@ -487,28 +459,30 @@ def foucart_remnant_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
             f"Foucart (2018) formula applied to {n_extrap} systems with "
             f"Q > 7 (max Q={float(np.max(Q)):.1f}); "
             f"calibrated for Q in [1, 7]",
-            stacklevel=2)
+            stacklevel=2,
+        )
     if np.any(np.abs(a_BH_a) > 0.9):
         n_chi = int(np.sum(np.abs(a_BH_a) > 0.9))
         warnings.warn(
             f"Foucart (2018) formula applied to {n_chi} systems with "
             f"|chi_BH| > 0.9 (max |chi|={float(np.max(np.abs(a_BH_a))):.3f}); "
             f"calibrated for chi_BH in [-0.5, 0.9]",
-            stacklevel=2)
+            stacklevel=2,
+        )
 
     R_km = R_NS_km if R_NS_km is not None else ns_radius(M_NS, R_1p4_km=R_1p4_km)
     C_NS = _compactness(M_NS, R_km)
-    eta = M_NS_a * M_BH_a / (M_NS_a + M_BH_a)**2
+    eta = M_NS_a * M_BH_a / (M_NS_a + M_BH_a) ** 2
     R_hat = r_isco(a_BH)
 
     alpha, beta, gamma, delta = 0.406, 0.139, 0.255, 1.761
-    bracket = alpha * (1 - 2*C_NS) / eta**(1/3) - beta * R_hat * C_NS / eta + gamma
+    bracket = alpha * (1 - 2 * C_NS) / eta ** (1 / 3) - beta * R_hat * C_NS / eta + gamma
 
     M_b = ns_baryon_mass(M_NS)
-    result = np.maximum(0.0, bracket)**delta * M_b
+    result = np.maximum(0.0, bracket) ** delta * M_b
 
     if clip_Q is not None:
-        result = np.where(Q > clip_Q, 0.0, result)
+        result = np.where(clip_Q < Q, 0.0, result)
     if clip_chi is not None:
         result = np.where(np.abs(a_BH_a) > clip_chi, 0.0, result)
 
@@ -532,14 +506,11 @@ def bhns_dynamical_ejecta(M_BH, M_NS, a_BH, R_NS_km=None, R_1p4_km=12.0):
 
     a1, a2, a4 = 0.007116, 0.001436, -0.02762
     n1, n2 = 0.8636, 1.6840
-    bracket = (a1 * Q**n1 * (1 - 2*C_NS) / C_NS
-               - a2 * Q**n2 * R_hat
-               + a4)
+    bracket = a1 * Q**n1 * (1 - 2 * C_NS) / C_NS - a2 * Q**n2 * R_hat + a4
     return np.maximum(0.0, bracket) * M_b
 
 
-def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0,
-                  M_TOV_local=None):
+def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0, M_TOV_local=None):
     """BNS post-merger accretion disk mass [Msun] -- Kruger & Foucart (2020) Eq. (4).
 
     .. warning::
@@ -547,9 +518,9 @@ def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0,
         C_1 ~ 0.156 (R_NS ~ 12 km for a 1.27 Msun NS), where the
         linear ``a * C_1 + c`` term hits the 5e-4 floor.  Empirically,
         the disk mass can swing by ~100x for a 1 km change in NS
-        radius near this threshold (e.g. for a GW170817-like system,
+        radius near this threshold: a GW170817-like system at
         R_1.4 = 12 km gives M_disk ~ 1.5e-3 Msun, while R_1.4 = 13 km
-        gives ~0.28 Msun).  For studies near R_1.4 ~ 12 km, average
+        gives ~0.28 Msun.  For studies near R_1.4 ~ 12 km, average
         over an EOS prior or use the smoother Radice et al. (2018)
         Eq. (1) instead.  Single-EOS results in this regime are not
         physically meaningful.
@@ -563,8 +534,8 @@ def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0,
         discontinuity above, this means: (i) the disk mass is
         completely insensitive to ``m_light`` below 1.4 Msun and
         depends only on ``R_1p4_km``; (ii) the discontinuity becomes
-        one-sided -- e.g. for ``M1 = 1.46, M2 = 1.27``, the result
-        is exactly the KF2020 floor (~1.5e-3 Msun) for any
+        one-sided.  For ``M1 = 1.46, M2 = 1.27`` the result is exactly
+        the KF2020 floor (~1.5e-3 Msun) for any
         ``R_1p4_km <= ~12.05`` km, then jumps two orders of magnitude
         as ``R_1p4_km`` crosses ~12.1 km.  For sub-1.4 Msun light
         components, supply explicit per-component ``R1_km`` /
@@ -584,10 +555,9 @@ def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0,
 
         a = -8.1580,  c = 1.2695
 
-    Note: this function is provided for completeness and downstream
-    use; the BNS classifiers in ``grb_classify`` use mass-ratio /
+    The BNS classifiers in ``grb_classify`` use mass-ratio and
     total-mass thresholds (Gottlieb 2023, 2024) rather than disk mass,
-    so ``bns_disk_mass`` is not currently wired into them.
+    so this helper is provided for completeness rather than direct use.
 
     Parameters
     ----------
@@ -614,10 +584,10 @@ def bns_disk_mass(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0,
     if R1_km is not None and R2_km is not None:
         R1 = np.asarray(R1_km, dtype=float)
         R2 = np.asarray(R2_km, dtype=float)
-        R_heavy = np.where(M1 >= M2, R1, R2)
+        R_heavy = np.where(M1 >= M2, R1, R2)  # noqa: F841 (kept for symmetry with R_light)
         R_light = np.where(M1 >= M2, R2, R1)
     else:
-        R_heavy = ns_radius(m_heavy, R_1p4_km=R_1p4_km, M_TOV_local=M_TOV_local)
+        R_heavy = ns_radius(m_heavy, R_1p4_km=R_1p4_km, M_TOV_local=M_TOV_local)  # noqa: F841
         R_light = ns_radius(m_light, R_1p4_km=R_1p4_km, M_TOV_local=M_TOV_local)
 
     C_1 = _compactness(m_light, R_light)
@@ -649,16 +619,17 @@ def bns_dynamical_ejecta(M1, M2, R1_km=None, R2_km=None, R_1p4_km=12.0):
     C2 = _compactness(M2, R2)
 
     a, b, c, n = -9.3335, 114.17, -337.56, 1.5465
-    term1 = (a / C1 + b * (M2 / M1)**n + c * C1) * M1
-    term2 = (a / C2 + b * (M1 / M2)**n + c * C2) * M2
+    term1 = (a / C1 + b * (M2 / M1) ** n + c * C1) * M1
+    term2 = (a / C2 + b * (M1 / M2) ** n + c * C2) * M2
     return np.maximum(0.0, term1 + term2) * 1e-3
 
 
 # ---------------------------------------------------------------------------
 # Disk mass = remnant mass - dynamical ejecta
 # ---------------------------------------------------------------------------
-def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
-                      f_disk=None, clip_Q=None, clip_chi=None):
+def foucart_disk_mass(
+    M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0, f_disk=None, clip_Q=None, clip_chi=None
+):
     """BHNS *late-time effective* accretion disk mass [Msun].
 
     Default behaviour (f_disk=None): computes
@@ -691,14 +662,13 @@ def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
         mass; set to 0.9 to stay strictly within the Foucart+ 2018
         calibration range.
     """
-    M_rem = foucart_remnant_mass(M_BH, M_NS, a_BH=a_BH,
-                                 R_NS_km=R_NS_km, R_1p4_km=R_1p4_km,
-                                 clip_Q=clip_Q, clip_chi=clip_chi)
+    M_rem = foucart_remnant_mass(
+        M_BH, M_NS, a_BH=a_BH, R_NS_km=R_NS_km, R_1p4_km=R_1p4_km, clip_Q=clip_Q, clip_chi=clip_chi
+    )
     if f_disk is not None:
         return f_disk * M_rem
 
-    M_dyn = bhns_dynamical_ejecta(M_BH, M_NS, a_BH,
-                                   R_NS_km=R_NS_km, R_1p4_km=R_1p4_km)
+    M_dyn = bhns_dynamical_ejecta(M_BH, M_NS, a_BH, R_NS_km=R_NS_km, R_1p4_km=R_1p4_km)
     return np.maximum(0.0, M_rem - M_dyn)
 
 
@@ -706,57 +676,24 @@ def foucart_disk_mass(M_BH, M_NS, a_BH=0.0, R_NS_km=None, R_1p4_km=12.0,
 # BH spin misalignment (Issue 5)
 # ---------------------------------------------------------------------------
 def effective_aligned_spin(a_BH, theta_tilt):
-    """Project BH spin onto the orbital angular momentum axis.
+    """``a_BH * cos(theta_tilt)``, clipped at zero.
 
-    Kawaguchi et al. (2015) NR simulations show that the Foucart remnant
-    mass formula (derived for aligned spins) overestimates disk mass when
-    the BH spin is misaligned.  The disk mass drops to near zero for
-    misalignment angles > 50–60 deg.
-
-    Parameters
-    ----------
-    a_BH : float or array
-        Dimensionless BH spin magnitude.
-    theta_tilt : float or array
-        Angle between BH spin and orbital angular momentum [rad].
-
-    Returns
-    -------
-    a_eff : float or array
-        Effective aligned spin component (clipped to >= 0).
+    The aligned-spin Foucart 2018 fit overestimates BHNS disk mass for
+    misaligned BHs; Kawaguchi et al. (2015) NR shows disk mass dropping
+    to near zero past ~50-60 deg of tilt.
     """
     return np.maximum(0.0, np.asarray(a_BH) * np.cos(np.asarray(theta_tilt)))
 
 
 MISALIGNMENT_SYSTEMATIC_FACTOR = 0.5
 """Order-unity heuristic for the population-averaged reduction in BHNS
-GRB fractions from BH spin-orbit misalignment.  This is NOT a measured
-constant from a single paper; the value 0.5 combines two ingredients:
-
-- Population-synthesis tilt distributions (Fragos et al. 2010,
-  arXiv:1001.1107; Gerosa et al. 2018) suggest roughly half of BHNS
-  systems have spin-orbit misalignment > 45 deg.
-- Kawaguchi et al. (2015, ApJ 825, 52) numerical-relativity simulations
-  show the BHNS disk mass drops to near zero for misalignment angles
-  > 50 to 60 deg (their Fig. 4), so misaligned systems contribute
-  negligibly to the GRB rate.
-
-The 0.5 factor approximates the population-integrated suppression
-under these two inputs.  For a per-system treatment that propagates
-individual tilt angles instead, use ``effective_aligned_spin``.
-
-Two ways to apply this:
-
-1. Population level (preferred when per-system tilts are unavailable):
-   multiply the integrated BHNS GRB rate by this factor.  See
-   ``grb_rates.apply_bhns_misalignment`` for the canonical helper.
-
-2. Per-system level (when individual tilt angles ``theta_tilt`` are
-   sampled): use ``effective_aligned_spin(a_BH, theta_tilt)`` to
-   project the BH spin onto the orbital angular momentum axis and
-   pass the result as ``a_BH`` to ``foucart_disk_mass``.  In this
-   regime the population factor should NOT also be applied (it would
-   double-count the suppression)."""
+GRB fractions from BH spin-orbit misalignment.  Roughly half of BHNS
+systems have tilt > 45 deg in the Fragos et al. (2010) and Gerosa et al.
+(2018) distributions, and Kawaguchi et al. (2015) NR simulations show
+the disk mass collapses to near zero past tilt ~50-60 deg.  Applied at
+the *population* level by ``grb_rates.apply_bhns_misalignment``; do
+*not* combine it with the per-system ``effective_aligned_spin`` route
+or the suppression double-counts."""
 
 
 # ---------------------------------------------------------------------------
@@ -843,7 +780,7 @@ def gottlieb25_eq11(T50, E_iso, alpha=2.0, f_inv=1.0):
     alpha : float, default 2.0
         Power-law index of the prompt luminosity function.
     f_inv : float, default 1.0
-        Inverse GRB radiative efficiency normalised to f = 0.1, i.e.
+        Inverse GRB radiative efficiency normalised to f = 0.1:
         ``f_inv = (f / 0.1) ** -1``.
     """
     T50 = np.asarray(T50, dtype=float)
@@ -863,22 +800,23 @@ def hmns_wind_ejecta(M_d, wind_frac=GOTTLIEB25_WIND_FRAC):
 def _selftest_gottlieb25():
     """Run on import; verifies that Eq. (11) normalisation and the f_inv
     derivation from Eq. (10) are consistent with the cited values."""
-    assert np.isclose(gottlieb25_eq11(1.0, 2e51, alpha=2.0, f_inv=1.0),
-                      1e-3), "Eq. 11 normalisation failed"
-    assert np.isclose(gottlieb25_eq11(4.0, 2e51, alpha=1.5, f_inv=1.0),
-                      2e-3), "Eq. 11 alpha=1.5 scaling failed"
+    assert np.isclose(gottlieb25_eq11(1.0, 2e51, alpha=2.0, f_inv=1.0), 1e-3), (
+        "Eq. 11 normalisation failed"
+    )
+    assert np.isclose(gottlieb25_eq11(4.0, 2e51, alpha=1.5, f_inv=1.0), 2e-3), (
+        "Eq. 11 alpha=1.5 scaling failed"
+    )
     f_lo, f_hi = GOTTLIEB25_F_RANGE
     finv_min, finv_max = 0.1 / f_hi, 0.1 / f_lo
-    assert np.isclose(finv_min, 0.14, atol=0.01), \
-        f"f_inv_min should be ~0.14 (got {finv_min:.3f})"
-    assert np.isclose(finv_max, 5.0, atol=0.05), \
-        f"f_inv_max should be ~5.0 (got {finv_max:.3f})"
+    assert np.isclose(finv_min, 0.14, atol=0.01), f"f_inv_min should be ~0.14 (got {finv_min:.3f})"
+    assert np.isclose(finv_max, 5.0, atol=0.05), f"f_inv_max should be ~5.0 (got {finv_max:.3f})"
     lo, hi = hmns_wind_ejecta(np.array(GOTTLIEB25_DISK_RANGE))
     assert 0 < lo < hi, "HMNS wind-ejecta range ordering failed"
     fw_lo, fw_hi = GOTTLIEB25_WIND_FRAC_RANGE
     assert 0 < fw_lo < fw_hi, "HMNS wind-fraction range ordering failed"
-    assert fw_lo <= GOTTLIEB25_WIND_FRAC <= fw_hi, \
+    assert fw_lo <= GOTTLIEB25_WIND_FRAC <= fw_hi, (
         "GOTTLIEB25_WIND_FRAC must lie inside GOTTLIEB25_WIND_FRAC_RANGE"
+    )
     t_lo, t_hi = GOTTLIEB25_T_HMNS_RANGE
     assert 0 < t_lo < t_hi, "HMNS t_range ordering failed"
 
@@ -892,8 +830,9 @@ _selftest_gottlieb25()
 def __getattr__(name):
     if name == "MEAN_MASS_EVOLVED":
         warnings.warn(
-            "MEAN_MASS_EVOLVED is deprecated; use "
-            "grb_rates.calibrate_mean_mass_evolved() instead",
-            DeprecationWarning, stacklevel=2)
+            "MEAN_MASS_EVOLVED is deprecated; use grb_rates.calibrate_mean_mass_evolved() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return _MEAN_MASS_EVOLVED_VALUE
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

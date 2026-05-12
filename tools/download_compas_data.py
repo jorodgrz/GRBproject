@@ -53,7 +53,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from typing import Dict, Iterable, List, Optional, Tuple
+from collections.abc import Iterable
 
 # Allow ``import embed_model_metadata`` without making ``tools`` a package.
 # The annotator is intentionally a sibling module rather than a third-party
@@ -80,7 +80,7 @@ ZENODO_API = "https://zenodo.org/api/records/{record_id}"
 # requires ``--confirm`` to proceed.  47 GB is the full grid, so this
 # threshold keeps "I just want to test it" runs from accidentally pulling
 # the entire archive.
-CONFIRM_THRESHOLD_BYTES = 5 * 1024 ** 3  # 5 GB
+CONFIRM_THRESHOLD_BYTES = 5 * 1024**3  # 5 GB
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ class ModelEntry:
     zip_name: str
     zip_dir: str
     paper2_letter: str
-    paper1_letter: Optional[str]
+    paper1_letter: str | None
     ns_max: float
     description: str
     tier: int
@@ -152,32 +152,113 @@ class ModelEntry:
 # (paper2_letter, project_suffix, paper1_letter, zip_name, zip_dir,
 #  ns_max, description, tier)
 _GRID = [
-    ("A",  "A",        "A",   "fiducial.zip",                       "fiducial",                       2.5, "Fiducial",                                            1),
-    ("B",  "B",        "B",   "massTransferEfficiencyFixed_0_25.zip", "massTransferEfficiencyFixed_0_25", 2.5, "Mass-transfer efficiency beta=0.25",                  4),
-    ("C",  "C",        "C",   "massTransferEfficiencyFixed_0_5.zip",  "massTransferEfficiencyFixed_0_5",  2.5, "Mass-transfer efficiency beta=0.5",                   4),
-    ("D",  "D",        "D",   "massTransferEfficiencyFixed_0_75.zip", "massTransferEfficiencyFixed_0_75", 2.5, "Mass-transfer efficiency beta=0.75",                  4),
-    ("E",  "E",        "E",   "unstableCaseBB.zip",                  "unstableCaseBB",                  2.5, "Unstable case BB mass transfer",                       4),
-    ("F",  "EH",       None,  "unstableCaseBB.zip",                  "unstableCaseBB",                  2.5, "Unstable case BB plus optimistic CE (paper-II only)", 4),
-    ("G",  "alpha0p1", None,  "alpha0_1.zip",                        "alpha0_1",                        2.5, "alpha_CE = 0.1 (paper-II only)",                       4),
-    ("H",  "F",        "F",   "alpha0_5.zip",                        "alpha0_5",                        2.5, "alpha_CE = 0.5",                                       1),
-    ("I",  "G",        "G",   "alpha2_0.zip",                        "alpha2_0",                        2.5, "alpha_CE = 2.0",                                       1),
-    ("J",  "alpha10",  None,  "alpha10.zip",                         "alpha10",                         2.5, "alpha_CE = 10 (paper-II only)",                        4),
-    ("K",  "H",        "H",   "fiducial.zip",                       "fiducial",                       2.5, "Optimistic CE (HG donors survive CE)",                3),
-    ("L",  "I",        "I",   "rapid.zip",                           "rapid",                           2.5, "Rapid SN remnant prescription",                        3),
-    ("M",  "J",        "J",   "maxNSmass2_0.zip",                    "maxNSmass2_0",                    2.0, "Maximum NS mass = 2.0 Msun",                           1),
-    ("N",  "K",        "K",   "maxNSmass3_0.zip",                    "maxNSmass3_0",                    3.0, "Maximum NS mass = 3.0 Msun",                           1),
-    ("O",  "L",        "L",   "noPISN.zip",                          "noPISN",                          2.5, "No (pulsational) PISN",                                4),
-    ("P",  "M",        "M",   "ccSNkick_100km_s.zip",                "ccSNkick_100km_s",                2.5, "Core-collapse SN kick sigma = 100 km/s",               3),
-    ("Q",  "N",        "N",   "ccSNkick_30km_s.zip",                 "ccSNkick_30km_s",                 2.5, "Core-collapse SN kick sigma = 30 km/s",                2),
-    ("R",  "O",        "O",   "noBHkick.zip",                        "noBHkick",                        2.5, "No BH natal kick (Blaauw kick only)",                  2),
-    ("S",  "fWR0p1",   None,  "wolf_rayet_multiplier_0_1.zip",       "wolf_rayet_multiplier_0_1",       2.5, "Wolf-Rayet wind multiplier f_WR = 0.1 (paper-II only)",4),
-    ("T",  "fWR5",     None,  "wolf_rayet_multiplier_5.zip",         "wolf_rayet_multiplier_5",         2.5, "Wolf-Rayet wind multiplier f_WR = 5 (paper-II only)",  4),
+    ("A", "A", "A", "fiducial.zip", "fiducial", 2.5, "Fiducial", 1),
+    (
+        "B",
+        "B",
+        "B",
+        "massTransferEfficiencyFixed_0_25.zip",
+        "massTransferEfficiencyFixed_0_25",
+        2.5,
+        "Mass-transfer efficiency beta=0.25",
+        4,
+    ),
+    (
+        "C",
+        "C",
+        "C",
+        "massTransferEfficiencyFixed_0_5.zip",
+        "massTransferEfficiencyFixed_0_5",
+        2.5,
+        "Mass-transfer efficiency beta=0.5",
+        4,
+    ),
+    (
+        "D",
+        "D",
+        "D",
+        "massTransferEfficiencyFixed_0_75.zip",
+        "massTransferEfficiencyFixed_0_75",
+        2.5,
+        "Mass-transfer efficiency beta=0.75",
+        4,
+    ),
+    (
+        "E",
+        "E",
+        "E",
+        "unstableCaseBB.zip",
+        "unstableCaseBB",
+        2.5,
+        "Unstable case BB mass transfer",
+        4,
+    ),
+    (
+        "F",
+        "EH",
+        None,
+        "unstableCaseBB.zip",
+        "unstableCaseBB",
+        2.5,
+        "Unstable case BB plus optimistic CE (paper-II only)",
+        4,
+    ),
+    ("G", "alpha0p1", None, "alpha0_1.zip", "alpha0_1", 2.5, "alpha_CE = 0.1 (paper-II only)", 4),
+    ("H", "F", "F", "alpha0_5.zip", "alpha0_5", 2.5, "alpha_CE = 0.5", 1),
+    ("I", "G", "G", "alpha2_0.zip", "alpha2_0", 2.5, "alpha_CE = 2.0", 1),
+    ("J", "alpha10", None, "alpha10.zip", "alpha10", 2.5, "alpha_CE = 10 (paper-II only)", 4),
+    ("K", "H", "H", "fiducial.zip", "fiducial", 2.5, "Optimistic CE (HG donors survive CE)", 3),
+    ("L", "I", "I", "rapid.zip", "rapid", 2.5, "Rapid SN remnant prescription", 3),
+    ("M", "J", "J", "maxNSmass2_0.zip", "maxNSmass2_0", 2.0, "Maximum NS mass = 2.0 Msun", 1),
+    ("N", "K", "K", "maxNSmass3_0.zip", "maxNSmass3_0", 3.0, "Maximum NS mass = 3.0 Msun", 1),
+    ("O", "L", "L", "noPISN.zip", "noPISN", 2.5, "No (pulsational) PISN", 4),
+    (
+        "P",
+        "M",
+        "M",
+        "ccSNkick_100km_s.zip",
+        "ccSNkick_100km_s",
+        2.5,
+        "Core-collapse SN kick sigma = 100 km/s",
+        3,
+    ),
+    (
+        "Q",
+        "N",
+        "N",
+        "ccSNkick_30km_s.zip",
+        "ccSNkick_30km_s",
+        2.5,
+        "Core-collapse SN kick sigma = 30 km/s",
+        2,
+    ),
+    ("R", "O", "O", "noBHkick.zip", "noBHkick", 2.5, "No BH natal kick (Blaauw kick only)", 2),
+    (
+        "S",
+        "fWR0p1",
+        None,
+        "wolf_rayet_multiplier_0_1.zip",
+        "wolf_rayet_multiplier_0_1",
+        2.5,
+        "Wolf-Rayet wind multiplier f_WR = 0.1 (paper-II only)",
+        4,
+    ),
+    (
+        "T",
+        "fWR5",
+        None,
+        "wolf_rayet_multiplier_5.zip",
+        "wolf_rayet_multiplier_5",
+        2.5,
+        "Wolf-Rayet wind multiplier f_WR = 5 (paper-II only)",
+        4,
+    ),
 ]
 
 
-def _build_registry() -> Dict[Tuple[str, str], ModelEntry]:
+def _build_registry() -> dict[tuple[str, str], ModelEntry]:
     """Cross-product the grid with both populations."""
-    out: Dict[Tuple[str, str], ModelEntry] = {}
+    out: dict[tuple[str, str], ModelEntry] = {}
     for kind, zid in (("BNS", ZENODO_BNS), ("BHNS", ZENODO_BHNS)):
         for paper2, suffix, paper1, zip_name, zip_dir, ns_max, desc, tier in _GRID:
             entry = ModelEntry(
@@ -196,13 +277,13 @@ def _build_registry() -> Dict[Tuple[str, str], ModelEntry]:
     return out
 
 
-MODEL_REGISTRY: Dict[Tuple[str, str], ModelEntry] = _build_registry()
+MODEL_REGISTRY: dict[tuple[str, str], ModelEntry] = _build_registry()
 
 
 # ---------------------------------------------------------------------------
 # Zenodo manifest fetching
 # ---------------------------------------------------------------------------
-def fetch_zenodo_manifest(zenodo_id: int, *, refresh: bool = False) -> Dict[str, Dict]:
+def fetch_zenodo_manifest(zenodo_id: int, *, refresh: bool = False) -> dict[str, dict]:
     """Return ``{zip_name: {"url", "md5", "size"}}`` for ``zenodo_id``.
 
     Caches the parsed manifest under ``Data/_cache/manifests/<id>.json``
@@ -211,14 +292,14 @@ def fetch_zenodo_manifest(zenodo_id: int, *, refresh: bool = False) -> Dict[str,
     os.makedirs(MANIFEST_DIR, exist_ok=True)
     cache_path = os.path.join(MANIFEST_DIR, f"{zenodo_id}.json")
     if not refresh and os.path.exists(cache_path):
-        with open(cache_path, "r") as fh:
+        with open(cache_path) as fh:
             return json.load(fh)
 
     url = ZENODO_API.format(record_id=zenodo_id)
     with urllib.request.urlopen(url, timeout=60) as resp:
         record = json.loads(resp.read().decode("utf-8"))
 
-    out: Dict[str, Dict] = {}
+    out: dict[str, dict] = {}
     for entry in record.get("files", []):
         checksum = entry.get("checksum", "")
         md5 = checksum.split(":", 1)[1] if checksum.startswith("md5:") else ""
@@ -257,8 +338,7 @@ def md5_of_file(path: str, *, chunk: int = 1024 * 1024) -> str:
 # ---------------------------------------------------------------------------
 # Download with resume
 # ---------------------------------------------------------------------------
-def download_with_resume(url: str, dest: str, *, expected_md5: str,
-                         expected_size: int) -> None:
+def download_with_resume(url: str, dest: str, *, expected_md5: str, expected_size: int) -> None:
     """Stream ``url`` to ``dest`` with HTTP Range resume and MD5 check.
 
     Writes to ``<dest>.partial`` first.  On size or checksum mismatch
@@ -296,18 +376,18 @@ def download_with_resume(url: str, dest: str, *, expected_md5: str,
             if start > 0 and status != 206:
                 # Server ignored Range; restart cleanly so we do not append
                 # the full body onto our partial bytes.
-                print(f"  (server did not honour Range; restarting download)")
+                print("  (server did not honour Range; restarting download)")
                 start = 0
                 bytes_done = 0
                 mode = "wb"
                 # Re-issue without the Range header.
                 resp.close()
                 with urllib.request.urlopen(url, timeout=120) as resp2:
-                    _stream_body(resp2, partial, mode, expected_size,
-                                 bytes_done, log_every_s, last_log)
+                    _stream_body(
+                        resp2, partial, mode, expected_size, bytes_done, log_every_s, last_log
+                    )
             else:
-                _stream_body(resp, partial, mode, expected_size,
-                             bytes_done, log_every_s, last_log)
+                _stream_body(resp, partial, mode, expected_size, bytes_done, log_every_s, last_log)
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code} fetching {url}") from e
 
@@ -321,16 +401,21 @@ def download_with_resume(url: str, dest: str, *, expected_md5: str,
     actual_md5 = md5_of_file(partial)
     if expected_md5 and actual_md5 != expected_md5:
         raise RuntimeError(
-            f"MD5 mismatch for {os.path.basename(dest)}: "
-            f"got {actual_md5}, expected {expected_md5}"
+            f"MD5 mismatch for {os.path.basename(dest)}: got {actual_md5}, expected {expected_md5}"
         )
 
     os.replace(partial, dest)
 
 
-def _stream_body(resp, dest_path: str, mode: str, total: int,
-                 bytes_done: int, log_every_s: float,
-                 last_log: float) -> None:
+def _stream_body(
+    resp,
+    dest_path: str,
+    mode: str,
+    total: int,
+    bytes_done: int,
+    log_every_s: float,
+    last_log: float,
+) -> None:
     chunk = 1024 * 1024
     name = os.path.basename(dest_path).removesuffix(".partial")
     with open(dest_path, mode) as fh:
@@ -344,8 +429,7 @@ def _stream_body(resp, dest_path: str, mode: str, total: int,
             if now - last_log >= log_every_s:
                 pct = 100.0 * bytes_done / max(total, 1)
                 sys.stderr.write(
-                    f"\r  {name}: {human_size(bytes_done)}"
-                    f" / {human_size(total)} ({pct:5.1f}%)"
+                    f"\r  {name}: {human_size(bytes_done)} / {human_size(total)} ({pct:5.1f}%)"
                 )
                 sys.stderr.flush()
                 last_log = now
@@ -409,8 +493,9 @@ def annotate(entry: ModelEntry, *, dry_run: bool = False) -> None:
 # ---------------------------------------------------------------------------
 # Selection / filtering
 # ---------------------------------------------------------------------------
-def select_entries(*, kind: Optional[str], tier: Optional[int],
-                   suffixes: Optional[Iterable[str]]) -> List[ModelEntry]:
+def select_entries(
+    *, kind: str | None, tier: int | None, suffixes: Iterable[str] | None
+) -> list[ModelEntry]:
     """Apply CLI filters to ``MODEL_REGISTRY`` and return a stable list."""
     entries = list(MODEL_REGISTRY.values())
     if kind:
@@ -427,17 +512,18 @@ def select_entries(*, kind: Optional[str], tier: Optional[int],
 # ---------------------------------------------------------------------------
 # Plan printing
 # ---------------------------------------------------------------------------
-def print_plan(entries: List[ModelEntry],
-               manifests: Dict[int, Dict[str, Dict]]) -> int:
+def print_plan(entries: list[ModelEntry], manifests: dict[int, dict[str, dict]]) -> int:
     """Print the per-entry plan and return the unique-zip total size."""
     # Group by zip so bundled zips are downloaded once.
-    groups: Dict[Tuple[int, str], List[ModelEntry]] = {}
+    groups: dict[tuple[int, str], list[ModelEntry]] = {}
     for e in entries:
         groups.setdefault((e.zenodo_id, e.zip_name), []).append(e)
 
     total = 0
-    print(f"{'kind':4s}  {'suffix':9s}  {'tier':4s}  {'ns_max':6s}  "
-          f"{'zip':38s}  {'size':>9s}  description")
+    print(
+        f"{'kind':4s}  {'suffix':9s}  {'tier':4s}  {'ns_max':6s}  "
+        f"{'zip':38s}  {'size':>9s}  description"
+    )
     print("-" * 110)
     for entry in entries:
         size = manifests[entry.zenodo_id][entry.zip_name]["size"]
@@ -447,9 +533,11 @@ def print_plan(entries: List[ModelEntry],
         size_for_total = size if is_first_in_group else 0
         total += size_for_total
         size_label = human_size(size) if is_first_in_group else "(bundled)"
-        print(f"{entry.kind:4s}  {entry.project_suffix:9s}  "
-              f"{entry.tier:4d}  {entry.ns_max:6.1f}  "
-              f"{entry.zip_name:38s}  {size_label:>9s}  {entry.description}")
+        print(
+            f"{entry.kind:4s}  {entry.project_suffix:9s}  "
+            f"{entry.tier:4d}  {entry.ns_max:6.1f}  "
+            f"{entry.zip_name:38s}  {size_label:>9s}  {entry.description}"
+        )
     print("-" * 110)
     print(f"Unique zips to download: {len(groups)} totalling {human_size(total)}")
     return total
@@ -458,10 +546,16 @@ def print_plan(entries: List[ModelEntry],
 # ---------------------------------------------------------------------------
 # Per-entry processing pipeline
 # ---------------------------------------------------------------------------
-def process_group(zenodo_id: int, zip_name: str,
-                  entries: List[ModelEntry],
-                  manifests: Dict[int, Dict[str, Dict]],
-                  *, force: bool, keep_zips: bool, verify: bool) -> None:
+def process_group(
+    zenodo_id: int,
+    zip_name: str,
+    entries: list[ModelEntry],
+    manifests: dict[int, dict[str, dict]],
+    *,
+    force: bool,
+    keep_zips: bool,
+    verify: bool,
+) -> None:
     """Download (if needed), then extract and annotate every entry that
     sources from a single zip."""
     # If every output already exists we still re-run annotate so a
@@ -470,8 +564,7 @@ def process_group(zenodo_id: int, zip_name: str,
     # forcing a redownload.  ``_annotate`` is idempotent.
     all_present = all(os.path.exists(e.output_path) for e in entries)
     if all_present and not force and not verify:
-        print(f"[skip] {zenodo_id} {zip_name}: targets present, "
-              f"re-running annotation")
+        print(f"[skip] {zenodo_id} {zip_name}: targets present, re-running annotation")
         for e in entries:
             print(f"       -> {e.output_filename}")
             annotate(e)
@@ -480,24 +573,19 @@ def process_group(zenodo_id: int, zip_name: str,
     meta = manifests[zenodo_id][zip_name]
     zip_path = os.path.join(CACHE_DIR, f"zenodo_{zenodo_id}", zip_name)
 
-    need_download = force or not (
-        os.path.exists(zip_path) and md5_of_file(zip_path) == meta["md5"]
-    )
+    need_download = force or not (os.path.exists(zip_path) and md5_of_file(zip_path) == meta["md5"])
     if all_present and not force and verify:
-        print(f"[verify] {zenodo_id} {zip_name}: targets exist; "
-              f"re-checking source zip")
-        need_download = not (
-            os.path.exists(zip_path) and md5_of_file(zip_path) == meta["md5"]
-        )
+        print(f"[verify] {zenodo_id} {zip_name}: targets exist; re-checking source zip")
+        need_download = not (os.path.exists(zip_path) and md5_of_file(zip_path) == meta["md5"])
         if not need_download:
-            print(f"  cached zip MD5 matches Zenodo manifest")
+            print("  cached zip MD5 matches Zenodo manifest")
             return
 
     if need_download:
         print(f"[fetch] {zip_name} ({human_size(meta['size'])})")
-        download_with_resume(meta["url"], zip_path,
-                             expected_md5=meta["md5"],
-                             expected_size=meta["size"])
+        download_with_resume(
+            meta["url"], zip_path, expected_md5=meta["md5"], expected_size=meta["size"]
+        )
         print(f"  cached at {os.path.relpath(zip_path, REPO_ROOT)}")
     else:
         print(f"[cached] {zip_name}")
@@ -518,31 +606,54 @@ def process_group(zenodo_id: int, zip_name: str,
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
-def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--kind", choices=("BNS", "BHNS"), default=None,
-                   help="Limit to one population (default: both).")
-    p.add_argument("--tier", type=int, choices=(1, 2, 3, 4), default=None,
-                   help="Inclusive tier filter; --tier 2 includes tiers 1 and 2.")
-    p.add_argument("--models", nargs="+", default=None,
-                   metavar="SUFFIX",
-                   help="Explicit list of project suffixes (e.g. J F G K).")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Print the plan and budget; do not download.")
-    p.add_argument("--confirm", action="store_true",
-                   help="Required acknowledgement when total > "
-                        f"{human_size(CONFIRM_THRESHOLD_BYTES).strip()}.")
-    p.add_argument("--force", action="store_true",
-                   help="Re-download and re-extract even if outputs exist.")
-    p.add_argument("--verify", action="store_true",
-                   help="Re-check cached zips against Zenodo MD5.")
-    p.add_argument("--keep-zips", action="store_true",
-                   help="Keep cached zips under Data/_cache/ after extraction.")
-    p.add_argument("--refresh-manifest", action="store_true",
-                   help="Bypass the cached Zenodo manifest and re-fetch.")
+    p.add_argument(
+        "--kind",
+        choices=("BNS", "BHNS"),
+        default=None,
+        help="Limit to one population (default: both).",
+    )
+    p.add_argument(
+        "--tier",
+        type=int,
+        choices=(1, 2, 3, 4),
+        default=None,
+        help="Inclusive tier filter; --tier 2 includes tiers 1 and 2.",
+    )
+    p.add_argument(
+        "--models",
+        nargs="+",
+        default=None,
+        metavar="SUFFIX",
+        help="Explicit list of project suffixes (e.g. J F G K).",
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="Print the plan and budget; do not download."
+    )
+    p.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required acknowledgement when total > "
+        f"{human_size(CONFIRM_THRESHOLD_BYTES).strip()}.",
+    )
+    p.add_argument(
+        "--force", action="store_true", help="Re-download and re-extract even if outputs exist."
+    )
+    p.add_argument("--verify", action="store_true", help="Re-check cached zips against Zenodo MD5.")
+    p.add_argument(
+        "--keep-zips",
+        action="store_true",
+        help="Keep cached zips under Data/_cache/ after extraction.",
+    )
+    p.add_argument(
+        "--refresh-manifest",
+        action="store_true",
+        help="Bypass the cached Zenodo manifest and re-fetch.",
+    )
     return p.parse_args(argv)
 
 
@@ -550,16 +661,16 @@ def _check_h5py_available() -> bool:
     """Return True iff h5py imports.  Used as an early gate in main()."""
     try:
         import h5py  # noqa: F401
+
         return True
     except ImportError:
         return False
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
-    entries = select_entries(kind=args.kind, tier=args.tier,
-                             suffixes=args.models)
+    entries = select_entries(kind=args.kind, tier=args.tier, suffixes=args.models)
     if not entries:
         print("No models match the requested filter.", file=sys.stderr)
         return 2
@@ -570,19 +681,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     # here avoids the failure mode where one zip downloads, partially
     # extracts, then aborts with a confusing ImportError.
     if not args.dry_run and not _check_h5py_available():
-        print("ERROR: h5py is required for download and annotation but is "
-              "not importable in the active Python environment.\n"
-              "Activate the conda env first:\n"
-              "    conda activate grb-env\n"
-              "then re-run this command.  ``--dry-run`` works without "
-              "h5py if you only want to preview the plan.",
-              file=sys.stderr)
+        print(
+            "ERROR: h5py is required for download and annotation but is "
+            "not importable in the active Python environment.\n"
+            "Activate the conda env first:\n"
+            "    conda activate grb-env\n"
+            "then re-run this command.  ``--dry-run`` works without "
+            "h5py if you only want to preview the plan.",
+            file=sys.stderr,
+        )
         return 1
 
     needed_records = sorted({e.zenodo_id for e in entries})
     manifests = {
-        zid: fetch_zenodo_manifest(zid, refresh=args.refresh_manifest)
-        for zid in needed_records
+        zid: fetch_zenodo_manifest(zid, refresh=args.refresh_manifest) for zid in needed_records
     }
 
     total = print_plan(entries, manifests)
@@ -591,26 +703,37 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if total > CONFIRM_THRESHOLD_BYTES and not args.confirm:
-        print(f"\nPlan exceeds {human_size(CONFIRM_THRESHOLD_BYTES).strip()}; "
-              f"re-run with --confirm to proceed.", file=sys.stderr)
+        print(
+            f"\nPlan exceeds {human_size(CONFIRM_THRESHOLD_BYTES).strip()}; "
+            f"re-run with --confirm to proceed.",
+            file=sys.stderr,
+        )
         return 1
 
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(CACHE_DIR, exist_ok=True)
 
-    groups: Dict[Tuple[int, str], List[ModelEntry]] = {}
+    groups: dict[tuple[int, str], list[ModelEntry]] = {}
     for e in entries:
         groups.setdefault((e.zenodo_id, e.zip_name), []).append(e)
 
     for (zid, zip_name), group in sorted(groups.items()):
         try:
-            process_group(zid, zip_name, group, manifests,
-                          force=args.force, keep_zips=args.keep_zips,
-                          verify=args.verify)
+            process_group(
+                zid,
+                zip_name,
+                group,
+                manifests,
+                force=args.force,
+                keep_zips=args.keep_zips,
+                verify=args.verify,
+            )
         except KeyboardInterrupt:
-            print("\nInterrupted; partial download preserved at "
-                  f"{CACHE_DIR}/zenodo_{zid}/{zip_name}.partial",
-                  file=sys.stderr)
+            print(
+                "\nInterrupted; partial download preserved at "
+                f"{CACHE_DIR}/zenodo_{zid}/{zip_name}.partial",
+                file=sys.stderr,
+            )
             return 130
         except Exception as e:
             print(f"\n[error] {zip_name}: {e}", file=sys.stderr)

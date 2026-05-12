@@ -2,12 +2,11 @@
 """One-shot helper to embed Broekgaarden+ 2021 model identifiers as HDF5
 root attributes on the COMPAS catalogues in ``Data/``.
 
-Reviewer 3 (council 2026-05-06) flagged that the COMPAS HDF5 files do not
-encode their model identity (A, J, K, ...) or ``ns_max`` value.
-Filename-only identification means a renamed or reprocessed file would
-silently pass every load -> classify -> rate check.
+The Zenodo files do not encode their model identity (A, J, K, ...) or
+``ns_max`` value, so filename-only identification would let a renamed
+or reprocessed file pass every load -> classify -> rate check silently.
 
-Running this script ONCE per fresh download writes the following
+Running this script once per fresh download writes the following
 attributes onto the root group of each known catalogue:
 
     /attrs:
@@ -60,26 +59,26 @@ ZENODO_BHNS_DOI = "10.5281/zenodo.5178777"
 # papers; the five descriptors (alpha0p1, alpha10, EH, fWR0p1, fWR5)
 # are paper-II-only knobs with no paper-I namesake.
 _GRID = [
-    ("A",        "A",        2.5),
-    ("B",        "B",        2.5),
-    ("C",        "C",        2.5),
-    ("D",        "D",        2.5),
-    ("E",        "E",        2.5),
-    ("EH",       "EH",       2.5),  # paper-II only: unstable BB + opt CE
+    ("A", "A", 2.5),
+    ("B", "B", 2.5),
+    ("C", "C", 2.5),
+    ("D", "D", 2.5),
+    ("E", "E", 2.5),
+    ("EH", "EH", 2.5),  # paper-II only: unstable BB + opt CE
     ("alpha0p1", "alpha0p1", 2.5),  # paper-II only: alpha_CE = 0.1
-    ("F",        "F",        2.5),
-    ("G",        "G",        2.5),
-    ("alpha10",  "alpha10",  2.5),  # paper-II only: alpha_CE = 10
-    ("H",        "H",        2.5),
-    ("I",        "I",        2.5),
-    ("J",        "J",        2.0),
-    ("K",        "K",        3.0),
-    ("L",        "L",        2.5),
-    ("M",        "M",        2.5),
-    ("N",        "N",        2.5),
-    ("O",        "O",        2.5),
-    ("fWR0p1",   "fWR0p1",   2.5),  # paper-II only: f_WR = 0.1
-    ("fWR5",     "fWR5",     2.5),  # paper-II only: f_WR = 5
+    ("F", "F", 2.5),
+    ("G", "G", 2.5),
+    ("alpha10", "alpha10", 2.5),  # paper-II only: alpha_CE = 10
+    ("H", "H", 2.5),
+    ("I", "I", 2.5),
+    ("J", "J", 2.0),
+    ("K", "K", 3.0),
+    ("L", "L", 2.5),
+    ("M", "M", 2.5),
+    ("N", "N", 2.5),
+    ("O", "O", 2.5),
+    ("fWR0p1", "fWR0p1", 2.5),  # paper-II only: f_WR = 0.1
+    ("fWR5", "fWR5", 2.5),  # paper-II only: f_WR = 5
 ]
 
 
@@ -109,12 +108,14 @@ KNOWN_FILES = _build_known_files()
 MSSFR_MU0_FIDUCIAL = 0.035  # Neijssel+ 2019
 
 
-def _annotate(path: str, model: str, ns_max: float, kind: str,
-              zenodo_id: str, dry_run: bool = False) -> None:
+def _annotate(
+    path: str, model: str, ns_max: float, kind: str, zenodo_id: str, dry_run: bool = False
+) -> None:
     print(f"[{path}] model={model} ns_max={ns_max} kind={kind}")
     if dry_run:
         return
     import h5py  # deferred so --dry-run runs without the conda env active
+
     with h5py.File(path, "a") as f:
         f.attrs["model"] = model
         f.attrs["ns_max"] = ns_max
@@ -126,30 +127,45 @@ def _annotate(path: str, model: str, ns_max: float, kind: str,
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("path", nargs="?", default=None,
-                   help="Path to a single HDF5 file (default: walk Data/).")
-    p.add_argument("--model", default=None,
-                   help="Paper-I letter (A through O) or paper-II-only "
-                        "descriptor (alpha0p1, alpha10, EH, fWR0p1, fWR5).")
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument(
+        "path", nargs="?", default=None, help="Path to a single HDF5 file (default: walk Data/)."
+    )
+    p.add_argument(
+        "--model",
+        default=None,
+        help="Paper-I letter (A through O) or paper-II-only "
+        "descriptor (alpha0p1, alpha10, EH, fWR0p1, fWR5).",
+    )
     p.add_argument("--ns-max", type=float, default=None)
     p.add_argument("--kind", choices=("BNS", "BHNS"), default=None)
-    p.add_argument("--zenodo", default=None,
-                   help="Zenodo DOI for this archive (e.g. 10.5281/zenodo.5189849).")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Print what would be written without modifying files.")
+    p.add_argument(
+        "--zenodo", default=None, help="Zenodo DOI for this archive (e.g. 10.5281/zenodo.5189849)."
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be written without modifying files.",
+    )
     args = p.parse_args(argv)
 
     if args.path is not None:
-        if any(args.model is None
-               for _ in (args.model, args.ns_max, args.kind, args.zenodo)):
-            if args.model is None or args.ns_max is None or args.kind is None or args.zenodo is None:
-                print("--model, --ns-max, --kind, and --zenodo are required when "
-                      "annotating an explicit file.", file=sys.stderr)
+        if any(args.model is None for _ in (args.model, args.ns_max, args.kind, args.zenodo)):
+            if (
+                args.model is None
+                or args.ns_max is None
+                or args.kind is None
+                or args.zenodo is None
+            ):
+                print(
+                    "--model, --ns-max, --kind, and --zenodo are required when "
+                    "annotating an explicit file.",
+                    file=sys.stderr,
+                )
                 return 2
-        _annotate(args.path, args.model, args.ns_max, args.kind,
-                  args.zenodo, dry_run=args.dry_run)
+        _annotate(args.path, args.model, args.ns_max, args.kind, args.zenodo, dry_run=args.dry_run)
         return 0
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -164,8 +180,14 @@ def main(argv: list[str] | None = None) -> int:
         if not os.path.exists(path):
             print(f"[skip] {name} not present in Data/")
             continue
-        _annotate(path, meta["model"], meta["ns_max"], meta["kind"],
-                  meta["zenodo_id"], dry_run=args.dry_run)
+        _annotate(
+            path,
+            meta["model"],
+            meta["ns_max"],
+            meta["kind"],
+            meta["zenodo_id"],
+            dry_run=args.dry_run,
+        )
         n_done += 1
     print(f"Done: annotated {n_done} HDF5 file(s).")
     return 0

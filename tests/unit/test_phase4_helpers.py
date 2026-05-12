@@ -1,4 +1,4 @@
-"""Unit tests for the Council Expansionist (Phase 4) helpers.
+"""Unit tests for the phase-4 cross-check helpers.
 
 Each helper is exercised against:
 
@@ -9,8 +9,6 @@ Each helper is exercised against:
 """
 
 from __future__ import annotations
-
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -23,9 +21,7 @@ import pytest
 def test_marginalize_bh_spin_dict_mode_matches_legacy_marginalize():
     from grb_rates import marginalize, marginalize_bh_spin
 
-    rates = {0.0: np.array([1.0, 2.0]),
-             0.5: np.array([3.0, 4.0]),
-             0.9: np.array([5.0, 6.0])}
+    rates = {0.0: np.array([1.0, 2.0]), 0.5: np.array([3.0, 4.0]), 0.9: np.array([5.0, 6.0])}
     weights = {0.0: 0.5, 0.5: 0.3, 0.9: 0.2}
 
     legacy = marginalize(rates, weights)
@@ -48,7 +44,10 @@ def test_marginalize_bh_spin_array_mode_with_callable_pdf():
 
     spins = np.linspace(0.0, 0.9, 19)
     rates = np.ones_like(spins)
-    pdf = lambda chi: 1.0 / 0.9
+
+    def pdf(chi):
+        return 1.0 / 0.9
+
     out = marginalize_bh_spin(rates, pdf, spin_grid=spins)
     # Trapezoidal integral of (1 / 0.9) * 1 over [0, 0.9] = 1.0
     assert out == pytest.approx(1.0, rel=1e-10)
@@ -76,10 +75,8 @@ def test_observed_frame_rate_applies_one_plus_z_factor():
     from grb_rates import observed_frame_rate
 
     R_int = np.array([100.0])
-    np.testing.assert_allclose(observed_frame_rate(R_int, np.array([1.0])),
-                               np.array([50.0]))
-    np.testing.assert_allclose(observed_frame_rate(R_int, np.array([3.0])),
-                               np.array([25.0]))
+    np.testing.assert_allclose(observed_frame_rate(R_int, np.array([1.0])), np.array([50.0]))
+    np.testing.assert_allclose(observed_frame_rate(R_int, np.array([3.0])), np.array([25.0]))
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -101,20 +98,23 @@ def test_classify_observed_mergers_mass_planes():
     #   2: 0.05  / 0.056 ~ 0.89  -> red-dominated
     #   3: total 0.003 -> faint (M_ej < 0.01)
     #   4: 0.025 / 0.055 ~ 0.45 -> mixed
-    assert out['sbGRB + blue KN'].tolist() == [True, False, False, False, False]
-    assert out['lbGRB + red KN (HMNS)'].tolist() == [False, True, False, False, True]
-    assert out['lbGRB + red KN (disk)'].tolist() == [False, False, True, False, False]
-    assert out['Faint lbGRB'].tolist() == [False, False, False, True, False]
+    assert out["sbGRB + blue KN"].tolist() == [True, False, False, False, False]
+    assert out["lbGRB + red KN (HMNS)"].tolist() == [False, True, False, False, True]
+    assert out["lbGRB + red KN (disk)"].tolist() == [False, False, True, False, False]
+    assert out["Faint lbGRB"].tolist() == [False, False, False, True, False]
 
 
 def test_classify_observed_mergers_threshold_swap_raises():
     from grb_classify import classify_observed_mergers
 
     with pytest.raises(ValueError, match="must exceed"):
-        classify_observed_mergers(np.array([0.01]), np.array([0.01]),
-                                  np.array([0.01]),
-                                  red_max_for_blue=0.7,
-                                  red_min_for_red=0.3)
+        classify_observed_mergers(
+            np.array([0.01]),
+            np.array([0.01]),
+            np.array([0.01]),
+            red_max_for_blue=0.7,
+            red_min_for_red=0.3,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -126,39 +126,38 @@ def test_channel_class_crosstab_raw_and_normalised_modes():
     n = 6
     weights = np.array([1.0, 1.0, 2.0, 2.0, 3.0, 3.0])
     channel_masks = {
-        'I  Classic CE':      np.array([True, True, False, False, False, False]),
-        'II  Stable MT only': np.array([False, False, True, True, False, False]),
-        'III Single-core CE': np.array([False, False, False, False, True, True]),
-        'IV  Double-core CE': np.zeros(n, dtype=bool),
-        'V   Other':          np.zeros(n, dtype=bool),
+        "I  Classic CE": np.array([True, True, False, False, False, False]),
+        "II  Stable MT only": np.array([False, False, True, True, False, False]),
+        "III Single-core CE": np.array([False, False, False, False, True, True]),
+        "IV  Double-core CE": np.zeros(n, dtype=bool),
+        "V   Other": np.zeros(n, dtype=bool),
     }
     class_masks = {
-        'sbGRB + blue KN':       np.array([True, False, True, False, True, False]),
-        'lbGRB + red KN (HMNS)': np.array([False, True, False, True, False, True]),
-        'lbGRB + red KN (disk)': np.zeros(n, dtype=bool),
-        'Faint lbGRB':           np.zeros(n, dtype=bool),
+        "sbGRB + blue KN": np.array([True, False, True, False, True, False]),
+        "lbGRB + red KN (HMNS)": np.array([False, True, False, True, False, True]),
+        "lbGRB + red KN (disk)": np.zeros(n, dtype=bool),
+        "Faint lbGRB": np.zeros(n, dtype=bool),
     }
 
     raw = channel_class_crosstab(channel_masks, class_masks, weights)
     assert isinstance(raw, pd.DataFrame)
     assert raw.shape == (5, 4)
     # Row I: (T,T) cells are (True, sb)=1, (False, lb)=1
-    assert raw.loc['I  Classic CE', 'sbGRB + blue KN'] == pytest.approx(1.0)
-    assert raw.loc['I  Classic CE', 'lbGRB + red KN (HMNS)'] == pytest.approx(1.0)
-    assert raw.loc['IV  Double-core CE', 'sbGRB + blue KN'] == 0.0
+    assert raw.loc["I  Classic CE", "sbGRB + blue KN"] == pytest.approx(1.0)
+    assert raw.loc["I  Classic CE", "lbGRB + red KN (HMNS)"] == pytest.approx(1.0)
+    assert raw.loc["IV  Double-core CE", "sbGRB + blue KN"] == 0.0
 
     # Channel-normalised: row sums to 1 (or 0 for empty rows).
-    by_ch = channel_class_crosstab(channel_masks, class_masks, weights,
-                                   normalise='channel')
-    assert by_ch.loc['I  Classic CE'].sum() == pytest.approx(1.0)
-    assert by_ch.loc['IV  Double-core CE'].sum() == 0.0
+    by_ch = channel_class_crosstab(channel_masks, class_masks, weights, normalise="channel")
+    assert by_ch.loc["I  Classic CE"].sum() == pytest.approx(1.0)
+    assert by_ch.loc["IV  Double-core CE"].sum() == 0.0
 
 
 def test_channel_class_crosstab_invalid_normalise_raises():
     from grb_classify import channel_class_crosstab
 
     with pytest.raises(ValueError, match="normalise must be"):
-        channel_class_crosstab({}, {}, np.array([]), normalise='banana')
+        channel_class_crosstab({}, {}, np.array([]), normalise="banana")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -170,13 +169,13 @@ def test_offset_cdf_by_class_per_class_sorted_and_unit_normalised():
     offsets = np.array([1.0, 2.0, 3.0, 5.0, 8.0])
     weights = np.array([1.0, 1.0, 1.0, 1.0, 1.0])
     masks = {
-        'A': np.array([True, True, False, False, False]),
-        'B': np.array([False, False, True, True, True]),
+        "A": np.array([True, True, False, False, False]),
+        "B": np.array([False, False, True, True, True]),
     }
     out = offset_cdf_by_class(offsets, weights, masks)
 
-    o_a, c_a = out['A']
-    o_b, c_b = out['B']
+    o_a, c_a = out["A"]
+    o_b, c_b = out["B"]
     assert (np.diff(o_a) >= 0).all()
     assert (np.diff(o_b) >= 0).all()
     assert c_a[-1] == pytest.approx(1.0)
@@ -188,12 +187,11 @@ def test_offset_cdf_by_class_empty_class_returns_sentinel():
 
     offsets = np.array([1.0, 2.0])
     weights = np.array([1.0, 1.0])
-    masks = {'empty': np.array([False, False]),
-             'singleton': np.array([True, False])}
+    masks = {"empty": np.array([False, False]), "singleton": np.array([True, False])}
     out = offset_cdf_by_class(offsets, weights, masks)
-    assert out['empty'][0].tolist() == [0.0]
+    assert out["empty"][0].tolist() == [0.0]
     # singleton has only one valid system so the CDF cannot be built
-    assert out['singleton'][0].tolist() == [0.0]
+    assert out["singleton"][0].tolist() == [0.0]
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -211,8 +209,12 @@ def test_compute_eos_sensitivity_class_fractions_sum_to_one():
     table = compute_eos_sensitivity(m1, m2, w)
     # Should have one row per EOS in EOS_MODELS.
     assert set(table.index) == set(EOS_MODELS.keys())
-    class_keys = ['sbGRB + blue KN', 'lbGRB + red KN (HMNS)',
-                  'lbGRB + red KN (disk)', 'Faint lbGRB']
+    class_keys = [
+        "sbGRB + blue KN",
+        "lbGRB + red KN (HMNS)",
+        "lbGRB + red KN (disk)",
+        "Faint lbGRB",
+    ]
     for eos in table.index:
         s = float(table.loc[eos, class_keys].sum())
         assert s == pytest.approx(1.0, rel=1e-9), (
@@ -230,36 +232,42 @@ def test_compute_eos_sensitivity_M_thresh_tracks_M_TOV():
     m2 = rng.uniform(1.1, 2.5, size=n)
     w = np.ones(n)
     table = compute_eos_sensitivity(m1, m2, w, k_thresh=1.30)
-    np.testing.assert_allclose(table['M_thresh'], 1.30 * table['M_TOV'])
+    np.testing.assert_allclose(table["M_thresh"], 1.30 * table["M_TOV"])
 
 
 # ─────────────────────────────────────────────────────────────────────
 # E7: beamed_class_comparison + OBSERVED_RATES_BY_CLASS
 # ─────────────────────────────────────────────────────────────────────
 def test_beamed_class_comparison_basic_shape_and_columns():
-    from grb_rates import (beamed_class_comparison,
-                           OBSERVED_RATES_BY_CLASS,
-                           CLASS_THETA_J)
+    from grb_rates import CLASS_THETA_J, beamed_class_comparison
 
     R_int = {
-        'sbGRB + blue KN':       100.0,
-        'lbGRB + red KN (HMNS)':  50.0,
-        'lbGRB + red KN (disk)':  10.0,
-        'Faint lbGRB':            20.0,
+        "sbGRB + blue KN": 100.0,
+        "lbGRB + red KN (HMNS)": 50.0,
+        "lbGRB + red KN (disk)": 10.0,
+        "Faint lbGRB": 20.0,
     }
     df = beamed_class_comparison(R_int)
     assert set(df.index) == set(R_int.keys())
-    for col in ['R_intrinsic', 'theta_j_deg', 'f_beam',
-                'R_beamed', 'R_obs', 'R_obs_lo', 'R_obs_hi', 'reference']:
+    for col in [
+        "R_intrinsic",
+        "theta_j_deg",
+        "f_beam",
+        "R_beamed",
+        "R_obs",
+        "R_obs_lo",
+        "R_obs_hi",
+        "reference",
+    ]:
         assert col in df.columns
 
     # R_beamed for sbGRB row matches the manual formula
-    theta_sb = CLASS_THETA_J['sbGRB']['fid']
+    theta_sb = CLASS_THETA_J["sbGRB"]["fid"]
     f_beam = 1.0 - np.cos(np.radians(theta_sb))
-    assert df.loc['sbGRB + blue KN', 'R_beamed'] == pytest.approx(100.0 * f_beam)
+    assert df.loc["sbGRB + blue KN", "R_beamed"] == pytest.approx(100.0 * f_beam)
 
     # The Faint lbGRB class has NaN observed rate per the dict
-    assert np.isnan(df.loc['Faint lbGRB', 'R_obs'])
+    assert np.isnan(df.loc["Faint lbGRB", "R_obs"])
 
 
 def test_observed_rates_by_class_keys_match_classify_bns_2024():
@@ -285,40 +293,52 @@ def _make_synth_population(N, rng):
 def test_offsets_vectorized_matches_legacy_ks():
     """Empirical-CDF agreement between batched RK4 and the legacy
     per-system path within the figure line-thickness tolerance."""
-    from grb_offsets import compute_offsets_population
     from scipy.stats import ks_2samp
+
+    from grb_offsets import compute_offsets_population
 
     rng_pop = np.random.default_rng(2026)
     v, t, w = _make_synth_population(N=600, rng=rng_pop)
 
     res_v = compute_offsets_population(
-        v, t, weights=w, max_systems=600, vectorized=True,
-        rng=np.random.default_rng(0))
+        v, t, weights=w, max_systems=600, vectorized=True, rng=np.random.default_rng(0)
+    )
     res_l = compute_offsets_population(
-        v, t, weights=w, max_systems=600, vectorized=False,
-        use_analytic=True, rng=np.random.default_rng(0))
+        v,
+        t,
+        weights=w,
+        max_systems=600,
+        vectorized=False,
+        use_analytic=True,
+        rng=np.random.default_rng(0),
+    )
 
     # Two-sample KS against the legacy distribution.  At N=600 the natural
     # empirical-CDF noise floor is 1.36/sqrt(600) ~ 0.056; we accept up to
     # 0.10 to leave headroom for the RK4-vs-RK45 step-size difference.
-    ks = ks_2samp(res_v['offsets_kpc'], res_l['offsets_kpc'])
+    ks = ks_2samp(res_v["offsets_kpc"], res_l["offsets_kpc"])
     assert ks.statistic < 0.10, (
         f"vectorized vs legacy KS distance = {ks.statistic:.3f} "
-        f"(p = {ks.pvalue:.3g}); CDFs disagree beyond figure line thickness")
+        f"(p = {ks.pvalue:.3g}); CDFs disagree beyond figure line thickness"
+    )
 
     # Bulk-percentile sanity: medians within 25 percent (the noise here is
     # dominated by random projection angle scatter; KS above is the tight
     # check).
-    med_v = float(np.median(res_v['offsets_kpc']))
-    med_l = float(np.median(res_l['offsets_kpc']))
+    med_v = float(np.median(res_v["offsets_kpc"]))
+    med_l = float(np.median(res_l["offsets_kpc"]))
     assert abs(med_v - med_l) / med_l < 0.25
 
 
 def test_offsets_vectorized_zero_kick_returns_birth_radius():
     """v_sys = 0 binaries stay at their projected birth radius."""
-    from grb_offsets import (compute_offsets_population_vectorized,
-                              hernquist_scale_radius, DEFAULT_R_E,
-                              _R_CAP_FACTOR, KPC_CM)
+    from grb_offsets import (
+        _R_CAP_FACTOR,
+        DEFAULT_R_E,
+        KPC_CM,
+        compute_offsets_population_vectorized,
+        hernquist_scale_radius,
+    )
 
     N = 100
     v = np.zeros(N)
@@ -326,68 +346,75 @@ def test_offsets_vectorized_zero_kick_returns_birth_radius():
     # the systems are admitted but their orbits stay essentially at r0.
     v[:] = 1e-3
     t = np.full(N, 1000.0)  # 1 Gyr delay
-    res = compute_offsets_population_vectorized(
-        v, t, max_systems=N, rng=np.random.default_rng(7))
+    res = compute_offsets_population_vectorized(v, t, max_systems=N, rng=np.random.default_rng(7))
     a_kpc = hernquist_scale_radius(DEFAULT_R_E) / KPC_CM
     # Cap is enforced; offsets must be finite and bounded above by r_cap.
-    assert np.isfinite(res['offsets_kpc']).all()
-    assert (res['offsets_kpc'] <= _R_CAP_FACTOR * a_kpc).all()
+    assert np.isfinite(res["offsets_kpc"]).all()
+    assert (res["offsets_kpc"] <= _R_CAP_FACTOR * a_kpc).all()
     # The Hernquist median 3D enclosed-mass radius is r_50 ~ 2.41 a (from
     # M(<r)/M = (r/(r+a))^2 = 0.5 -> r = a / (sqrt(2) - 1) ~ 2.41 a);
     # projected, the median sits below that.  Just check it's positive
     # and sensible (within a couple decades of `a`).
-    med = float(np.median(res['offsets_kpc']))
+    med = float(np.median(res["offsets_kpc"]))
     assert 0.01 * a_kpc < med < 100.0 * a_kpc
 
 
 def test_offsets_vectorized_unbound_returns_finite():
     """Super-escape kicks give finite offsets capped at r_cap."""
-    from grb_offsets import (compute_offsets_population_vectorized,
-                              hernquist_scale_radius, DEFAULT_R_E,
-                              _R_CAP_FACTOR, KPC_CM)
+    from grb_offsets import (
+        _R_CAP_FACTOR,
+        DEFAULT_R_E,
+        KPC_CM,
+        compute_offsets_population_vectorized,
+        hernquist_scale_radius,
+    )
+
     v = np.array([1e5, 5e4, 2e4])  # km/s -- super-escape
     t = np.array([100.0, 1000.0, 5000.0])
-    res = compute_offsets_population_vectorized(
-        v, t, max_systems=3, rng=np.random.default_rng(11))
+    res = compute_offsets_population_vectorized(v, t, max_systems=3, rng=np.random.default_rng(11))
     a_kpc = hernquist_scale_radius(DEFAULT_R_E) / KPC_CM
-    assert np.isfinite(res['offsets_kpc']).all()
-    assert (res['offsets_kpc'] <= _R_CAP_FACTOR * a_kpc).all()
+    assert np.isfinite(res["offsets_kpc"]).all()
+    assert (res["offsets_kpc"] <= _R_CAP_FACTOR * a_kpc).all()
 
 
 def test_offsets_mixed_hosts_regression_within_5_percent():
     """compute_offsets_mixed_hosts (now backed by the vectorized path) keeps
     its bulk distribution within ~5 percent of the legacy mean and 90th
     percentile when the seed is held fixed."""
-    from grb_offsets import (compute_offsets_mixed_hosts,
-                              compute_offsets_population)
+    from grb_offsets import compute_offsets_mixed_hosts, compute_offsets_population
 
     rng_pop = np.random.default_rng(3)
     v, t, w = _make_synth_population(N=400, rng=rng_pop)
 
-    mh = compute_offsets_mixed_hosts(v, t, weights=w, max_systems=400,
-                                     rng=np.random.default_rng(0))
+    mh = compute_offsets_mixed_hosts(v, t, weights=w, max_systems=400, rng=np.random.default_rng(0))
     legacy_off = []
     rng_l = np.random.default_rng(0)
     # Build a legacy reference with the same host mixture by calling the
     # legacy code path explicitly (vectorized=False).
     from grb_offsets import HOST_MODELS
+
     for name, hp in HOST_MODELS.items():
         r = compute_offsets_population(
-            v, t, weights=w, max_systems=400,
-            M_gal=hp['M_gal'], R_e=hp['R_e'],
-            vectorized=False, use_analytic=True, rng=rng_l)
-        legacy_off.append(r['offsets_kpc'])
+            v,
+            t,
+            weights=w,
+            max_systems=400,
+            M_gal=hp["M_gal"],
+            R_e=hp["R_e"],
+            vectorized=False,
+            use_analytic=True,
+            rng=rng_l,
+        )
+        legacy_off.append(r["offsets_kpc"])
     legacy_arr = np.concatenate(legacy_off)
 
-    mean_v = float(np.mean(mh['mixed_offsets']))
+    mean_v = float(np.mean(mh["mixed_offsets"]))
     mean_l = float(np.mean(legacy_arr))
-    p90_v  = float(np.percentile(mh['mixed_offsets'], 90))
-    p90_l  = float(np.percentile(legacy_arr, 90))
+    p90_v = float(np.percentile(mh["mixed_offsets"], 90))
+    p90_l = float(np.percentile(legacy_arr, 90))
 
     # Means and the 90th percentile must agree to ~25 percent.  This is a
     # bulk-distribution sanity check; the tight per-CDF agreement is in
     # ``test_offsets_vectorized_matches_legacy_ks``.
-    assert abs(mean_v - mean_l) / mean_l < 0.25, (
-        f"mean drift {mean_v:.2f} vs {mean_l:.2f}")
-    assert abs(p90_v - p90_l) / p90_l < 0.25, (
-        f"p90 drift {p90_v:.2f} vs {p90_l:.2f}")
+    assert abs(mean_v - mean_l) / mean_l < 0.25, f"mean drift {mean_v:.2f} vs {mean_l:.2f}"
+    assert abs(p90_v - p90_l) / p90_l < 0.25, f"p90 drift {p90_v:.2f} vs {p90_l:.2f}"

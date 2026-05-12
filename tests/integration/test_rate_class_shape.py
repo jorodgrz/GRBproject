@@ -59,11 +59,13 @@ def _build_setup(bns_a_path):
     )
 
     from astropy.cosmology import Planck15
-    # CLAUDE.md mandate: Planck 2015 (matches COMPAS FastCosmicIntegration).
+
+    # Project cosmology pin: Planck 2015 (Ade et al. 2016, A&A 594, A13;
+    # matches COMPAS FastCosmicIntegration TNG-consistent default).
     assert abs(Planck15.H0.value - 67.74) < 0.01
 
-    from grb_io import load_bns, read_expected_local_rate
     from grb_classify import classify_bns_2024
+    from grb_io import load_bns, read_expected_local_rate
     from grb_physics import remap_ns_masses_double_gaussian
     from grb_rates import calibrate_mean_mass_evolved
 
@@ -72,8 +74,8 @@ def _build_setup(bns_a_path):
     # matches grb_main.ipynb so the sbGRB mask reproduces the cyan curve
     # the production plot actually shows.
     m1, m2 = remap_ns_masses_double_gaussian(
-        bns["m1"].copy(), bns["m2"].copy(),
-        weights=bns["weights"], rng=np.random.default_rng(42))
+        bns["m1"].copy(), bns["m2"].copy(), weights=bns["weights"], rng=np.random.default_rng(42)
+    )
 
     Z = bns["metallicity"]
     delays = bns["delay_time"]
@@ -87,7 +89,11 @@ def _build_setup(bns_a_path):
     return SimpleNamespace(
         fci=fci,
         Planck15=Planck15,
-        Z=Z, delays=delays, w=w, Z_grid=Z_grid, mask=mask,
+        Z=Z,
+        delays=delays,
+        w=w,
+        Z_grid=Z_grid,
+        mask=mask,
         expected_local_rate=read_expected_local_rate(bns_a_path),
         calibrate_mean_mass_evolved=calibrate_mean_mass_evolved,
     )
@@ -100,23 +106,32 @@ def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
     ``mean_mass_evolved`` calibrated against the BNS A pre-tabulated
     local rate so R_ours(z = 0) matches the HDF5 fiducial.
     """
-    redshifts, _, times, time_first_SF, _, _ = (
-        setup.fci.calculate_redshift_related_params(
-            max_redshift=max_redshift, redshift_step=redshift_step,
-            cosmology=setup.Planck15))
+    redshifts, _, times, time_first_SF, _, _ = setup.fci.calculate_redshift_related_params(
+        max_redshift=max_redshift, redshift_step=redshift_step, cosmology=setup.Planck15
+    )
     sfr = setup.fci.find_sfr(redshifts)
     _, _, p_draw = setup.fci.find_metallicity_distribution(
-        redshifts,
-        min_logZ_COMPAS=np.log(setup.Z.min()),
-        max_logZ_COMPAS=np.log(setup.Z.max()))
+        redshifts, min_logZ_COMPAS=np.log(setup.Z.min()), max_logZ_COMPAS=np.log(setup.Z.max())
+    )
     mean_mass, _ = setup.calibrate_mean_mass_evolved(
-        sfr, redshifts, times, time_first_SF, p_draw,
-        setup.Z, setup.delays, setup.w,
-        setup.expected_local_rate, Z_grid=setup.Z_grid)
+        sfr,
+        redshifts,
+        times,
+        time_first_SF,
+        p_draw,
+        setup.Z,
+        setup.delays,
+        setup.w,
+        setup.expected_local_rate,
+        Z_grid=setup.Z_grid,
+    )
     n_formed = sfr / mean_mass
     return SimpleNamespace(
-        redshifts=redshifts, times=times, time_first_SF=time_first_SF,
-        n_formed=n_formed, p_draw=p_draw,
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=time_first_SF,
+        n_formed=n_formed,
+        p_draw=p_draw,
     )
 
 
@@ -131,11 +146,18 @@ def _R_sbgrb(setup, grid, smooth_sigma):
     sub-kernel discretization wobble.
     """
     from grb_rates import compute_merger_rate
+
     return compute_merger_rate(
-        grid.redshifts, grid.times, grid.time_first_SF,
-        grid.n_formed, grid.p_draw,
-        setup.Z[setup.mask], setup.delays[setup.mask], setup.w[setup.mask],
-        Z_grid=setup.Z_grid, smooth_sigma=smooth_sigma,
+        grid.redshifts,
+        grid.times,
+        grid.time_first_SF,
+        grid.n_formed,
+        grid.p_draw,
+        setup.Z[setup.mask],
+        setup.delays[setup.mask],
+        setup.w[setup.mask],
+        Z_grid=setup.Z_grid,
+        smooth_sigma=smooth_sigma,
     )
 
 
@@ -177,10 +199,17 @@ def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
     for dz in (0.01, 0.005):
         grid = _cosmic_grid(setup, redshift_step=dz)
         R_full = compute_merger_rate(
-            grid.redshifts, grid.times, grid.time_first_SF,
-            grid.n_formed, grid.p_draw,
-            setup.Z, setup.delays, setup.w,
-            Z_grid=setup.Z_grid, smooth_sigma=0)
+            grid.redshifts,
+            grid.times,
+            grid.time_first_SF,
+            grid.n_formed,
+            grid.p_draw,
+            setup.Z,
+            setup.delays,
+            setup.w,
+            Z_grid=setup.Z_grid,
+            smooth_sigma=0,
+        )
         rel = abs(R_full[0] / setup.expected_local_rate - 1.0)
         assert rel < 1e-3, (
             f"At dz={dz}, unsmoothed R_full(z=0) = {R_full[0]:.4f} does "
@@ -188,7 +217,8 @@ def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
             f"{setup.expected_local_rate:.4f} (relative {rel * 100:.3f}%); "
             f"calibrate_mean_mass_evolved is no longer producing a sharp "
             f"z=0 anchor.  Check that smooth_sigma=0 is still being "
-            f"passed to its internal compute_merger_rate call.")
+            f"passed to its internal compute_merger_rate call."
+        )
 
 
 @pytest.mark.requires_data
@@ -241,12 +271,9 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
     grid_coarse = _cosmic_grid(setup, redshift_step=0.01)
     R_coarse = _R_sbgrb(setup, grid_coarse, smooth_sigma=30)
 
-    z_p1_c, R_p1_c, _ = _find_extremum(
-        grid_coarse.redshifts, R_coarse, 0.5, 2.5, "max")
-    z_d_c, R_d_c, _ = _find_extremum(
-        grid_coarse.redshifts, R_coarse, 3.0, 5.5, "min")
-    z_p2_c, R_p2_c, _ = _find_extremum(
-        grid_coarse.redshifts, R_coarse, 5.5, 9.0, "max")
+    z_p1_c, R_p1_c, _ = _find_extremum(grid_coarse.redshifts, R_coarse, 0.5, 2.5, "max")
+    z_d_c, R_d_c, _ = _find_extremum(grid_coarse.redshifts, R_coarse, 3.0, 5.5, "min")
+    z_p2_c, R_p2_c, _ = _find_extremum(grid_coarse.redshifts, R_coarse, 5.5, 9.0, "max")
 
     contrast_p1_c = R_p1_c / R_d_c
     contrast_p2_c = R_p2_c / R_d_c
@@ -257,23 +284,22 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
     assert contrast_p1_c > 5.0, (
         f"production cyan curve at dz=0.01 no longer has the expected "
         f"first-peak / dip contrast; got {contrast_p1_c:.2f}x at "
-        f"z_p1={z_p1_c:.2f}, z_d={z_d_c:.2f}.")
+        f"z_p1={z_p1_c:.2f}, z_d={z_d_c:.2f}."
+    )
     assert contrast_p2_c > 2.0, (
         f"production cyan curve at dz=0.01 no longer has the expected "
         f"second-peak / dip contrast; got {contrast_p2_c:.2f}x at "
-        f"z_p2={z_p2_c:.2f}, z_d={z_d_c:.2f}.")
+        f"z_p2={z_p2_c:.2f}, z_d={z_d_c:.2f}."
+    )
 
     grid_fine = _cosmic_grid(setup, redshift_step=0.005)
     # smooth_sigma=60 at dz=0.005 keeps the physical Gaussian kernel
     # width identical to smooth_sigma=30 at dz=0.01 (Delta_z = 0.30).
     R_fine = _R_sbgrb(setup, grid_fine, smooth_sigma=60)
 
-    z_p1_f, R_p1_f, _ = _find_extremum(
-        grid_fine.redshifts, R_fine, 0.5, 2.5, "max")
-    z_d_f, R_d_f, _ = _find_extremum(
-        grid_fine.redshifts, R_fine, 3.0, 5.5, "min")
-    z_p2_f, R_p2_f, _ = _find_extremum(
-        grid_fine.redshifts, R_fine, 5.5, 9.0, "max")
+    z_p1_f, R_p1_f, _ = _find_extremum(grid_fine.redshifts, R_fine, 0.5, 2.5, "max")
+    z_d_f, R_d_f, _ = _find_extremum(grid_fine.redshifts, R_fine, 3.0, 5.5, "min")
+    z_p2_f, R_p2_f, _ = _find_extremum(grid_fine.redshifts, R_fine, 5.5, 9.0, "max")
 
     contrast_p1_f = R_p1_f / R_d_f
     contrast_p2_f = R_p2_f / R_d_f
@@ -285,29 +311,35 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
         f"R(p2)/R(d)={contrast_p2_c:.3f}x  R_d={R_d_c:.3e}"
         f"\n  fine   dz=0.005: z_p1={z_p1_f:.3f} z_d={z_d_f:.3f} "
         f"z_p2={z_p2_f:.3f}  R(p1)/R(d)={contrast_p1_f:.3f}x  "
-        f"R(p2)/R(d)={contrast_p2_f:.3f}x  R_d={R_d_f:.3e}")
+        f"R(p2)/R(d)={contrast_p2_f:.3f}x  R_d={R_d_f:.3e}"
+    )
 
     # Persistence at the fine grid: structure must survive refinement.
     assert contrast_p1_f > 5.0, (
         f"sbGRB dip dissolved at dz=0.005: R_p1/R_d = {contrast_p1_f:.2f}x "
         f"(production threshold > 5x).  The cyan double-peak is binning-"
-        f"sensitive in a way the production curve does not capture.")
+        f"sensitive in a way the production curve does not capture."
+    )
     assert contrast_p2_f > 2.0, (
         f"sbGRB recovery dissolved at dz=0.005: R_p2/R_d = "
-        f"{contrast_p2_f:.2f}x (production threshold > 2x).")
+        f"{contrast_p2_f:.2f}x (production threshold > 2x)."
+    )
 
     # Location stability across binnings.
     assert abs(z_p1_f - z_p1_c) < 0.10, (
         f"sbGRB first-peak shifted by {z_p1_f - z_p1_c:+.4f} between "
-        f"dz=0.01 (z_p1={z_p1_c:.3f}) and dz=0.005 (z_p1={z_p1_f:.3f}).")
+        f"dz=0.01 (z_p1={z_p1_c:.3f}) and dz=0.005 (z_p1={z_p1_f:.3f})."
+    )
     assert abs(z_d_f - z_d_c) < 0.05, (
         f"sbGRB dip shifted by {z_d_f - z_d_c:+.4f} between dz=0.01 "
         f"(z_d={z_d_c:.3f}) and dz=0.005 (z_d={z_d_f:.3f}); a stable "
-        f"physical feature should land within 5 production bins.")
+        f"physical feature should land within 5 production bins."
+    )
     assert abs(z_p2_f - z_p2_c) < 0.10, (
         f"sbGRB second-peak shifted by {z_p2_f - z_p2_c:+.4f} between "
         f"dz=0.01 (z_p2={z_p2_c:.3f}) and dz=0.005 (z_p2={z_p2_f:.3f}); "
-        f"> 0.10 hints at an interpolation artifact in compute_merger_rate.")
+        f"> 0.10 hints at an interpolation artifact in compute_merger_rate."
+    )
 
     # Headline: contrast-ratio invariance under refinement.  If the dip
     # were a binning artifact, its depth relative to the surrounding
@@ -321,11 +353,13 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
         f"sbGRB R_peak1 / R_dip changed by {delta_p1 * 100:+.1f}% "
         f"({contrast_p1_c:.3f} -> {contrast_p1_f:.3f}) between dz=0.01 "
         f"and dz=0.005; > 15% would flag the dip's depth as a binning "
-        f"artifact relative to the surrounding peaks.")
+        f"artifact relative to the surrounding peaks."
+    )
     assert delta_p2 < 0.15, (
         f"sbGRB R_peak2 / R_dip changed by {delta_p2 * 100:+.1f}% "
         f"({contrast_p2_c:.3f} -> {contrast_p2_f:.3f}) between dz=0.01 "
-        f"and dz=0.005.")
+        f"and dz=0.005."
+    )
 
     # Absolute-amplitude invariance.  Only meaningful after the
     # smooth_sigma=0 calibration fix in calibrate_mean_mass_evolved;
@@ -342,10 +376,12 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
         f"(R_dip={R_d_c:.3e}) and dz=0.005 (R_dip={R_d_f:.3e}); pre-fix "
         f"this was 38.9% via the calibrate_mean_mass_evolved boundary-"
         f"smoothing bias.  Verify smooth_sigma=0 is still being passed "
-        f"to its internal compute_merger_rate call.")
+        f"to its internal compute_merger_rate call."
+    )
     assert amp_p2 < 0.10, (
         f"sbGRB R_peak2 drifted by {amp_p2 * 100:+.1f}% between dz=0.01 "
-        f"(R_peak2={R_p2_c:.3e}) and dz=0.005 (R_peak2={R_p2_f:.3e}).")
+        f"(R_peak2={R_p2_c:.3e}) and dz=0.005 (R_peak2={R_p2_f:.3e})."
+    )
 
 
 @pytest.mark.requires_data
@@ -386,15 +422,22 @@ def test_sbGRB_rate_dip_n_eff_above_threshold(bns_a_path):
 
     def _n_eff(z_target):
         wi = per_system_rate_weights(
-            z_target, grid.redshifts, grid.times, grid.time_first_SF,
-            grid.n_formed, grid.p_draw,
-            setup.Z[setup.mask], setup.delays[setup.mask], setup.w[setup.mask],
-            Z_grid=setup.Z_grid)
+            z_target,
+            grid.redshifts,
+            grid.times,
+            grid.time_first_SF,
+            grid.n_formed,
+            grid.p_draw,
+            setup.Z[setup.mask],
+            setup.delays[setup.mask],
+            setup.w[setup.mask],
+            Z_grid=setup.Z_grid,
+        )
         wsum = float(wi.sum())
-        wsum2 = float((wi ** 2).sum())
+        wsum2 = float((wi**2).sum())
         if wsum2 <= 0.0:
             return 0.0
-        return (wsum ** 2) / wsum2
+        return (wsum**2) / wsum2
 
     n_peak1 = _n_eff(z_peak1)
     n_dip = _n_eff(z_dip)
@@ -404,7 +447,8 @@ def test_sbGRB_rate_dip_n_eff_above_threshold(bns_a_path):
     print(
         f"\n[sbGRB + blue KN] N_eff(z={z_peak1:.2f}) = {n_peak1:.1f}, "
         f"N_eff(z={z_dip:.2f}) = {n_dip:.1f}, "
-        f"N_eff(z={z_peak2:.2f}) = {n_peak2:.1f}")
+        f"N_eff(z={z_peak2:.2f}) = {n_peak2:.1f}"
+    )
 
     assert n_dip >= 50.0, (
         f"sbGRB N_eff at z_dip = {z_dip:.2f} is {n_dip:.1f}; below the "
@@ -412,14 +456,17 @@ def test_sbGRB_rate_dip_n_eff_above_threshold(bns_a_path):
         f"feature from STROOPWAFEL sparse-sample bumpiness (BNS A "
         f"baseline ~ 99).  Treat the cyan dip as a sample-starvation "
         f"artifact and either widen the sbGRB class or down-weight the "
-        f"high-z portion of the curve.")
+        f"high-z portion of the curve."
+    )
     assert n_peak1 > n_dip, (
         f"sbGRB N_eff at z_peak1={z_peak1:.2f} ({n_peak1:.1f}) does not "
         f"exceed N_eff at z_dip={z_dip:.2f} ({n_dip:.1f}); the lightest-"
         f"BNS class should have its largest effective contribution near "
-        f"the SFR peak (z ~ 1.5), not at z > 3.")
+        f"the SFR peak (z ~ 1.5), not at z > 3."
+    )
     assert n_peak2 > 0.5 * n_dip, (
         f"sbGRB N_eff at z_peak2={z_peak2:.2f} ({n_peak2:.1f}) is below "
         f"half the dip's N_eff ({n_dip:.1f}); high-z bins should not "
         f"crash relative to the dip if the recovery is a physical "
-        f"feature rather than weight-induced noise.")
+        f"feature rather than weight-induced noise."
+    )

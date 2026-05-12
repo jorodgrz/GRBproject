@@ -53,21 +53,24 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     )
     from astropy.cosmology import Planck15
 
-    from grb_classify import classify_bns_2024, classify_bhns
+    from grb_classify import classify_bhns, classify_bns_2024
     from grb_io import (
-        load_bns_with_channels, load_bns_with_kicks,
+        DEFAULT_BHNS_PATH,
+        DEFAULT_BNS_PATH,
         load_bhns_with_kicks,
+        load_bns_with_channels,
+        load_bns_with_kicks,
         read_expected_local_rate,
         verify_shared_metallicity_prior,
-        DEFAULT_BNS_PATH, DEFAULT_BHNS_PATH,
     )
     from grb_physics import (
-        remap_ns_masses_double_gaussian,
         MISALIGNMENT_SYSTEMATIC_FACTOR,
+        remap_ns_masses_double_gaussian,
     )
     from grb_rates import (
-        compute_merger_rate, calibrate_mean_mass_evolved,
         apply_bhns_misalignment,
+        calibrate_mean_mass_evolved,
+        compute_merger_rate,
     )
 
     # ------------------------------------------------------------------
@@ -75,42 +78,44 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     # ------------------------------------------------------------------
     bns_ch = load_bns_with_channels(path=bns_a_path)
     bns_k = load_bns_with_kicks(path=bns_a_path)
-    bns_ch['m1'], bns_ch['m2'] = remap_ns_masses_double_gaussian(
-        bns_ch['m1'].copy(), bns_ch['m2'].copy(),
-        weights=bns_ch['weights'], rng=np.random.default_rng(42))
-    bns_k['m1'], bns_k['m2'] = bns_ch['m1'], bns_ch['m2']
+    bns_ch["m1"], bns_ch["m2"] = remap_ns_masses_double_gaussian(
+        bns_ch["m1"].copy(),
+        bns_ch["m2"].copy(),
+        weights=bns_ch["weights"],
+        rng=np.random.default_rng(42),
+    )
+    bns_k["m1"], bns_k["m2"] = bns_ch["m1"], bns_ch["m2"]
 
-    m1_bns, m2_bns = bns_ch['m1'], bns_ch['m2']
-    w_bns = bns_ch['weights']
-    Z_bns = bns_ch['metallicity']
-    delay_bns = bns_ch['delay_time']
+    m1_bns, m2_bns = bns_ch["m1"], bns_ch["m2"]
+    w_bns = bns_ch["weights"]
+    Z_bns = bns_ch["metallicity"]
+    delay_bns = bns_ch["delay_time"]
 
     cls24 = classify_bns_2024(m1_bns, m2_bns)
-    sbGRB_blue = cls24['sbGRB + blue KN']
-    lbGRB_hmns = cls24['lbGRB + red KN (HMNS)']
-    lbGRB_disk = cls24['lbGRB + red KN (disk)']
-    bns_faint_lb = cls24['Faint lbGRB']
+    sbGRB_blue = cls24["sbGRB + blue KN"]
+    lbGRB_hmns = cls24["lbGRB + red KN (HMNS)"]
+    lbGRB_disk = cls24["lbGRB + red KN (disk)"]
+    bns_faint_lb = cls24["Faint lbGRB"]
 
     # ------------------------------------------------------------------
     # BHNS load and Foucart 2018 disk-mass classification at a_BH=0.5.
     # ------------------------------------------------------------------
     bhns = load_bhns_with_kicks(path=bhns_a_path)
-    BH, NS_bh = bhns['M_BH'], bhns['M_NS']
-    w_bhns = bhns['weights']
-    Z_bhns = bhns['metallicity']
-    delay_bhns = bhns['delay_time']
+    BH, NS_bh = bhns["M_BH"], bhns["M_NS"]
+    w_bhns = bhns["weights"]
+    Z_bhns = bhns["metallicity"]
+    delay_bhns = bhns["delay_time"]
 
     cbhns = classify_bhns(BH, NS_bh, a_BH=0.5)
-    bhns_no_grb = cbhns['No GRB']
-    bhns_short = cbhns['Short cbGRB']
-    bhns_long = cbhns['Long cbGRB']
+    bhns_no_grb = cbhns["No GRB"]
+    bhns_short = cbhns["Short cbGRB"]
+    bhns_long = cbhns["Long cbGRB"]
 
     # ------------------------------------------------------------------
     # Cosmic integration (notebook Section 4).
     # ------------------------------------------------------------------
-    redshifts, _, times, time_first_SF, _, _ = (
-        fci.calculate_redshift_related_params(
-            max_redshift=10.0, redshift_step=0.01, cosmology=Planck15)
+    redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
+        max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
     )
     sfr = fci.find_sfr(redshifts)
 
@@ -118,18 +123,14 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     # would import the project DEFAULT_BNS_PATH / DEFAULT_BHNS_PATH but
     # the bns_a_path / bhns_a_path fixtures are by construction those
     # defaults, so the call here is just a sanity check.
-    if (bns_a_path == DEFAULT_BNS_PATH
-            and bhns_a_path == DEFAULT_BHNS_PATH):
-        Z_range = verify_shared_metallicity_prior(
-            DEFAULT_BNS_PATH, DEFAULT_BHNS_PATH)
+    if bns_a_path == DEFAULT_BNS_PATH and bhns_a_path == DEFAULT_BHNS_PATH:
+        Z_range = verify_shared_metallicity_prior(DEFAULT_BNS_PATH, DEFAULT_BHNS_PATH)
     else:
-        Z_range = (float(min(Z_bns.min(), Z_bhns.min())),
-                   float(max(Z_bns.max(), Z_bhns.max())))
+        Z_range = (float(min(Z_bns.min(), Z_bhns.min())), float(max(Z_bns.max(), Z_bhns.max())))
 
     _, metallicities, p_draw = fci.find_metallicity_distribution(
-        redshifts,
-        min_logZ_COMPAS=np.log(Z_range[0]),
-        max_logZ_COMPAS=np.log(Z_range[1]))
+        redshifts, min_logZ_COMPAS=np.log(Z_range[0]), max_logZ_COMPAS=np.log(Z_range[1])
+    )
 
     expected_rate_bns = read_expected_local_rate(bns_a_path)
     expected_rate_bhns = read_expected_local_rate(bhns_a_path)
@@ -137,13 +138,29 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     Z_grid_BHNS = np.unique(Z_bhns)
 
     mean_mass_bns, _ = calibrate_mean_mass_evolved(
-        sfr, redshifts, times, time_first_SF, p_draw,
-        Z_bns, delay_bns, w_bns, expected_rate_bns,
-        Z_grid=Z_grid_BNS)
+        sfr,
+        redshifts,
+        times,
+        time_first_SF,
+        p_draw,
+        Z_bns,
+        delay_bns,
+        w_bns,
+        expected_rate_bns,
+        Z_grid=Z_grid_BNS,
+    )
     mean_mass_bhns, _ = calibrate_mean_mass_evolved(
-        sfr, redshifts, times, time_first_SF, p_draw,
-        Z_bhns, delay_bhns, w_bhns, expected_rate_bhns,
-        Z_grid=Z_grid_BHNS)
+        sfr,
+        redshifts,
+        times,
+        time_first_SF,
+        p_draw,
+        Z_bhns,
+        delay_bhns,
+        w_bhns,
+        expected_rate_bhns,
+        Z_grid=Z_grid_BHNS,
+    )
     n_formed_BNS = sfr / mean_mass_bns
     n_formed_BHNS = sfr / mean_mass_bhns
 
@@ -151,67 +168,90 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     # Per-class BNS rates (notebook Section 7).
     # ------------------------------------------------------------------
     bns_class_masks = {
-        'sbGRB + blue KN': sbGRB_blue,
-        'lbGRB (HMNS)':    lbGRB_hmns,
-        'lbGRB (disk)':    lbGRB_disk,
-        'Faint lbGRB':     bns_faint_lb,
-        'All BNS':         np.ones(len(delay_bns), dtype=bool),
+        "sbGRB + blue KN": sbGRB_blue,
+        "lbGRB (HMNS)": lbGRB_hmns,
+        "lbGRB (disk)": lbGRB_disk,
+        "Faint lbGRB": bns_faint_lb,
+        "All BNS": np.ones(len(delay_bns), dtype=bool),
     }
     merger_rates_BNS = {
         label: compute_merger_rate(
-            redshifts, times, time_first_SF, n_formed_BNS, p_draw,
-            Z_bns[mask], delay_bns[mask], w_bns[mask],
-            Z_grid=Z_grid_BNS)
+            redshifts,
+            times,
+            time_first_SF,
+            n_formed_BNS,
+            p_draw,
+            Z_bns[mask],
+            delay_bns[mask],
+            w_bns[mask],
+            Z_grid=Z_grid_BNS,
+        )
         for label, mask in bns_class_masks.items()
     }
 
     # ------------------------------------------------------------------
     # All-BHNS rate at the fiducial a_BH = 0.5 (notebook Section 8).
     # apply_bhns_misalignment folds in the population-averaged spin-orbit
-    # misalignment factor (CLAUDE.md: rate-level, not sample-level).
+    # misalignment factor (Fragos et al. 2010; Kawaguchi et al. 2015):
+    # the correction is rate-level, not sample-level.
     # ------------------------------------------------------------------
     rate_bhns_all = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed_BHNS, p_draw,
-        Z_bhns, delay_bhns, w_bhns, Z_grid=Z_grid_BHNS)
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed_BHNS,
+        p_draw,
+        Z_bhns,
+        delay_bhns,
+        w_bhns,
+        Z_grid=Z_grid_BHNS,
+    )
     rate_bhns_all_misaligned = apply_bhns_misalignment(rate_bhns_all)
 
     rate_bhns_long = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed_BHNS, p_draw,
-        Z_bhns[bhns_long], delay_bhns[bhns_long], w_bhns[bhns_long],
-        Z_grid=Z_grid_BHNS)
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed_BHNS,
+        p_draw,
+        Z_bhns[bhns_long],
+        delay_bhns[bhns_long],
+        w_bhns[bhns_long],
+        Z_grid=Z_grid_BHNS,
+    )
 
     iz0 = int(np.argmin(np.abs(redshifts)))
 
     return {
-        'redshifts':           redshifts,
-        'iz0':                 iz0,
-        'merger_rates_BNS':    merger_rates_BNS,
-        'rate_bhns_all':       rate_bhns_all,
-        'rate_bhns_all_misaligned': rate_bhns_all_misaligned,
-        'rate_bhns_long':      rate_bhns_long,
-        'misalignment_factor': MISALIGNMENT_SYSTEMATIC_FACTOR,
-        'cls24_masks':         {k: v for k, v in cls24.items()
-                                if isinstance(v, np.ndarray)
-                                and v.dtype == bool},
-        'bhns_class_masks':    {
-            'No GRB':      bhns_no_grb,
-            'Short cbGRB': bhns_short,
-            'Long cbGRB':  bhns_long,
+        "redshifts": redshifts,
+        "iz0": iz0,
+        "merger_rates_BNS": merger_rates_BNS,
+        "rate_bhns_all": rate_bhns_all,
+        "rate_bhns_all_misaligned": rate_bhns_all_misaligned,
+        "rate_bhns_long": rate_bhns_long,
+        "misalignment_factor": MISALIGNMENT_SYSTEMATIC_FACTOR,
+        "cls24_masks": {
+            k: v for k, v in cls24.items() if isinstance(v, np.ndarray) and v.dtype == bool
         },
-        'w_bns':               w_bns,
-        'w_bhns':              w_bhns,
-        'delay_bns':           delay_bns,
-        'delay_bhns':          delay_bhns,
-        'v_sys_bns':           bns_k['v_sys'],
-        'v_sys_bhns':          bhns['v_sys'],
-        'm1_bns':              m1_bns,
-        'm2_bns':              m2_bns,
-        'BH':                  BH,
-        'NS_bh':               NS_bh,
-        'sbGRB_blue':          sbGRB_blue,
-        'lbGRB_hmns':          lbGRB_hmns,
-        'expected_rate_bns':   expected_rate_bns,
-        'expected_rate_bhns':  expected_rate_bhns,
+        "bhns_class_masks": {
+            "No GRB": bhns_no_grb,
+            "Short cbGRB": bhns_short,
+            "Long cbGRB": bhns_long,
+        },
+        "w_bns": w_bns,
+        "w_bhns": w_bhns,
+        "delay_bns": delay_bns,
+        "delay_bhns": delay_bhns,
+        "v_sys_bns": bns_k["v_sys"],
+        "v_sys_bhns": bhns["v_sys"],
+        "m1_bns": m1_bns,
+        "m2_bns": m2_bns,
+        "BH": BH,
+        "NS_bh": NS_bh,
+        "sbGRB_blue": sbGRB_blue,
+        "lbGRB_hmns": lbGRB_hmns,
+        "expected_rate_bns": expected_rate_bns,
+        "expected_rate_bhns": expected_rate_bhns,
     }
 
 
@@ -238,14 +278,15 @@ def test_bns_modelA_R0_within_LIGO_O4_BNS_band(notebook_pipeline):
     Loose envelope; surfaces only catastrophic miscalibration.
     """
     pipe = notebook_pipeline
-    R0 = float(pipe['merger_rates_BNS']['All BNS'][pipe['iz0']])
+    R0 = float(pipe["merger_rates_BNS"]["All BNS"][pipe["iz0"]])
     assert R0 > 0
     lo, hi = 10.0, 1700.0
     assert lo <= R0 <= hi, (
         f"All-BNS R(z=0) = {R0:.2f} Gpc^-3 yr^-1 is outside the "
         f"LIGO/Virgo GWTC-3 envelope [{lo}, {hi}] (Abbott+ 2023).  "
         f"Either the calibration broke (check w_000 anchor) or the "
-        f"sample is no longer Model A.")
+        f"sample is no longer Model A."
+    )
 
 
 @pytest.mark.requires_data
@@ -264,13 +305,13 @@ def test_bhns_modelA_R0_within_LIGO_O4_BHNS_band(notebook_pipeline):
     correction (Fragos et al. 2010, Kawaguchi et al. 2015), the
     notebook-printed value should sit at the low end of the LIGO band.
 
-    The 50 percent misalignment correction is rate-level, not
-    sample-level (CLAUDE.md gotcha).  Any analysis that double-counts
-    by additionally dropping systems silently halves the BHNS rate
-    twice.
+    The 50 percent misalignment correction (``apply_bhns_misalignment``
+    in ``grb_rates.py``) is rate-level, not sample-level.  Any analysis
+    that double-counts by additionally dropping systems from the sample
+    silently halves the BHNS rate twice.
     """
     pipe = notebook_pipeline
-    R0 = float(pipe['rate_bhns_all_misaligned'][pipe['iz0']])
+    R0 = float(pipe["rate_bhns_all_misaligned"][pipe["iz0"]])
     assert R0 > 0
     # Drop the lower edge to 1.0 to allow Model A's intrinsically low
     # BHNS rate (~few Gpc^-3 yr^-1 before misalignment, ~1-3 after) to
@@ -281,7 +322,8 @@ def test_bhns_modelA_R0_within_LIGO_O4_BHNS_band(notebook_pipeline):
         f"{pipe['misalignment_factor']}) = {R0:.3f} Gpc^-3 yr^-1 is "
         f"outside [{lo}, {hi}] (LIGO/Virgo GWTC-3 90 percent CR).  "
         f"Verify both the calibration anchor and that "
-        f"apply_bhns_misalignment was applied at the rate level only.")
+        f"apply_bhns_misalignment was applied at the rate level only."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -310,14 +352,14 @@ def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
     A, well inside the envelope.
 
     Cited assumption: 100 percent jet launching above the disk-mass
-    threshold (Gottlieb 2023; CLAUDE.md "All disk-mass GRB rates are
-    upper bounds").  Real beamed rates are at most this value.
+    threshold (Gottlieb 2023); all disk-mass GRB rates are therefore
+    upper bounds, and real beamed rates are at most this value.
     """
-    from grb_rates import beamed_rate, CLASS_THETA_J
+    from grb_rates import CLASS_THETA_J, beamed_rate
 
     pipe = notebook_pipeline
-    R_sb_int = float(pipe['merger_rates_BNS']['sbGRB + blue KN'][pipe['iz0']])
-    theta_fid = CLASS_THETA_J['sbGRB']['fid']
+    R_sb_int = float(pipe["merger_rates_BNS"]["sbGRB + blue KN"][pipe["iz0"]])
+    theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
     R_sb_beamed = float(beamed_rate(R_sb_int, theta_fid))
 
     # Combined union envelope of WP15, Ghirlanda 2016, Colombo 2022.
@@ -331,7 +373,8 @@ def test_bns_beamed_sbgrb_in_observed_sgrb_band(notebook_pipeline):
         f"= {theta_fid} deg) is outside the observed sGRB envelope "
         f"[{lo}, {hi}] from WP15 / Ghirlanda 2016 / Colombo 2022.  "
         f"Either the intrinsic sbGRB rate broke or the beaming "
-        f"convention drifted from f_beam = 1 - cos(theta_j).")
+        f"convention drifted from f_beam = 1 - cos(theta_j)."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -353,18 +396,16 @@ def test_class_fractions_sum_to_unity(notebook_pipeline):
     docstring).
     """
     pipe = notebook_pipeline
-    w = pipe['w_bns']
-    masks = pipe['cls24_masks']
-    fractions = {
-        label: float((w[m] / w.sum()).sum())
-        for label, m in masks.items()
-    }
+    w = pipe["w_bns"]
+    masks = pipe["cls24_masks"]
+    fractions = {label: float((w[m] / w.sum()).sum()) for label, m in masks.items()}
     total = sum(fractions.values())
     assert total == pytest.approx(1.0, abs=1e-9), (
-        f"Gottlieb (2024) class fractions sum to {total}, not 1.  "
-        f"Per-class breakdown: {fractions}")
+        f"Gottlieb (2024) class fractions sum to {total}, not 1.  Per-class breakdown: {fractions}"
+    )
     assert all(f >= 0.0 for f in fractions.values()), (
-        f"Negative class fraction encountered: {fractions}")
+        f"Negative class fraction encountered: {fractions}"
+    )
 
 
 @pytest.mark.requires_data
@@ -387,15 +428,16 @@ def test_class_fractions_dominated_by_HMNS_for_modelA(notebook_pipeline):
     the COMPAS sample shifted from Model A.
     """
     pipe = notebook_pipeline
-    w = pipe['w_bns']
-    sb = pipe['sbGRB_blue']
-    hmns = pipe['lbGRB_hmns']
+    w = pipe["w_bns"]
+    sb = pipe["sbGRB_blue"]
+    hmns = pipe["lbGRB_hmns"]
     f_hmns_engine = float((w[sb | hmns] / w.sum()).sum())
     assert f_hmns_engine > 0.50, (
         f"HMNS-engine fraction (sbGRB + lbGRB HMNS) = "
         f"{f_hmns_engine:.3f} is below the 0.50 threshold expected "
         f"for Model A + Alsing remap from Gottlieb (2024) Fig. 3.  "
-        f"Verify the Alsing NS remap is applied and hmns_factor = 1.2.")
+        f"Verify the Alsing NS remap is applied and hmns_factor = 1.2."
+    )
 
 
 @pytest.mark.requires_data
@@ -417,15 +459,16 @@ def test_bhns_long_cbgrb_fraction_matches_gottlieb_2023_band(notebook_pipeline):
     Foucart formula clipped everything.
     """
     pipe = notebook_pipeline
-    w = pipe['w_bhns']
-    long_mask = pipe['bhns_class_masks']['Long cbGRB']
+    w = pipe["w_bhns"]
+    long_mask = pipe["bhns_class_masks"]["Long cbGRB"]
     f_long = float((w[long_mask] / w.sum()).sum())
     lo, hi = 0.001, 0.30
     assert lo <= f_long <= hi, (
         f"BHNS Long cbGRB fraction at a_BH=0.5 = {f_long:.4f} sits "
         f"outside the Gottlieb (2023) Sec. 4 band [{lo}, {hi}].  "
         f"Check MDISK_LONG, the Foucart 2018 disk-mass formula, and "
-        f"the BH-spin assumption.")
+        f"the BH-spin assumption."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -463,31 +506,33 @@ def test_wanderman_piran_2015_chi2_red_in_baseline_band(notebook_pipeline):
     Reference: Wanderman and Piran (2015) MNRAS 448, 3026, Eq. (9);
     grb_rates.wanderman_piran_2015_Rz; notebook ``rate_beaming_comparison`` panel 3.
     """
-    from grb_rates import beamed_rate, CLASS_THETA_J, wanderman_piran_2015_Rz
+    from grb_rates import CLASS_THETA_J, beamed_rate, wanderman_piran_2015_Rz
 
     pipe = notebook_pipeline
-    redshifts = pipe['redshifts']
+    redshifts = pipe["redshifts"]
     z_mask = redshifts <= 5.0
     z_plot = redshifts[z_mask]
     wp15_Rz = wanderman_piran_2015_Rz(z_plot)
-    theta_fid = CLASS_THETA_J['sbGRB']['fid']
+    theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
 
-    R_bns_all_z = pipe['merger_rates_BNS']['All BNS']
+    R_bns_all_z = pipe["merger_rates_BNS"]["All BNS"]
     R_bns_beamed_z = beamed_rate(R_bns_all_z, theta_fid)
-    norm_factor = wp15_Rz['R_best'][0] / max(R_bns_beamed_z[0], 1e-30)
+    norm_factor = wp15_Rz["R_best"][0] / max(R_bns_beamed_z[0], 1e-30)
 
     residual_z = z_plot[(z_plot > 0.1) & (z_plot < 3.0)]
-    r_model_norm = np.interp(residual_z, z_plot,
-                             R_bns_beamed_z[z_mask] * norm_factor)
-    r_wp15_norm = np.interp(residual_z, z_plot, wp15_Rz['R_best'])
-    sigma_wp15 = 0.5 * (np.interp(residual_z, z_plot, wp15_Rz['R_hi'])
-                        - np.interp(residual_z, z_plot, wp15_Rz['R_lo']))
-    chi2_red = float(np.sum(((r_model_norm - r_wp15_norm) / sigma_wp15) ** 2)
-                     / max(1, len(residual_z) - 1))
+    r_model_norm = np.interp(residual_z, z_plot, R_bns_beamed_z[z_mask] * norm_factor)
+    r_wp15_norm = np.interp(residual_z, z_plot, wp15_Rz["R_best"])
+    sigma_wp15 = 0.5 * (
+        np.interp(residual_z, z_plot, wp15_Rz["R_hi"])
+        - np.interp(residual_z, z_plot, wp15_Rz["R_lo"])
+    )
+    chi2_red = float(
+        np.sum(((r_model_norm - r_wp15_norm) / sigma_wp15) ** 2) / max(1, len(residual_z) - 1)
+    )
 
     assert np.isfinite(chi2_red), (
-        f"chi^2_red = {chi2_red} is not finite; check sigma_wp15 "
-        f"computation and norm_factor.")
+        f"chi^2_red = {chi2_red} is not finite; check sigma_wp15 computation and norm_factor."
+    )
     # Empirical baseline: notebook prints chi^2_red ~ 1.7e5 for Model A
     # BNS at the documented Section 10 settings.  Pin to one order of
     # magnitude either side so a structural drift trips the test but
@@ -499,7 +544,8 @@ def test_wanderman_piran_2015_chi2_red_in_baseline_band(notebook_pipeline):
         f"{hi:.0e}].  The notebook caption already documents that this "
         f"is an order-of-magnitude statistic; an order-of-magnitude "
         f"drift here signals a real shape change in the rate "
-        f"convolution.")
+        f"convolution."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -529,22 +575,22 @@ def test_offset_cdf_ks_pvalue_lbgrb_above_threshold(notebook_pipeline):
     from scipy.stats import ks_2samp
 
     from grb_offsets import (
-        compute_offsets_mixed_hosts,
         OBSERVED_SGRB_OFFSETS_KPC,
+        compute_offsets_mixed_hosts,
     )
 
     pipe = notebook_pipeline
-    mask = pipe['lbGRB_hmns']
+    mask = pipe["lbGRB_hmns"]
     if mask.sum() < 100:
         pytest.skip("not enough lbGRB (HMNS) systems to KS-test")
 
     res = compute_offsets_mixed_hosts(
-        pipe['v_sys_bns'][mask],
-        pipe['delay_bns'][mask],
-        weights=pipe['w_bns'][mask],
+        pipe["v_sys_bns"][mask],
+        pipe["delay_bns"][mask],
+        weights=pipe["w_bns"][mask],
         max_systems=20000,
     )
-    finite = res['mixed_offsets'][np.isfinite(res['mixed_offsets'])]
+    finite = res["mixed_offsets"][np.isfinite(res["mixed_offsets"])]
     if finite.size < 10:
         pytest.skip("offset integration produced too few finite samples")
 
@@ -554,11 +600,12 @@ def test_offset_cdf_ks_pvalue_lbgrb_above_threshold(notebook_pipeline):
         f"2013 sample = {ks.pvalue:.4f} (statistic = {ks.statistic:.3f}) "
         f"is below the 0.01 consistency threshold.  Check the host "
         f"mixture (HOST_MODELS), Hernquist scale radius, or the "
-        f"v_sys distribution for drift.")
+        f"v_sys distribution for drift."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
-# EOS sweep coherence (Bauswein 2013, CLAUDE.md EOS invariant).
+# EOS sweep coherence (Bauswein et al. 2013, PRL 111, 131101).
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_data
 def test_eos_sensitivity_M_thresh_moves_with_M_TOV(notebook_pipeline):
@@ -586,39 +633,43 @@ def test_eos_sensitivity_M_thresh_moves_with_M_TOV(notebook_pipeline):
     (validates the monotonicity of the sweep).
 
     Reference: Bauswein et al. (2013) PRL 111, 131101 Table I;
-    grb_rates.compute_eos_sensitivity; CLAUDE.md "EOS sweep coherence"
-    invariant.
+    ``grb_rates.compute_eos_sensitivity`` and
+    ``grb_classify.classify_bns_2024`` jointly enforce the EOS-sweep
+    coherence (M_thresh = k * M_TOV with k held fixed at K_THRESH_DEFAULT).
     """
     from grb_physics import EOS_MODELS
     from grb_rates import compute_eos_sensitivity
 
     pipe = notebook_pipeline
-    eos_table = compute_eos_sensitivity(
-        pipe['m1_bns'], pipe['m2_bns'], pipe['w_bns'])
+    eos_table = compute_eos_sensitivity(pipe["m1_bns"], pipe["m2_bns"], pipe["w_bns"])
 
     # M_thresh coupling: Delta M_thresh = K * Delta M_TOV.
-    m_thresh_sfho = float(eos_table.loc['SFHo', 'M_thresh'])
-    m_thresh_dd2 = float(eos_table.loc['DD2', 'M_thresh'])
+    m_thresh_sfho = float(eos_table.loc["SFHo", "M_thresh"])
+    m_thresh_dd2 = float(eos_table.loc["DD2", "M_thresh"])
     delta = m_thresh_dd2 - m_thresh_sfho
-    delta_expected = 1.27 * (EOS_MODELS['DD2']['M_TOV']
-                             - EOS_MODELS['SFHo']['M_TOV'])
+    delta_expected = 1.27 * (EOS_MODELS["DD2"]["M_TOV"] - EOS_MODELS["SFHo"]["M_TOV"])
     assert delta == pytest.approx(delta_expected, rel=1e-6), (
         f"M_thresh shift across EOSs = {delta:.4f} Msun does not match "
         f"k * Delta M_TOV = 1.27 * "
         f"({EOS_MODELS['DD2']['M_TOV']} - {EOS_MODELS['SFHo']['M_TOV']}) "
-        f"= {delta_expected:.4f}.  EOS sweep coherence invariant broken.")
+        f"= {delta_expected:.4f}.  EOS sweep coherence invariant broken."
+    )
     assert delta >= 0.40, (
         f"M_thresh shift across SFHo -> DD2 = {delta:.3f} Msun is "
         f"below the expected 0.4 Msun band; either the EOS table or "
-        f"the K_THRESH_DEFAULT coupling regressed.")
+        f"the K_THRESH_DEFAULT coupling regressed."
+    )
 
     # Monotonicity of prompt-collapse fraction.
-    f_prompt_sfho = float(eos_table.loc['SFHo', 'lbGRB + red KN (disk)']
-                          + eos_table.loc['SFHo', 'Faint lbGRB'])
-    f_prompt_dd2 = float(eos_table.loc['DD2', 'lbGRB + red KN (disk)']
-                         + eos_table.loc['DD2', 'Faint lbGRB'])
+    f_prompt_sfho = float(
+        eos_table.loc["SFHo", "lbGRB + red KN (disk)"] + eos_table.loc["SFHo", "Faint lbGRB"]
+    )
+    f_prompt_dd2 = float(
+        eos_table.loc["DD2", "lbGRB + red KN (disk)"] + eos_table.loc["DD2", "Faint lbGRB"]
+    )
     assert f_prompt_sfho > f_prompt_dd2, (
         f"Prompt-collapse fraction at SFHo ({f_prompt_sfho:.4f}) is "
         f"not greater than at DD2 ({f_prompt_dd2:.4f}), violating the "
         f"Bauswein (2013) expectation that softer EOSs (lower M_TOV "
-        f"-> lower M_thresh) prompt-collapse more often.")
+        f"-> lower M_thresh) prompt-collapse more often."
+    )

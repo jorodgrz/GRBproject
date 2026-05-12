@@ -1,13 +1,11 @@
 """Strict literature-anchor tests for `grb_*.py` modules.
 
 Each test pins a numerical constant or a function output to the
-corresponding paper in ``Papers/``.  The user-selected policy
-(``strict_paper``, council 2026-05-08) is to flag any in-code value
-that lies outside the paper-quoted central plus uncertainty band:
-documented heuristics that drift outside their cited bounds fail this
-suite even when the docstring rationalizes them.  Failures here are
-not regressions; they are scientific discrepancies that should be
-resolved in a separate change.
+corresponding paper in ``Papers/``.  Policy (``strict_paper``): any
+in-code value that lies outside the paper-quoted central plus
+uncertainty band fails this suite even when the docstring rationalizes
+it.  Failures here are not regressions; they are scientific
+discrepancies that should be resolved in a separate change.
 
 Each test docstring states paper, equation or table number, and the
 exact number being pinned, so the failure message is actionable.
@@ -59,6 +57,7 @@ def test_bauswein_2013_prompt_collapse_k_ratio_in_published_band():
     the test fails.
     """
     from grb_physics import K_THRESH_DEFAULT
+
     assert 1.30 <= K_THRESH_DEFAULT <= 1.70, (
         f"K_THRESH_DEFAULT = {K_THRESH_DEFAULT} is outside the Bauswein "
         f"(2013) PRL 111, 131101 prompt-collapse band [1.30, 1.70].  "
@@ -69,16 +68,19 @@ def test_bauswein_2013_prompt_collapse_k_ratio_in_published_band():
     )
 
 
-@pytest.mark.parametrize("eos_name, k_min, k_max", [
-    # Bauswein (2013) Table I quotes EOS-dependent k = M_thresh / M_TOV.
-    # APR4 (soft):  k ~ 1.31; SFHo:  k ~ 1.26; LS220: k ~ 1.33; DD2 (stiff): k ~ 1.38.
-    # Wider Bauswein (2013) survey band [1.30, 1.70]; we use [1.20, 1.70] here
-    # because SFHo sits at the lower edge per Bauswein et al. (2020) re-analysis.
-    ("APR4", 1.20, 1.70),
-    ("SFHo", 1.20, 1.70),
-    ("LS220", 1.20, 1.70),
-    ("DD2", 1.20, 1.70),
-])
+@pytest.mark.parametrize(
+    "eos_name, k_min, k_max",
+    [
+        # Bauswein (2013) Table I quotes EOS-dependent k = M_thresh / M_TOV.
+        # APR4 (soft):  k ~ 1.31; SFHo:  k ~ 1.26; LS220: k ~ 1.33; DD2 (stiff): k ~ 1.38.
+        # Wider Bauswein (2013) survey band [1.30, 1.70]; we use [1.20, 1.70] here
+        # because SFHo sits at the lower edge per Bauswein et al. (2020) re-analysis.
+        ("APR4", 1.20, 1.70),
+        ("SFHo", 1.20, 1.70),
+        ("LS220", 1.20, 1.70),
+        ("DD2", 1.20, 1.70),
+    ],
+)
 def test_eos_models_M_crit_over_M_TOV_in_bauswein_band(eos_name, k_min, k_max):
     """`EOS_MODELS[eos]['M_crit'] / M_TOV` must satisfy Bauswein (2013) k in [1.20, 1.70].
 
@@ -89,8 +91,9 @@ def test_eos_models_M_crit_over_M_TOV_in_bauswein_band(eos_name, k_min, k_max):
     SFHo as a false positive.
     """
     from grb_physics import EOS_MODELS
+
     eos = EOS_MODELS[eos_name]
-    k = eos['M_crit'] / eos['M_TOV']
+    k = eos["M_crit"] / eos["M_TOV"]
     assert k_min <= k <= k_max, (
         f"EOS_MODELS[{eos_name!r}] gives M_crit/M_TOV = {k:.3f} = "
         f"{eos['M_crit']}/{eos['M_TOV']}; Bauswein (2013) Table I "
@@ -102,24 +105,28 @@ def test_eos_models_M_crit_over_M_TOV_in_bauswein_band(eos_name, k_min, k_max):
 # Read, Lackey, Owen, Friedman (2009) PRD 79, 124032 [Papers/Read_2009.pdf]
 # EOS table III: NS radius at 1.4 Msun and maximum mass.
 # ─────────────────────────────────────────────────────────────────────
-@pytest.mark.parametrize("eos_name, R14_central, R14_tol_km, MTOV_central, MTOV_tol_Msun", [
-    # APR4 (Akmal-Pandharipande-Ravenhall): Read (2009) Table III gives
-    # R_1.4 ~ 11.4 km, M_TOV ~ 2.20 Msun.  Project value 11.1 km, M_TOV
-    # 2.20 Msun; allow 0.5 km / 0.1 Msun band.
-    ("APR4",  11.30, 0.50, 2.20, 0.10),
-    # SFHo (Steiner, Hempel, Fischer 2013): Bauswein (2013) Table I and
-    # Koppel (2019) Table 1 give R_max ~ 10.34 km but R_1.4 ~ 11.9 km
-    # (less compact than R at the maximum mass); M_TOV ~ 2.06.
-    ("SFHo",  11.90, 0.50, 2.06, 0.10),
-    # LS220 (Lattimer-Swesty 220): Bauswein (2013) Table I; widely
-    # tabulated R_1.4 ~ 12.7, M_TOV ~ 2.04.
-    ("LS220", 12.70, 0.60, 2.04, 0.10),
-    # DD2 (Typel et al. 2010): Bauswein (2013), Bauswein (2019/2020)
-    # give R_1.4 ~ 13.2 km, M_TOV ~ 2.42 Msun.
-    ("DD2",   13.20, 0.50, 2.42, 0.10),
-])
+@pytest.mark.parametrize(
+    "eos_name, R14_central, R14_tol_km, MTOV_central, MTOV_tol_Msun",
+    [
+        # APR4 (Akmal-Pandharipande-Ravenhall): Read (2009) Table III gives
+        # R_1.4 ~ 11.4 km, M_TOV ~ 2.20 Msun.  Project value 11.1 km, M_TOV
+        # 2.20 Msun; allow 0.5 km / 0.1 Msun band.
+        ("APR4", 11.30, 0.50, 2.20, 0.10),
+        # SFHo (Steiner, Hempel, Fischer 2013): Bauswein (2013) Table I and
+        # Koppel (2019) Table 1 give R_max ~ 10.34 km but R_1.4 ~ 11.9 km
+        # (less compact than R at the maximum mass); M_TOV ~ 2.06.
+        ("SFHo", 11.90, 0.50, 2.06, 0.10),
+        # LS220 (Lattimer-Swesty 220): Bauswein (2013) Table I; widely
+        # tabulated R_1.4 ~ 12.7, M_TOV ~ 2.04.
+        ("LS220", 12.70, 0.60, 2.04, 0.10),
+        # DD2 (Typel et al. 2010): Bauswein (2013), Bauswein (2019/2020)
+        # give R_1.4 ~ 13.2 km, M_TOV ~ 2.42 Msun.
+        ("DD2", 13.20, 0.50, 2.42, 0.10),
+    ],
+)
 def test_eos_models_R14_and_MTOV_against_read_2009_table_III(
-        eos_name, R14_central, R14_tol_km, MTOV_central, MTOV_tol_Msun):
+    eos_name, R14_central, R14_tol_km, MTOV_central, MTOV_tol_Msun
+):
     """Strict pin of `EOS_MODELS[eos]` to the Read (2009) Table III ranges.
 
     Read, Lackey, Owen and Friedman (2009) PRD 79, 124032 Table III
@@ -137,13 +144,14 @@ def test_eos_models_R14_and_MTOV_against_read_2009_table_III(
     error in `EOS_MODELS` or a change in the canonical reference.
     """
     from grb_physics import EOS_MODELS
+
     eos = EOS_MODELS[eos_name]
-    assert abs(eos['R_1p4'] - R14_central) <= R14_tol_km, (
+    assert abs(eos["R_1p4"] - R14_central) <= R14_tol_km, (
         f"EOS_MODELS[{eos_name!r}]['R_1p4'] = {eos['R_1p4']} km is "
         f"more than {R14_tol_km} km from Read (2009)/Bauswein (2013) "
         f"central R_1.4 = {R14_central} km."
     )
-    assert abs(eos['M_TOV'] - MTOV_central) <= MTOV_tol_Msun, (
+    assert abs(eos["M_TOV"] - MTOV_central) <= MTOV_tol_Msun, (
         f"EOS_MODELS[{eos_name!r}]['M_TOV'] = {eos['M_TOV']} Msun is "
         f"more than {MTOV_tol_Msun} Msun from Read (2009)/Bauswein (2013) "
         f"central M_TOV = {MTOV_central} Msun."
@@ -168,6 +176,7 @@ def test_raaijmakers_2021_M_TOV_inside_combined_posterior():
     Allowed band conservative wrt the looser CS posterior: [1.95, 2.40].
     """
     from grb_physics import M_TOV
+
     assert 1.95 <= M_TOV <= 2.40, (
         f"M_TOV = {M_TOV} Msun is outside the Raaijmakers (2021) "
         f"NICER + GW + KN combined posterior band [1.95, 2.40] Msun "
@@ -196,7 +205,8 @@ def test_ns_baryon_mass_matches_lattimer_prakash_eq56(M_g):
     pins `ns_baryon_mass` to the formula.
     """
     from grb_physics import ns_baryon_mass
-    expected = M_g + 0.080 * M_g ** 2
+
+    expected = M_g + 0.080 * M_g**2
     got = float(ns_baryon_mass(M_g))
     assert got == pytest.approx(expected, rel=1e-12), (
         f"ns_baryon_mass({M_g}) = {got} != Lattimer-Prakash (2001) "
@@ -227,10 +237,15 @@ def test_alsing_2018_double_gaussian_constants_match_table3():
     centers, 0.05 Msun for widths, and 0.05 for weights.
     """
     from grb_physics import (
-        NS_REMAP_W1, NS_REMAP_MU1, NS_REMAP_SIG1,
-        NS_REMAP_W2, NS_REMAP_MU2, NS_REMAP_SIG2,
         NS_REMAP_M_MIN,
+        NS_REMAP_MU1,
+        NS_REMAP_MU2,
+        NS_REMAP_SIG1,
+        NS_REMAP_SIG2,
+        NS_REMAP_W1,
+        NS_REMAP_W2,
     )
+
     assert abs(NS_REMAP_W1 - 0.66) <= 0.05, NS_REMAP_W1
     assert abs(NS_REMAP_MU1 - 1.34) <= 0.02, NS_REMAP_MU1
     assert abs(NS_REMAP_SIG1 - 0.07) <= 0.05, NS_REMAP_SIG1
@@ -273,7 +288,7 @@ def test_remap_closes_fryer_rapid_gap_in_1p65_to_1p80_msun():
     m_high = rng.uniform(1.80, 2.20, size=n_high)
     m_raw = np.concatenate([m_low, m_high])
     m1_raw = m_raw[: len(m_raw) // 2]
-    m2_raw = m_raw[len(m_raw) // 2:]
+    m2_raw = m_raw[len(m_raw) // 2 :]
 
     n_pair = min(m1_raw.size, m2_raw.size)
     m1_raw = m1_raw[:n_pair]
@@ -281,14 +296,16 @@ def test_remap_closes_fryer_rapid_gap_in_1p65_to_1p80_msun():
     m1_raw, m2_raw = np.maximum(m1_raw, m2_raw), np.minimum(m1_raw, m2_raw)
 
     m1, m2 = remap_ns_masses_double_gaussian(
-        m1_raw.copy(), m2_raw.copy(),
-        weights=np.ones(n_pair), rng=rng,
+        m1_raw.copy(),
+        m2_raw.copy(),
+        weights=np.ones(n_pair),
+        rng=rng,
     )
 
-    raw_in_gap = ((m1_raw >= 1.65) & (m1_raw <= 1.80)).sum() + \
-                 ((m2_raw >= 1.65) & (m2_raw <= 1.80)).sum()
-    new_in_gap = ((m1 >= 1.65) & (m1 <= 1.80)).sum() + \
-                 ((m2 >= 1.65) & (m2 <= 1.80)).sum()
+    raw_in_gap = ((m1_raw >= 1.65) & (m1_raw <= 1.80)).sum() + (
+        (m2_raw >= 1.65) & (m2_raw <= 1.80)
+    ).sum()
+    new_in_gap = ((m1 >= 1.65) & (m1 <= 1.80)).sum() + ((m2 >= 1.65) & (m2 <= 1.80)).sum()
 
     assert raw_in_gap == 0, (
         f"Synthetic Fryer-rapid input has {raw_in_gap} NSs in the "
@@ -315,23 +332,20 @@ def test_foucart_2018_eq4_coefficients_match_paper():
 
     as the rms-minimizing fit to 75 NR simulations spanning Q in [1, 7],
     chi_BH in [-0.5, 0.97], C_NS in [0.13, 0.182].  The
-    `test_foucart_remnant_matches_eq4_by_hand` in `tests/test_physics.py`
+    `test_foucart_remnant_matches_eq4_by_hand` in `tests/unit/test_physics.py`
     already verifies the Foucart formula for one canonical input; this
     test pins the coefficients themselves by reading them from the
     function via two well-chosen probes that constrain the four
     parameters jointly (Q=2 and Q=5 at the same C_NS, chi_BH).
     """
-    from grb_physics import (foucart_remnant_mass, ns_baryon_mass,
-                             _compactness, r_isco)
+    from grb_physics import _compactness, foucart_remnant_mass, ns_baryon_mass, r_isco
 
-    def expected(Q, chi, M_NS, R_km,
-                 alpha=0.406, beta=0.139, gamma=0.255, delta=1.761):
+    def expected(Q, chi, M_NS, R_km, alpha=0.406, beta=0.139, gamma=0.255, delta=1.761):
         M_BH = Q * M_NS
         C_NS = float(_compactness(M_NS, R_km))
         eta = M_NS * M_BH / (M_NS + M_BH) ** 2
         R_hat = float(r_isco(chi))
-        bracket = (alpha * (1 - 2 * C_NS) / eta ** (1 / 3)
-                   - beta * R_hat * C_NS / eta + gamma)
+        bracket = alpha * (1 - 2 * C_NS) / eta ** (1 / 3) - beta * R_hat * C_NS / eta + gamma
         M_b = float(ns_baryon_mass(M_NS))
         return max(0.0, bracket) ** delta * M_b
 
@@ -339,8 +353,7 @@ def test_foucart_2018_eq4_coefficients_match_paper():
     R_km = 12.0
     chi = 0.5
     for Q in (2.0, 5.0):
-        got = float(foucart_remnant_mass(M_BH=Q * M_NS, M_NS=M_NS,
-                                         a_BH=chi, R_NS_km=R_km))
+        got = float(foucart_remnant_mass(M_BH=Q * M_NS, M_NS=M_NS, a_BH=chi, R_NS_km=R_km))
         ref = expected(Q, chi, M_NS, R_km)
         assert got == pytest.approx(ref, rel=1e-10), (
             f"foucart_remnant_mass(Q={Q}, chi={chi}) drifted from "
@@ -362,17 +375,13 @@ def test_foucart_2018_validity_ranges_documented_warning_thresholds():
 
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        foucart_remnant_mass(M_BH=8.0 * 1.35, M_NS=1.35, a_BH=0.5,
-                             R_NS_km=12.0)
-    assert any("Q > 7" in str(item.message) for item in w), [
-        str(i.message) for i in w]
+        foucart_remnant_mass(M_BH=8.0 * 1.35, M_NS=1.35, a_BH=0.5, R_NS_km=12.0)
+    assert any("Q > 7" in str(item.message) for item in w), [str(i.message) for i in w]
 
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        foucart_remnant_mass(M_BH=5.0 * 1.35, M_NS=1.35, a_BH=0.95,
-                             R_NS_km=12.0)
-    assert any("|chi_BH| > 0.9" in str(item.message) for item in w), [
-        str(i.message) for i in w]
+        foucart_remnant_mass(M_BH=5.0 * 1.35, M_NS=1.35, a_BH=0.95, R_NS_km=12.0)
+    assert any("|chi_BH| > 0.9" in str(item.message) for item in w), [str(i.message) for i in w]
 
 
 def test_foucart_2018_qualitative_low_Q_below_FF12():
@@ -386,8 +395,7 @@ def test_foucart_2018_qualitative_low_Q_below_FF12():
     Q = 1.2 against a hand-coded FF12-style prediction (without the eta
     substitution).
     """
-    from grb_physics import (foucart_remnant_mass, ns_baryon_mass,
-                             _compactness, r_isco)
+    from grb_physics import _compactness, foucart_remnant_mass, ns_baryon_mass, r_isco
 
     M_NS = 1.35
     R_km = 11.5
@@ -395,14 +403,12 @@ def test_foucart_2018_qualitative_low_Q_below_FF12():
     Q = 1.2
     M_BH = Q * M_NS
 
-    new_model = float(foucart_remnant_mass(M_BH=M_BH, M_NS=M_NS,
-                                            a_BH=chi, R_NS_km=R_km))
+    new_model = float(foucart_remnant_mass(M_BH=M_BH, M_NS=M_NS, a_BH=chi, R_NS_km=R_km))
 
     alpha, beta, gamma, delta = 0.406, 0.139, 0.255, 1.761
     C_NS = float(_compactness(M_NS, R_km))
     R_hat = float(r_isco(chi))
-    bracket_ff12 = (alpha * (1 - 2 * C_NS) * Q ** (1 / 3)
-                    - beta * R_hat * C_NS * Q + gamma)
+    bracket_ff12 = alpha * (1 - 2 * C_NS) * Q ** (1 / 3) - beta * R_hat * C_NS * Q + gamma
     M_b = float(ns_baryon_mass(M_NS))
     ff12_style = max(0.0, bracket_ff12) ** delta * M_b
 
@@ -431,8 +437,7 @@ def test_kruger_foucart_2020_bhns_dyn_ejecta_eq9_coefficients_by_hand():
 
     and the unbound ejecta is `max(0, bracket) * M_b^NS`.
     """
-    from grb_physics import (bhns_dynamical_ejecta, ns_baryon_mass,
-                             _compactness, r_isco)
+    from grb_physics import _compactness, bhns_dynamical_ejecta, ns_baryon_mass, r_isco
 
     M_NS = 1.35
     M_BH = 6.75
@@ -445,12 +450,10 @@ def test_kruger_foucart_2020_bhns_dyn_ejecta_eq9_coefficients_by_hand():
 
     a1, a2, a4 = 0.007116, 0.001436, -0.02762
     n1, n2 = 0.8636, 1.6840
-    bracket = (a1 * Q ** n1 * (1 - 2 * C_NS) / C_NS
-               - a2 * Q ** n2 * R_hat + a4)
+    bracket = a1 * Q**n1 * (1 - 2 * C_NS) / C_NS - a2 * Q**n2 * R_hat + a4
     expected = max(0.0, bracket) * M_b
 
-    got = float(bhns_dynamical_ejecta(M_BH=M_BH, M_NS=M_NS, a_BH=a_BH,
-                                       R_NS_km=R_km))
+    got = float(bhns_dynamical_ejecta(M_BH=M_BH, M_NS=M_NS, a_BH=a_BH, R_NS_km=R_km))
     assert got == pytest.approx(expected, rel=1e-10), (
         f"bhns_dynamical_ejecta drifted from KF2020 Eq. (9) Table I "
         f"coefficients: got {got}, expected {expected}."
@@ -468,12 +471,11 @@ def test_kruger_foucart_2020_bns_disk_eq4_coefficients_by_hand():
     where C_1 is the compactness of the lighter NS and M_b^tot is the
     sum of component baryon masses.
     """
-    from grb_physics import (bns_disk_mass, ns_baryon_mass, _compactness,
-                             ns_radius)
+    from grb_physics import _compactness, bns_disk_mass, ns_baryon_mass, ns_radius
 
     M1, M2 = 1.46, 1.27
     R_1p4 = 13.0
-    R1 = float(ns_radius(M1, R_1p4_km=R_1p4))
+    R1 = float(ns_radius(M1, R_1p4_km=R_1p4))  # noqa: F841 (literature setup)
     R2 = float(ns_radius(M2, R_1p4_km=R_1p4))
     C1 = float(_compactness(M2, R2))  # lighter NS, Kruger-Foucart convention
     M_b_tot = float(ns_baryon_mass(M1) + ns_baryon_mass(M2))
@@ -498,7 +500,7 @@ def test_kruger_foucart_2020_bns_dyn_ejecta_eq6_coefficients_by_hand():
 
     with a = -9.3335, b = 114.17, c = -337.56, n = 1.5465.
     """
-    from grb_physics import bns_dynamical_ejecta, _compactness, ns_radius
+    from grb_physics import _compactness, bns_dynamical_ejecta, ns_radius
 
     M1, M2 = 1.46, 1.27
     R_1p4 = 12.0
@@ -530,6 +532,7 @@ def test_kruger_foucart_bns_dyn_ejecta_gw170817_band():
     rest).
     """
     from grb_physics import bns_dynamical_ejecta
+
     M_ej = float(bns_dynamical_ejecta(M1=1.46, M2=1.27, R_1p4_km=12.0))
     assert 1e-4 <= M_ej <= 5e-2, (
         f"GW170817-like KF2020 dyn-ejecta = {M_ej:.4e} Msun is outside "
@@ -552,11 +555,12 @@ def test_hernquist_scale_radius_uses_projected_half_light_ratio():
     are projected, so the projected ratio is the right one to use.
     """
     from grb_offsets import hernquist_scale_radius
+
     for R_e in [1.0, 5.0, 8.0, 13.7]:
-        assert hernquist_scale_radius(R_e) == pytest.approx(
-            R_e / 1.8153, rel=1e-9), (
-                f"hernquist_scale_radius({R_e}) does not match Hernquist "
-                f"(1990) Table 1 projected half-light ratio 1.8153.")
+        assert hernquist_scale_radius(R_e) == pytest.approx(R_e / 1.8153, rel=1e-9), (
+            f"hernquist_scale_radius({R_e}) does not match Hernquist "
+            f"(1990) Table 1 projected half-light ratio 1.8153."
+        )
 
 
 def test_hernquist_birth_radius_inverse_cdf_anchor():
@@ -592,7 +596,7 @@ def test_hernquist_escape_velocity_matches_2GM_over_r_plus_a(r0_over_a):
     velocity is the kick at which kinetic energy equals the
     gravitational binding, ``v_esc^2 = 2 |Phi| = 2 G M / (r + a)``.
     """
-    from grb_offsets import escape_velocity, G_CGS, MSUN_G, KPC_CM
+    from grb_offsets import G_CGS, KPC_CM, MSUN_G, escape_velocity
 
     M_gal = 1e10 * MSUN_G
     a = 5.0 * KPC_CM
@@ -601,13 +605,14 @@ def test_hernquist_escape_velocity_matches_2GM_over_r_plus_a(r0_over_a):
     got = float(escape_velocity(r=r0, M_gal=M_gal, a=a))
     assert got == pytest.approx(expected, rel=1e-12), (
         f"escape_velocity at r0/a = {r0_over_a} drifted from Hernquist "
-        f"(1990) Phi(r) = -GM/(r+a): got {got}, expected {expected}.")
+        f"(1990) Phi(r) = -GM/(r+a): got {got}, expected {expected}."
+    )
 
 
 def test_hernquist_potential_and_acceleration_signs():
     """`hernquist_potential` < 0 and `hernquist_acceleration` < 0 (inward)."""
-    from grb_offsets import (hernquist_potential, hernquist_acceleration,
-                              MSUN_G, KPC_CM)
+    from grb_offsets import KPC_CM, MSUN_G, hernquist_acceleration, hernquist_potential
+
     M_gal = 1e10 * MSUN_G
     a = 5.0 * KPC_CM
     r = 2.0 * a
@@ -630,10 +635,12 @@ def test_fong_berger_2013_default_R_e_within_observed_sgrb_band():
     co-fit.
     """
     from grb_offsets import DEFAULT_R_E, KPC_CM
+
     R_e_kpc = DEFAULT_R_E / KPC_CM
     assert 3.0 <= R_e_kpc <= 7.0, (
         f"DEFAULT_R_E = {R_e_kpc:.2f} kpc lies outside the Fong "
-        f"and Berger (2013) sGRB host R_e median band [3, 7] kpc.")
+        f"and Berger (2013) sGRB host R_e median band [3, 7] kpc."
+    )
 
 
 def test_fong_berger_2013_host_model_weights_sum_to_one():
@@ -646,13 +653,14 @@ def test_fong_berger_2013_host_model_weights_sum_to_one():
     consistent with their Table 4.
     """
     from grb_offsets import HOST_MODELS
-    weights = sum(host['weight'] for host in HOST_MODELS.values())
+
+    weights = sum(host["weight"] for host in HOST_MODELS.values())
     assert weights == pytest.approx(1.0, rel=1e-12), (
         f"HOST_MODELS weights sum to {weights}, not 1.0 as required "
-        f"by Fong and Berger (2013) Sec. 4 host-type fractions.")
-    sf_weight = (HOST_MODELS['SF_disk']['weight']
-                 + HOST_MODELS['SF_massive']['weight'])
-    el_weight = HOST_MODELS['Elliptical']['weight']
+        f"by Fong and Berger (2013) Sec. 4 host-type fractions."
+    )
+    sf_weight = HOST_MODELS["SF_disk"]["weight"] + HOST_MODELS["SF_massive"]["weight"]
+    el_weight = HOST_MODELS["Elliptical"]["weight"]
     # Fong+ 2013 reports ~75/25 SF/elliptical; allow +/- 0.10 absolute.
     assert abs(sf_weight - 0.75) <= 0.10, sf_weight
     assert abs(el_weight - 0.25) <= 0.10, el_weight
@@ -692,13 +700,14 @@ def test_neijssel_2019_compas_default_sfr_peak_at_z_2p13():
     sfr = np.asarray(fci.find_sfr(z), dtype=float)
     z_peak = float(z[np.argmax(sfr)])
     # Closed-form peak from the differentiation above.
-    a, b, c, d = 0.01, 2.77, 2.9, 4.7
+    a, b, c, d = 0.01, 2.77, 2.9, 4.7  # noqa: F841 (Neijssel 2019 Eq. 6 coefficients)
     z_peak_analytic = c * (b / (d - b)) ** (1.0 / d) - 1.0
     assert abs(z_peak - z_peak_analytic) <= 0.10, (
         f"COMPAS SFR peak z = {z_peak:.3f} drifted from the Neijssel "
         f"(2019) Eq. 6 closed-form peak {z_peak_analytic:.3f}; "
         f"upstream coefficients (a, b, c, d) = (0.01, 2.77, 2.9, 4.7) "
-        f"may have changed.")
+        f"may have changed."
+    )
     # Sanity bound matches the COMPAS-default location to within the
     # SFR-shape tolerance Neijssel (2019) Sec. 3.2 quotes (~0.1 in z).
     assert 1.95 <= z_peak <= 2.30, z_peak
@@ -753,14 +762,14 @@ def test_kroupa_2001_imf_continuity_at_breakpoints():
     f_left_low = float(kroupa_imf(0.08 - eps))
     f_right_low = float(kroupa_imf(0.08))
     assert f_left_low == pytest.approx(f_right_low, rel=1e-3), (
-        f"kroupa_imf discontinuous at m = 0.08: {f_left_low} vs "
-        f"{f_right_low}.")
+        f"kroupa_imf discontinuous at m = 0.08: {f_left_low} vs {f_right_low}."
+    )
 
     f_left_high = float(kroupa_imf(0.5 - eps))
     f_right_high = float(kroupa_imf(0.5))
     assert f_left_high == pytest.approx(f_right_high, rel=1e-3), (
-        f"kroupa_imf discontinuous at m = 0.5: {f_left_high} vs "
-        f"{f_right_high}.")
+        f"kroupa_imf discontinuous at m = 0.5: {f_left_high} vs {f_right_high}."
+    )
 
 
 def test_kroupa_2001_mean_stellar_mass_in_published_band():
@@ -779,24 +788,30 @@ def test_kroupa_2001_mean_stellar_mass_in_published_band():
     from grb_rates import verify_mean_mass_evolved
 
     bd_inclusive = verify_mean_mass_evolved(
-        m_lo_full=0.01, m_hi_full=200.0,
-        m_lo_prim=5.0, m_hi_prim=150.0,
+        m_lo_full=0.01,
+        m_hi_full=200.0,
+        m_lo_prim=5.0,
+        m_hi_prim=150.0,
         mean_mass_evolved=1.0,
     )
-    mean_bd = bd_inclusive['mean_star_mass']
+    mean_bd = bd_inclusive["mean_star_mass"]
     assert 0.30 <= mean_bd <= 0.50, (
         f"Kroupa brown-dwarf-inclusive [0.01, 200] mean = {mean_bd:.3f} "
-        f"Msun outside Kroupa (2002) Sci. Table 1 band [0.30, 0.50].")
+        f"Msun outside Kroupa (2002) Sci. Table 1 band [0.30, 0.50]."
+    )
 
     no_bd = verify_mean_mass_evolved(
-        m_lo_full=0.08, m_hi_full=100.0,
-        m_lo_prim=5.0, m_hi_prim=150.0,
+        m_lo_full=0.08,
+        m_hi_full=100.0,
+        m_lo_prim=5.0,
+        m_hi_prim=150.0,
         mean_mass_evolved=1.0,
     )
-    mean_nobd = no_bd['mean_star_mass']
+    mean_nobd = no_bd["mean_star_mass"]
     assert 0.45 <= mean_nobd <= 0.75, (
         f"Kroupa no-brown-dwarf [0.08, 100] mean = {mean_nobd:.3f} "
-        f"Msun outside Kroupa (2001) Eq. 2 band [0.45, 0.75].")
+        f"Msun outside Kroupa (2001) Eq. 2 band [0.45, 0.75]."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -823,24 +838,25 @@ def test_wanderman_piran_2015_piecewise_exponential_continuity_and_slopes():
     out = wanderman_piran_2015_Rz(z_grid)
     R = out["R_best"]
     assert abs(R[0] - R[1]) / R[0] < 1e-4, (
-        f"wanderman_piran_2015_Rz is not C^0 at z=0.9: left {R[0]}, "
-        f"right {R[1]}.")
+        f"wanderman_piran_2015_Rz is not C^0 at z=0.9: left {R[0]}, right {R[1]}."
+    )
 
     z_lo = np.array([0.5, 0.7, 0.9])
     R_lo = wanderman_piran_2015_Rz(z_lo)["R_best"]
     assert (np.diff(R_lo) > 0).all(), (
-        f"wanderman_piran_2015_Rz must be rising for z <= 0.9; got "
-        f"diffs {np.diff(R_lo)}.")
+        f"wanderman_piran_2015_Rz must be rising for z <= 0.9; got diffs {np.diff(R_lo)}."
+    )
     z_hi = np.array([0.9, 1.5, 3.0])
     R_hi = wanderman_piran_2015_Rz(z_hi)["R_best"]
     assert (np.diff(R_hi) < 0).all(), (
-        f"wanderman_piran_2015_Rz must be falling for z >= 0.9; got "
-        f"diffs {np.diff(R_hi)}.")
+        f"wanderman_piran_2015_Rz must be falling for z >= 0.9; got diffs {np.diff(R_hi)}."
+    )
 
 
 def test_wanderman_piran_2015_R0_normalization_within_band():
     """Default `R0 = 4.1 Gpc^-3 yr^-1` (peak observed sGRB rate) inside paper band."""
     from grb_rates import wanderman_piran_2015_Rz
+
     out = wanderman_piran_2015_Rz(np.array([0.9]))
     R0 = float(out["R_best"][0])
     R_lo = float(out["R_lo"][0])
@@ -867,11 +883,12 @@ def test_class_theta_j_sbgrb_band_matches_fong_beniamini_nakar():
     bounds.
     """
     from grb_rates import CLASS_THETA_J
-    sb = CLASS_THETA_J['sbGRB']
-    assert sb['lo'] == pytest.approx(10.0, abs=1.0), sb['lo']
-    assert sb['fid'] == pytest.approx(13.0, abs=1.0), sb['fid']
-    assert sb['hi'] == pytest.approx(16.0, abs=1.0), sb['hi']
-    assert sb['lo'] < sb['fid'] < sb['hi']
+
+    sb = CLASS_THETA_J["sbGRB"]
+    assert sb["lo"] == pytest.approx(10.0, abs=1.0), sb["lo"]
+    assert sb["fid"] == pytest.approx(13.0, abs=1.0), sb["fid"]
+    assert sb["hi"] == pytest.approx(16.0, abs=1.0), sb["hi"]
+    assert sb["lo"] < sb["fid"] < sb["hi"]
 
 
 def test_class_theta_j_lbgrb_band_matches_gottlieb_2023_mad_jets():
@@ -883,22 +900,24 @@ def test_class_theta_j_lbgrb_band_matches_gottlieb_2023_mad_jets():
     matches the Gottlieb (2023) lbGRB jet half-opening angle.
     """
     from grb_rates import CLASS_THETA_J
-    lb = CLASS_THETA_J['lbGRB']
-    assert lb['lo'] == pytest.approx(5.0, abs=1.0), lb['lo']
-    assert lb['fid'] == pytest.approx(6.5, abs=1.0), lb['fid']
-    assert lb['hi'] == pytest.approx(8.0, abs=1.0), lb['hi']
-    assert lb['lo'] < lb['fid'] < lb['hi']
+
+    lb = CLASS_THETA_J["lbGRB"]
+    assert lb["lo"] == pytest.approx(5.0, abs=1.0), lb["lo"]
+    assert lb["fid"] == pytest.approx(6.5, abs=1.0), lb["fid"]
+    assert lb["hi"] == pytest.approx(8.0, abs=1.0), lb["hi"]
+    assert lb["lo"] < lb["fid"] < lb["hi"]
 
 
 def test_fong_2015_beaming_factor_for_fiducial_sbgrb_in_published_range():
     """sbGRB beaming factor f_beam = 1 - cos(13 deg) within Fong (2015) band [0.015, 0.04]."""
-    from grb_rates import beamed_rate, CLASS_THETA_J
+    from grb_rates import CLASS_THETA_J, beamed_rate
+
     theta_fid = CLASS_THETA_J["sbGRB"]["fid"]
     f_beam = float(beamed_rate(1.0, theta_fid))
     # Fong (2015) abstract band: f_beam ~ 0.015-0.04 for theta_j 10-16 deg.
     assert 0.015 <= f_beam <= 0.040, (
-        f"sbGRB f_beam = {f_beam:.4f} outside Fong (2015) band [0.015, "
-        f"0.040].")
+        f"sbGRB f_beam = {f_beam:.4f} outside Fong (2015) band [0.015, 0.040]."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -917,23 +936,26 @@ def test_kawaguchi_2015_misalignment_factor_in_physical_band():
     is [0.4, 0.7] (e.g. Gerosa et al. 2018 Fig. 7 spread).
     """
     from grb_physics import MISALIGNMENT_SYSTEMATIC_FACTOR
+
     assert 0.4 <= MISALIGNMENT_SYSTEMATIC_FACTOR <= 0.7, (
         f"MISALIGNMENT_SYSTEMATIC_FACTOR = {MISALIGNMENT_SYSTEMATIC_FACTOR} "
         f"is outside the Kawaguchi+ 2015 / Fragos+ 2010 plausible "
-        f"population band [0.4, 0.7].")
+        f"population band [0.4, 0.7]."
+    )
 
 
 def test_kawaguchi_2015_aligned_spin_projection_matches_paper_definition():
     """`effective_aligned_spin(a, theta) = max(0, a * cos(theta))` (Kawaguchi 2015)."""
     from grb_physics import effective_aligned_spin
+
     chi = 0.7
-    for theta in [0.0, np.pi / 6, np.pi / 4, np.pi / 3, np.pi / 2,
-                  2 * np.pi / 3]:
+    for theta in [0.0, np.pi / 6, np.pi / 4, np.pi / 3, np.pi / 2, 2 * np.pi / 3]:
         expected = max(0.0, chi * np.cos(theta))
         got = float(effective_aligned_spin(chi, theta))
         assert got == pytest.approx(expected, rel=1e-12, abs=1e-12), (
             f"effective_aligned_spin({chi}, {theta}) = {got} != "
-            f"max(0, a cos theta) = {expected} (Kawaguchi 2015 Sec. 4).")
+            f"max(0, a cos theta) = {expected} (Kawaguchi 2015 Sec. 4)."
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -951,9 +973,11 @@ def test_margalit_metzger_2017_hmns_factor_in_supramassive_band():
     Gottlieb (2024) sbGRB / lbGRB+HMNS fiducial.
     """
     from grb_physics import HMNS_FACTOR_DEFAULT
+
     assert 1.0 <= HMNS_FACTOR_DEFAULT <= 1.3, (
         f"HMNS_FACTOR_DEFAULT = {HMNS_FACTOR_DEFAULT} is outside the "
-        f"Margalit-Metzger (2017) supramassive-remnant band [1.0, 1.3].")
+        f"Margalit-Metzger (2017) supramassive-remnant band [1.0, 1.3]."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -972,6 +996,7 @@ def test_neijssel_2019_mssfr_lognormal_parameters_match_eq2():
     z.
     """
     from grb_rates import _MU0, _MUZ, _SIGMA_0, _SIGMA_Z
+
     assert _MU0 == pytest.approx(0.035, rel=1e-9), _MU0
     assert _MUZ == pytest.approx(-0.23, rel=1e-9), _MUZ
     assert _SIGMA_0 == pytest.approx(0.39, rel=1e-9), _SIGMA_0
@@ -979,13 +1004,13 @@ def test_neijssel_2019_mssfr_lognormal_parameters_match_eq2():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Cosmology pin (Planck 2015) per CLAUDE.md mandate.
+# Cosmology pin: Planck Collaboration 2016, A&A 594, A13.
 # ─────────────────────────────────────────────────────────────────────
 def test_planck15_cosmology_constants_match_compas_pin():
     """Planck 2015 H0 / Omega_m / Omega_Lambda must match COMPAS pin.
 
-    CLAUDE.md mandates Planck 2015 (matches COMPAS
-    FastCosmicIntegration TNG-consistent default):
+    Project cosmology (Ade et al. 2016, A&A 594, A13, TT+lowP+lensing+ext;
+    matches COMPAS FastCosmicIntegration TNG-consistent default):
 
         H0 = 67.74 km/s/Mpc, Omega_m = 0.3089, Omega_Lambda = 0.6911.
 
@@ -994,25 +1019,29 @@ def test_planck15_cosmology_constants_match_compas_pin():
     substantively.
 
     Note: ``astropy.cosmology.Planck15.Om0 = 0.3075`` is from the
-    Planck 2015 baseline TT+lowP column (Ade et al. 2016 A&A 594, A13
-    Table 4); CLAUDE.md / `grb_physics.py` quote Om0 = 0.3089 from
-    the TT+lowP+lensing+ext column.  The project's stated value sits
-    1.4 sigma from the astropy default; the strict_paper test surfaces
-    that discrepancy with a 0.005 absolute tolerance band that admits
-    either Planck 2015 column.  A future change should reconcile by
-    either updating the docstrings to 0.3075 or constructing an
-    explicit `FlatLambdaCDM(H0=67.74, Om0=0.3089)` cosmology.
+    Planck 2015 baseline TT+lowP column (Ade et al. 2016, Table 4);
+    `grb_physics.py` quotes Om0 = 0.3089 from the TT+lowP+lensing+ext
+    column.  The project's stated value sits 1.4 sigma from the astropy
+    default; the strict_paper test surfaces that discrepancy with a
+    0.005 absolute tolerance band that admits either Planck 2015 column.
+    A future change should reconcile by either updating the docstrings
+    to 0.3075 or constructing an explicit
+    `FlatLambdaCDM(H0=67.74, Om0=0.3089)` cosmology.
     """
     from astropy.cosmology import Planck15
+
     assert abs(Planck15.H0.value - 67.74) < 0.01, (
         f"astropy.Planck15.H0 = {Planck15.H0.value} drifted from "
-        f"the CLAUDE.md mandate 67.74 km/s/Mpc.")
+        f"the project cosmology pin 67.74 km/s/Mpc (Ade et al. 2016)."
+    )
     assert abs(Planck15.Om0 - 0.3089) <= 0.005, (
         f"astropy.Planck15.Om0 = {Planck15.Om0} more than 0.005 from "
-        f"CLAUDE.md mandate 0.3089 (Planck 2015 TT+lowP+lensing+ext).")
+        f"project cosmology pin 0.3089 (Ade et al. 2016, TT+lowP+lensing+ext)."
+    )
     assert abs(Planck15.Ode0 - 0.6911) <= 0.005, (
         f"astropy.Planck15.Ode0 = {Planck15.Ode0} more than 0.005 from "
-        f"CLAUDE.md mandate 0.6911.")
+        f"project cosmology pin 0.6911 (Ade et al. 2016)."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1028,6 +1057,7 @@ def test_bardeen_1972_isco_textbook_anchors():
     and Teukolsky (1972) ApJ 178, 347, Eq. 2.21.
     """
     from grb_physics import r_isco
+
     assert r_isco(0.0) == pytest.approx(6.0, rel=1e-9)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # |a|=1 triggers clip warning
@@ -1041,7 +1071,8 @@ def test_bardeen_1972_isco_textbook_anchors():
 # ─────────────────────────────────────────────────────────────────────
 def test_gottlieb_2023_disk_mass_thresholds_match_paper():
     """BHNS disk-mass thresholds must equal Gottlieb (2023) Sec. 4 / Fig. 6."""
-    from grb_physics import MDISK_SHORT, MDISK_LONG
+    from grb_physics import MDISK_LONG, MDISK_SHORT
+
     assert MDISK_SHORT == pytest.approx(0.01, rel=1e-9), MDISK_SHORT
     assert MDISK_LONG == pytest.approx(0.10, rel=1e-9), MDISK_LONG
 
@@ -1049,6 +1080,7 @@ def test_gottlieb_2023_disk_mass_thresholds_match_paper():
 def test_gottlieb_2023_bns_M_crit_and_q_thresh_match_paper():
     """BNS prompt-collapse `M_CRIT_BNS = 2.8` and mass-ratio `Q_THRESH_BNS = 1.2`."""
     from grb_physics import M_CRIT_BNS, Q_THRESH_BNS
+
     assert M_CRIT_BNS == pytest.approx(2.8, rel=1e-9), M_CRIT_BNS
     assert Q_THRESH_BNS == pytest.approx(1.2, rel=1e-9), Q_THRESH_BNS
 
@@ -1060,4 +1092,5 @@ def test_gottlieb_2023_bns_M_crit_and_q_thresh_match_paper():
 def test_broekgaarden_2021_NS_MAX_FIDUCIAL_models_J_A_K():
     """Models J / A / K NS_MAX values must equal 2.0 / 2.5 / 3.0 Msun."""
     from grb_classify import NS_MAX_FIDUCIAL
+
     assert NS_MAX_FIDUCIAL == (2.0, 2.5, 3.0), NS_MAX_FIDUCIAL

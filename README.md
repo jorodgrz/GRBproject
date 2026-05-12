@@ -18,14 +18,10 @@ python -m ipykernel install --user --name grb-env --display-name "GRB (grb-env)"
 
 ```bash
 python tools/download_compas_data.py --tier 1 --confirm    # 5 core models A, F, G, J, K (manuscript figures)
-python tools/download_compas_data.py --confirm             # full 20-model grid, ~45 GB
+python tools/download_compas_data.py --confirm    # full 20-model grid, ~45 GB
 ```
 
 Files land in `Data/COMPASCompactOutput_<KIND>_<SUFFIX>.h5`. BNS catalogues from [Zenodo 5189849](https://zenodo.org/records/5189849), BHNS from [Zenodo 5178777](https://zenodo.org/records/5178777). The observational comparison in [comparison.ipynb](comparison.ipynb) reads `Data/rastinejad_2024.csv` (Rastinejad et al. 2024 component decomposition).
-
-## Reproduce
-
-Every figure regenerates from a notebook cell. Open [grb_main.ipynb](grb_main.ipynb) for the main paper figures and [comparison.ipynb](comparison.ipynb) for the BH-engine vs HMNS-engine observational comparison. Random seeds are fixed; parameter-sweep configurations log to a dated file in `Plots/`.
 
 ## Layout
 
@@ -60,21 +56,7 @@ Every figure regenerates from a notebook cell. Open [grb_main.ipynb](grb_main.ip
 | Short cbGRB | $0.01 \leq M_\mathrm{disk} < 0.1\,M_\odot$ |
 | Long cbGRB | $M_\mathrm{disk} \geq 0.1\,M_\odot$ |
 
-Also exposed in [grb_classify.py](grb_classify.py): `classify_bns_2023` (Gottlieb 2023 three-class), `classify_grid` (unified six-class mass-plane labels; 0 marks BBH or out-of-range), and `classify_formation_channels` (Broekgaarden et al. 2021 channels I to V).
 
-## Tests
-
-| Target | Scope |
-|---|---|
-| `make smoke` | No data, no compas pin; under ~5 s |
-| `make ci` | Exactly the set CI runs |
-| `make test` | Full suite; data-bound tests gated on `Data/` |
-
-CI runs `make ci` on every push and pull request via [.github/workflows/pytest.yml](.github/workflows/pytest.yml). Every literature value the pipeline consumes is paired with a pytest case in [PHYSICS_AUDIT.md](PHYSICS_AUDIT.md).
-
-## Cosmology
-
-Planck 2015 (matches COMPAS `FastCosmicIntegration`): $H_0 = 67.74$ km/s/Mpc, $\Omega_m = 0.3089$, $\Omega_\Lambda = 0.6911$. MSSFR from Neijssel et al. (2019). Disk-mass GRB rates assume 100 percent jet launching above threshold and are therefore upper bounds (Gottlieb 2023). Detailed physical inputs live in [PHYSICS_AUDIT.md](PHYSICS_AUDIT.md); project-wide invariants live in [CLAUDE.md](CLAUDE.md).
 
 ## References
 
@@ -96,9 +78,6 @@ Planck 2015 (matches COMPAS `FastCosmicIntegration`): $H_0 = 67.74$ km/s/Mpc, $\
 - Read et al. (2009), [arXiv:0812.2163](https://arxiv.org/abs/0812.2163)
 - Wanderman and Piran (2015), [arXiv:1405.5878](https://arxiv.org/abs/1405.5878)
 
-## Citation
-
-If you use this code, please cite the accompanying paper (Rodriguez et al., in preparation, ApJ). A BibTeX entry will be added on arXiv submission.
 
 ## License
 

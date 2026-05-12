@@ -1,9 +1,8 @@
-"""Council-mandated hard runtime asserts in grb_classify.
+"""Hard runtime asserts in ``grb_classify``.
 
-Council 2026-05-06 (HIGH severity): a typo such as ``ns_max=2.4`` or a
-caller passing both ``k_thresh`` and an inconsistent ``m_thresh`` would
-silently misclassify the entire BNS / BHNS boundary or the prompt-
-collapse threshold.  Both are now hard errors.
+A typo such as ``ns_max=2.4`` or a caller passing both ``k_thresh`` and
+an inconsistent ``m_thresh`` would silently misclassify the entire BNS
+or BHNS boundary, or the prompt-collapse threshold; both are hard errors.
 """
 
 import warnings
@@ -11,7 +10,7 @@ import warnings
 import numpy as np
 import pytest
 
-from grb_classify import (NS_MAX_FIDUCIAL, _resolve_m_thresh, classify_grid)
+from grb_classify import NS_MAX_FIDUCIAL, _resolve_m_thresh, classify_grid
 
 
 def test_resolve_m_thresh_consistent_pair_returns_derived():

@@ -1,9 +1,7 @@
 """Real-data audit for ``grb_io.py`` across the Broekgaarden+ 2021 grid.
 
-The chairman's "one thing to do first" from the council transcript
-2026-05-06: a 30-line audit that pins the COMPAS HDF5 contract
-against the actual Zenodo files in ``Data/``.  Each test maps 1:1 to
-a chairman bullet:
+Pins the COMPAS HDF5 contract against the actual Zenodo files in
+``Data/``:
 
 1. No NaN in ``w[mask]`` for every available model file.
 2. ``_match_sn_to_dco`` returns NaN for at most 1 percent of the
@@ -27,7 +25,7 @@ that have landed.
 
 Run once per Zenodo download:
 
-    pytest tests/test_grb_io_realdata.py -v --tb=line
+    pytest tests/integration/test_grb_io_realdata.py -v --tb=line
 """
 
 from __future__ import annotations
@@ -42,7 +40,6 @@ import pytest
 # ``tests/conftest.py`` adds for ``tools/``; this matches the pattern
 # in ``tools/download_compas_data.py``.
 from embed_model_metadata import KNOWN_FILES  # type: ignore[import-not-found]
-
 
 # ─────────────────────────────────────────────────────────────────────
 # Parametrisation source-of-truth
@@ -74,9 +71,9 @@ _UNMATCHED_TOLERANCE = {
 def test_no_nan_weights_after_mask(compas_file):
     """STROOPWAFEL ``weight`` must be NaN-free on every merging row.
 
-    Council Contrarian #1 / Chairman fix #1.  The downstream rates
-    use ``np.average(x, weights=w)`` and ``np.histogram(weights=w)``,
-    both of which silently propagate NaN to the science output.
+    Downstream rates use ``np.average(x, weights=w)`` and
+    ``np.histogram(weights=w)``, both of which silently propagate NaN
+    to the science output.
     """
     with h5.File(compas_file, "r") as f:
         dco = f["doubleCompactObjects"]
@@ -99,17 +96,16 @@ def test_no_nan_weights_after_mask(compas_file):
 def test_match_sn_to_dco_no_nan_on_merging_subset(compas_file, capsys):
     """Less than 1 percent of merging systems may have unmatched seeds.
 
-    Council Contrarian #3 / Chairman fix #2.  The chairman accepts a
-    small unmatched fraction (Hernquist offsets drop NaN rows via
-    ``np.isfinite`` in ``compute_offsets_population``), but a
-    > tolerance unmatched fraction means a paper-killer in the SN
-    join rather than a benign edge-case.
-
-    Per-model overrides for legitimate physics-driven gaps live in
-    ``_UNMATCHED_TOLERANCE`` at the top of this file.
+    A small unmatched fraction is tolerable (Hernquist offsets drop NaN
+    rows via ``np.isfinite`` in ``compute_offsets_population``), but a
+    > tolerance fraction means a paper-killer in the SN join rather
+    than a benign edge-case.  Per-model overrides for legitimate
+    physics-driven gaps live in ``_UNMATCHED_TOLERANCE`` at the top of
+    this file.
     """
     import os as _os
-    from grb_io import load_bns_with_kicks, load_bhns_with_kicks
+
+    from grb_io import load_bhns_with_kicks, load_bns_with_kicks
 
     name = _os.path.basename(compas_file)
     kind = _KIND_BY_FILE[name]
@@ -147,11 +143,10 @@ def _grid_contains(values, grid, atol=1e-8):
 def test_metallicity_grid_matches_data(compas_file):
     """Birth metallicities in the HDF5 must be a subset of ``METALLICITY_GRID``.
 
-    Council Contrarian #2 / Chairman fix #5.  Catches Zenodo schema
-    drift in the metallicity discretisation.  The literal grid in
-    ``grb_io.py`` was already corrected once based on the Model A
-    audit; this test fans the same check across the full 20-variation
-    grid.
+    Catches Zenodo schema drift in the metallicity discretisation.
+    The literal grid in ``grb_io.py`` was already corrected once based
+    on the Model A audit; this test fans the same check across the
+    full 20-variation grid.
     """
     from grb_io import METALLICITY_GRID
 
@@ -162,8 +157,7 @@ def test_metallicity_grid_matches_data(compas_file):
 
     Z_unique = np.unique(Z[mh == 1])
     grid_unique = np.unique(METALLICITY_GRID)
-    missing = [v for v in Z_unique
-               if not np.any(np.isclose(grid_unique, v, atol=1e-8))]
+    missing = [v for v in Z_unique if not np.any(np.isclose(grid_unique, v, atol=1e-8))]
     assert _grid_contains(Z_unique, grid_unique), (
         f"{compas_file}: data carries metallicities not present in "
         f"METALLICITY_GRID; first 5 missing values = {missing[:5]}.  "
@@ -176,8 +170,14 @@ def test_metallicity_grid_matches_data(compas_file):
 # 4. HDF5 schema audit
 # ─────────────────────────────────────────────────────────────────────
 _REQUIRED_DCO_COLS = {
-    "M1", "M2", "weight", "Metallicity1",
-    "mergesInHubbleTimeFlag", "tc", "tform", "stellarType1",
+    "M1",
+    "M2",
+    "weight",
+    "Metallicity1",
+    "mergesInHubbleTimeFlag",
+    "tc",
+    "tform",
+    "stellarType1",
 }
 
 
@@ -186,8 +186,7 @@ _REQUIRED_DCO_COLS = {
 def test_hdf5_schema_pinned(compas_file):
     """``doubleCompactObjects`` must contain the columns every loader uses.
 
-    Council blind spot identified by every peer reviewer / Chairman
-    fix #6.  Catches Zenodo schema drift on the next download.
+    Catches Zenodo schema drift on the next download.
     """
     with h5.File(compas_file, "r") as f:
         keys = set(f["doubleCompactObjects"].keys())
@@ -208,11 +207,13 @@ def test_hdf5_schema_pinned(compas_file):
 def test_mass_ordering_invariant(compas_file):
     """Sanity-check ``sort_masses=True`` (BNS) / BH-NS split (BHNS).
 
-    Reviewer 3 blind spot: nobody actually verified the default in
-    the council round.  Fanned across the full grid here.
+    Fanned across the full Broekgaarden+ 2021 model grid so the
+    default ordering is verified file-by-file rather than only on the
+    fiducial Model A.
     """
     import os as _os
-    from grb_io import load_bns, load_bhns
+
+    from grb_io import load_bhns, load_bns
 
     name = _os.path.basename(compas_file)
     kind = _KIND_BY_FILE[name]

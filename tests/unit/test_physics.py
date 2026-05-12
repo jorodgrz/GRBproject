@@ -1,9 +1,8 @@
 """Validation tests for Foucart 2018 / Kruger-Foucart 2020 / Neijssel 2019.
 
-The Chairman's Monday-morning list (council 2026-05-06) calls for one
-test per cited paper that anchors the corresponding module function to
-a published equation or check point.  All tests are pure-function and
-data-free except where explicitly marked ``requires_data``.
+One test per cited paper, anchoring the corresponding module function
+to a published equation or check point.  All tests are pure-function
+and data-free except where explicitly marked ``requires_data``.
 """
 
 from __future__ import annotations
@@ -14,17 +13,17 @@ import numpy as np
 import pytest
 
 from grb_physics import (
+    EOS_MODELS,
+    K_THRESH_DEFAULT,
+    M_THRESH,
+    M_TOV,
+    _compactness,
+    bhns_dynamical_ejecta,
     chirp_mass,
     foucart_disk_mass,
     foucart_remnant_mass,
-    bhns_dynamical_ejecta,
     ns_baryon_mass,
-    _compactness,
     r_isco,
-    M_TOV,
-    M_THRESH,
-    K_THRESH_DEFAULT,
-    EOS_MODELS,
 )
 
 
@@ -57,13 +56,12 @@ def test_foucart_remnant_matches_eq4_by_hand(foucart_canonical_inputs):
     a_BH = args["a_BH"]
     R = args["R_NS_km"]
 
-    Q = M_BH / M_NS
+    Q = M_BH / M_NS  # noqa: F841 (Foucart 2018 Eq. 4 setup; Q kept as literature anchor)
     C_NS = float(_compactness(M_NS, R))
     eta = M_NS * M_BH / (M_NS + M_BH) ** 2
     R_hat = float(r_isco(a_BH))
     alpha, beta, gamma, delta = 0.406, 0.139, 0.255, 1.761
-    bracket = (alpha * (1 - 2 * C_NS) / eta ** (1 / 3)
-               - beta * R_hat * C_NS / eta + gamma)
+    bracket = alpha * (1 - 2 * C_NS) / eta ** (1 / 3) - beta * R_hat * C_NS / eta + gamma
     M_b = float(ns_baryon_mass(M_NS))
     expected = max(0.0, bracket) ** delta * M_b
 
@@ -94,18 +92,21 @@ def test_foucart_remnant_zero_for_no_disruption():
         # Q > 7 is outside the calibration range; the module emits a
         # bulk-warning we don't care about here.
         warnings.simplefilter("ignore")
-        M_rem = float(foucart_remnant_mass(M_BH=20.0, M_NS=1.35,
-                                           a_BH=0.0, R_NS_km=11.0))
+        M_rem = float(foucart_remnant_mass(M_BH=20.0, M_NS=1.35, a_BH=0.0, R_NS_km=11.0))
     assert M_rem == 0.0
 
 
 def test_foucart_disk_mass_subtracts_dynamical_ejecta(foucart_canonical_inputs):
     """foucart_disk_mass = M_rem - M_dyn (default behavior, f_disk=None)."""
     M_rem = float(foucart_remnant_mass(**foucart_canonical_inputs))
-    M_dyn = float(bhns_dynamical_ejecta(
-        foucart_canonical_inputs["M_BH"], foucart_canonical_inputs["M_NS"],
-        foucart_canonical_inputs["a_BH"],
-        R_NS_km=foucart_canonical_inputs["R_NS_km"]))
+    M_dyn = float(
+        bhns_dynamical_ejecta(
+            foucart_canonical_inputs["M_BH"],
+            foucart_canonical_inputs["M_NS"],
+            foucart_canonical_inputs["a_BH"],
+            R_NS_km=foucart_canonical_inputs["R_NS_km"],
+        )
+    )
     M_disk = float(foucart_disk_mass(**foucart_canonical_inputs))
     assert M_disk == pytest.approx(max(0.0, M_rem - M_dyn), rel=1e-10)
     assert M_disk >= 0.0
@@ -132,8 +133,7 @@ def test_foucart_warns_outside_calibration():
 # ─────────────────────────────────────────────────────────────────────
 def test_kruger_foucart_dyn_ejecta_finite():
     """KF2020 Eq. (9) returns a finite, non-negative ejecta mass."""
-    M_dyn = float(bhns_dynamical_ejecta(M_BH=6.75, M_NS=1.35, a_BH=0.5,
-                                        R_NS_km=12.0))
+    M_dyn = float(bhns_dynamical_ejecta(M_BH=6.75, M_NS=1.35, a_BH=0.5, R_NS_km=12.0))
     assert np.isfinite(M_dyn)
     assert M_dyn >= 0.0
     # Dynamical ejecta in the disk-disrupting BHNS regime is typically
@@ -163,17 +163,15 @@ def test_neijssel_dPdlogZ_matches_integrated_window_at_z0():
     from scipy.stats import norm as _N
 
     from grb_io import METALLICITY_GRID
-    from grb_rates import _bin_averaged_dPdlogZ, _MU0, _SIGMA_0
+    from grb_rates import _MU0, _SIGMA_0, _bin_averaged_dPdlogZ
 
     Z_unique = np.unique(METALLICITY_GRID)
-    binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_unique,
-                                      Z_grid=Z_unique)
+    binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_unique, Z_grid=Z_unique)
     sigma = _SIGMA_0
-    mu = np.log(_MU0) - 0.5 * sigma ** 2
+    mu = np.log(_MU0) - 0.5 * sigma**2
     ln_Z_min = float(np.log(Z_unique.min()))
     ln_Z_max = float(np.log(Z_unique.max()))
-    norm_expected = float(_N.cdf((ln_Z_max - mu) / sigma)
-                          - _N.cdf((ln_Z_min - mu) / sigma))
+    norm_expected = float(_N.cdf((ln_Z_max - mu) / sigma) - _N.cdf((ln_Z_min - mu) / sigma))
     integral = float(binned.sum())
     assert integral == pytest.approx(norm_expected, rel=1e-6), (
         f"dPdlogZ z=0 integral = {integral:.6f}; expected "
@@ -192,8 +190,7 @@ def test_neijssel_dPdlogZ_per_d_lnZ_not_d_log10Z():
     from grb_rates import _bin_averaged_dPdlogZ
 
     Z_unique = np.unique(METALLICITY_GRID)
-    binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_unique,
-                                      Z_grid=Z_unique)
+    binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_unique, Z_grid=Z_unique)
     integral = float(binned.sum())
     assert integral < 1.0, (
         f"dPdlogZ integral = {integral:.4f}; suggests d/d(log10 Z) "
@@ -203,7 +200,7 @@ def test_neijssel_dPdlogZ_per_d_lnZ_not_d_log10Z():
 
 @pytest.mark.parametrize("z", [0.0, 0.5, 1.0, 2.0, 4.0])
 def test_neijssel_dPdlogZ_matches_log_normal_across_redshift(z):
-    """Multi-redshift extension of the z = 0 cross-check (Council I5).
+    """Multi-redshift extension of the z = 0 cross-check.
 
     At each redshift the bin-integrated probabilities returned by
     ``_bin_averaged_dPdlogZ`` must equal the analytic CDF of the
@@ -220,28 +217,23 @@ def test_neijssel_dPdlogZ_matches_log_normal_across_redshift(z):
     mismatch in this single equality.
     """
     from scipy.stats import norm as _N
+
     from grb_io import METALLICITY_GRID
-    from grb_rates import (_bin_averaged_dPdlogZ, _MU0, _MUZ,
-                           _SIGMA_0, _SIGMA_Z)
+    from grb_rates import _MU0, _MUZ, _SIGMA_0, _SIGMA_Z, _bin_averaged_dPdlogZ
 
     Z_unique = np.unique(METALLICITY_GRID)
-    binned, _ = _bin_averaged_dPdlogZ(np.array([z]), Z_unique,
-                                      Z_grid=Z_unique)
+    binned, _ = _bin_averaged_dPdlogZ(np.array([z]), Z_unique, Z_grid=Z_unique)
 
     sigma = _SIGMA_0 * 10.0 ** (_SIGMA_Z * z)
     mean_metal = _MU0 * 10.0 ** (_MUZ * z)
-    mu = float(np.log(mean_metal) - 0.5 * sigma ** 2)
+    mu = float(np.log(mean_metal) - 0.5 * sigma**2)
     ln_Z_min = float(np.log(Z_unique.min()))
     ln_Z_max = float(np.log(Z_unique.max()))
-    cdf_expected = float(
-        _N.cdf((ln_Z_max - mu) / sigma)
-        - _N.cdf((ln_Z_min - mu) / sigma)
-    )
+    cdf_expected = float(_N.cdf((ln_Z_max - mu) / sigma) - _N.cdf((ln_Z_min - mu) / sigma))
 
     integrated = float(binned.sum())
     assert integrated == pytest.approx(cdf_expected, rel=1e-6), (
-        f"z = {z}: integrated dPdlogZ = {integrated:.6e}, "
-        f"analytic CDF = {cdf_expected:.6e}"
+        f"z = {z}: integrated dPdlogZ = {integrated:.6e}, analytic CDF = {cdf_expected:.6e}"
     )
 
 
@@ -270,9 +262,7 @@ def test_load_bns_mass_ordering(bns_a_path):
     from grb_io import load_bns
 
     bns = load_bns(path=bns_a_path)
-    assert (bns["m1"] >= bns["m2"]).all(), (
-        "load_bns violated the m1 >= m2 invariant on Model A"
-    )
+    assert (bns["m1"] >= bns["m2"]).all(), "load_bns violated the m1 >= m2 invariant on Model A"
     # Sanity bounds on the COMPAS NS-mass distribution.
     assert bns["m1"].min() > 0.5
     assert bns["m1"].max() < 3.5
@@ -301,10 +291,9 @@ def test_stroopwafel_local_rate_vs_broekgaarden_table3(bns_a_path):
     metallicity-prior variations (their Table 3 fiducial line plus
     surrounding discussion).
 
-    A weight-extraction bug in compas_python_utils (Reviewer 4's
-    single-point-of-failure flag) would manifest as a value of zero,
-    NaN, or many orders of magnitude off; this test catches that
-    regime without baking in a single reference number.
+    A weight-extraction bug in ``compas_python_utils`` would manifest
+    as a value of zero, NaN, or many orders of magnitude off; this test
+    catches that regime without baking in a single reference number.
     """
     from grb_io import read_expected_local_rate
 
@@ -324,7 +313,7 @@ def test_stroopwafel_local_rate_vs_broekgaarden_table3(bns_a_path):
 @pytest.mark.requires_data
 @pytest.mark.slow
 def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
-    """Per-class round-trip vs Broekgaarden+ (2021) Table 3 (Council I2).
+    """Per-class round-trip vs Broekgaarden+ (2021) Table 3.
 
     Splits the ``weights_intrinsic/w_000`` column by Gottlieb (2024)
     four-class mask and asserts that
@@ -341,21 +330,26 @@ def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
     so the total rate is invariant under it (the per-class split is not).
     """
     import h5py as h5
-    from grb_io import load_bns, read_expected_local_rate
+
     from grb_classify import classify_bns_2024
+    from grb_io import load_bns, read_expected_local_rate
     from grb_physics import remap_ns_masses_double_gaussian
 
     bns = load_bns(path=bns_a_path)
     m1_remap, m2_remap = remap_ns_masses_double_gaussian(
-        bns["m1"], bns["m2"], weights=bns["weights"],
+        bns["m1"],
+        bns["m2"],
+        weights=bns["weights"],
         rng=np.random.default_rng(42),
     )
 
     cls = classify_bns_2024(m1_remap, m2_remap)
-    class_keys = ["sbGRB + blue KN",
-                  "lbGRB + red KN (HMNS)",
-                  "lbGRB + red KN (disk)",
-                  "Faint lbGRB"]
+    class_keys = [
+        "sbGRB + blue KN",
+        "lbGRB + red KN (HMNS)",
+        "lbGRB + red KN (disk)",
+        "Faint lbGRB",
+    ]
     masks = {k: np.asarray(cls[k], dtype=bool) for k in class_keys}
 
     with h5.File(bns_a_path, "r") as f:
@@ -371,10 +365,10 @@ def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
     R_per_class = {k: float(w_000[m].sum()) for k, m in masks.items()}
 
     bands = {
-        "sbGRB + blue KN":       (0.0,  100.0),
-        "lbGRB + red KN (HMNS)": (1.0,  300.0),
-        "lbGRB + red KN (disk)": (0.0,  100.0),
-        "Faint lbGRB":           (0.0,  100.0),
+        "sbGRB + blue KN": (0.0, 100.0),
+        "lbGRB + red KN (HMNS)": (1.0, 300.0),
+        "lbGRB + red KN (disk)": (0.0, 100.0),
+        "Faint lbGRB": (0.0, 100.0),
     }
     for k, R in R_per_class.items():
         lo, hi = bands[k]
@@ -410,22 +404,24 @@ def test_chirp_mass_equal_mass_identity():
     assert chirp_mass(m, m) == pytest.approx(expected, rel=1e-12)
     np.testing.assert_allclose(
         chirp_mass(np.array([m, 2 * m]), np.array([m, 2 * m])),
-        np.array([expected, 2 * expected]), rtol=1e-12, atol=0)
+        np.array([expected, 2 * expected]),
+        rtol=1e-12,
+        atol=0,
+    )
 
 
 def test_chirp_mass_ordering_invariance():
     """``chirp_mass`` is symmetric in (m1, m2): swap-invariant.
 
-    The CLAUDE.md ``m1 >= m2`` invariant is enforced at load time, but
-    chirp mass is a derived quantity that must be order-agnostic so the
-    helper does not silently shift if a future caller violates the
-    ordering.
+    The ``m1 >= m2`` invariant is enforced at load time in
+    ``grb_io.load_bns`` / ``load_bhns``, but chirp mass is a derived
+    quantity that must be order-agnostic so the helper does not
+    silently shift if a future caller violates the ordering.
     """
     rng = np.random.default_rng(0)
     m1 = rng.uniform(0.8, 2.5, size=64)
     m2 = rng.uniform(0.8, 2.5, size=64)
-    np.testing.assert_allclose(chirp_mass(m1, m2), chirp_mass(m2, m1),
-                               rtol=1e-15, atol=0)
+    np.testing.assert_allclose(chirp_mass(m1, m2), chirp_mass(m2, m1), rtol=1e-15, atol=0)
 
 
 def test_chirp_mass_scalar_array_parity():
@@ -441,4 +437,3 @@ def test_chirp_mass_scalar_array_parity():
     assert s == pytest.approx(float(a[0]), rel=1e-15)
     expected = (m1 * m2) ** 0.6 / (m1 + m2) ** 0.2
     assert s == pytest.approx(expected, rel=1e-15)
-

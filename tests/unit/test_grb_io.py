@@ -1,15 +1,13 @@
 """Unit tests for ``grb_io.py``.
 
-Implements the Executor's smoke-test bundle plus assertions for the
-chairman's defensive-perimeter fixes (council transcript
-2026-05-06): NaN-weight guard, returned-dict shape consistency,
-`'population'` tag, and the unmatched-seed warning in
-``_match_sn_to_dco``.
+Covers the defensive-perimeter checks: NaN-weight guard, returned-dict
+shape consistency, ``'population'`` tag, and the unmatched-seed
+warning in ``_match_sn_to_dco``.
 
-The fixtures build tiny synthetic HDF5 files mirroring the
-Broekgaarden et al. (2021) COMPAS column layout.  This keeps the
-suite runnable in CI without the multi-GB Zenodo archives; the
-real-data audit lives in ``tests/test_grb_io_realdata.py``.
+Fixtures build tiny synthetic HDF5 files mirroring the Broekgaarden
+et al. (2021) COMPAS column layout so the suite is runnable in CI
+without the multi-GB Zenodo archives; the real-data audit lives in
+``tests/integration/test_grb_io_realdata.py``.
 """
 
 from __future__ import annotations
@@ -20,19 +18,23 @@ import h5py as h5
 import numpy as np
 import pytest
 
-
 # ─────────────────────────────────────────────────────────────────────
 # Synthetic-HDF5 builders
 # ─────────────────────────────────────────────────────────────────────
 _DCO_COLS_BASE = (
-    "M1", "M2", "weight", "Metallicity1",
-    "mergesInHubbleTimeFlag", "tc", "tform",
+    "M1",
+    "M2",
+    "weight",
+    "Metallicity1",
+    "mergesInHubbleTimeFlag",
+    "tc",
+    "tform",
 )
 
 
-def _write_dco_group(f, *, n_total=6, n_merging=4, st1_values=None,
-                     weights=None, masses=None,
-                     extra_cols=None):
+def _write_dco_group(
+    f, *, n_total=6, n_merging=4, st1_values=None, weights=None, masses=None, extra_cols=None
+):
     """Write a minimal ``doubleCompactObjects`` group.
 
     Parameters
@@ -72,9 +74,14 @@ def _write_dco_group(f, *, n_total=6, n_merging=4, st1_values=None,
     Z = np.full(n_total, 0.0142)
 
     cols = {
-        "M1": m1, "M2": m2, "weight": weights,
-        "Metallicity1": Z, "mergesInHubbleTimeFlag": mh,
-        "tc": tc, "tform": tform, "stellarType1": st1_values,
+        "M1": m1,
+        "M2": m2,
+        "weight": weights,
+        "Metallicity1": Z,
+        "mergesInHubbleTimeFlag": mh,
+        "tc": tc,
+        "tform": tform,
+        "stellarType1": st1_values,
     }
     if extra_cols:
         cols.update(extra_cols)
@@ -114,8 +121,7 @@ def synthetic_bhns_path(tmp_path):
     m2 = np.array([1.4, 7.0, 1.3, 6.0, 1.4, 1.5])
     with h5.File(path, "w") as f:
         _write_metadata(f, kind="BHNS", model="A", ns_max=2.5)
-        _write_dco_group(f, n_total=n_total, n_merging=n_merging,
-                         st1_values=st1, masses=(m1, m2))
+        _write_dco_group(f, n_total=n_total, n_merging=n_merging, st1_values=st1, masses=(m1, m2))
     return str(path), n_merging, st1, m1, m2
 
 
@@ -128,16 +134,24 @@ def synthetic_kicks_bns_path(tmp_path):
     seeds = np.arange(100, 100 + n_total, dtype=np.int64)
     sn_seeds = np.repeat(seeds, 2)
     sn_time = np.tile([1.0, 2.0], n_total)
-    sn_vsys = np.array([
-        10.0, 110.0,
-        20.0, 220.0,
-        30.0, 330.0,
-        40.0, 440.0,
-    ])
+    sn_vsys = np.array(
+        [
+            10.0,
+            110.0,
+            20.0,
+            220.0,
+            30.0,
+            330.0,
+            40.0,
+            440.0,
+        ]
+    )
     with h5.File(path, "w") as f:
         _write_metadata(f, kind="BNS", model="A", ns_max=2.5)
         _write_dco_group(
-            f, n_total=n_total, n_merging=n_merging,
+            f,
+            n_total=n_total,
+            n_merging=n_merging,
             extra_cols={
                 "drawnKick1": np.full(n_total, 50.0),
                 "drawnKick2": np.full(n_total, 60.0),
@@ -169,7 +183,9 @@ def synthetic_kicks_unmatched_path(tmp_path):
     with h5.File(path, "w") as f:
         _write_metadata(f, kind="BNS", model="A", ns_max=2.5)
         _write_dco_group(
-            f, n_total=n_total, n_merging=n_merging,
+            f,
+            n_total=n_total,
+            n_merging=n_merging,
             extra_cols={
                 "drawnKick1": np.full(n_total, 50.0),
                 "drawnKick2": np.full(n_total, 60.0),
@@ -186,7 +202,7 @@ def synthetic_kicks_unmatched_path(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Population tag (Chairman fix #4)
+# Population tag
 # ─────────────────────────────────────────────────────────────────────
 def test_load_bns_returns_population_tag(synthetic_bns_path):
     from grb_io import load_bns
@@ -204,7 +220,7 @@ def test_load_bhns_returns_population_tag(synthetic_bhns_path):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Returned-dict shape consistency (Chairman fix #3)
+# Returned-dict shape consistency
 # ─────────────────────────────────────────────────────────────────────
 def test_load_bns_dict_shape_consistent(synthetic_bns_path):
     from grb_io import load_bns
@@ -226,13 +242,11 @@ def test_load_bhns_dict_shape_consistent(synthetic_bhns_path):
     assert out["n_merging"] == n_merging
     for k, v in out.items():
         if isinstance(v, np.ndarray) and k != "mask_merging":
-            assert len(v) == n_merging, (
-                f"{k!r} has length {len(v)}, expected {n_merging}"
-            )
+            assert len(v) == n_merging, f"{k!r} has length {len(v)}, expected {n_merging}"
 
 
 # ─────────────────────────────────────────────────────────────────────
-# NaN-weight guard (Chairman fix #1)
+# NaN-weight guard
 # ─────────────────────────────────────────────────────────────────────
 def test_load_bns_raises_on_nan_weight(tmp_path):
     """A NaN inside the merging slice of weight must abort the load."""
@@ -272,20 +286,17 @@ def test_load_bhns_type_separation(synthetic_bhns_path):
     path, n_merging, st1, m1, m2 = synthetic_bhns_path
     out = load_bhns(path=path)
 
-    expected_M_BH = np.where(st1[:n_merging] == 14,
-                             m1[:n_merging], m2[:n_merging])
-    expected_M_NS = np.where(st1[:n_merging] == 14,
-                             m2[:n_merging], m1[:n_merging])
+    expected_M_BH = np.where(st1[:n_merging] == 14, m1[:n_merging], m2[:n_merging])
+    expected_M_NS = np.where(st1[:n_merging] == 14, m2[:n_merging], m1[:n_merging])
     np.testing.assert_array_equal(out["M_BH"], expected_M_BH)
     np.testing.assert_array_equal(out["M_NS"], expected_M_NS)
     assert (out["M_BH"] >= out["M_NS"]).all(), (
-        "Synthetic fixture violates BHNS hierarchy; BH should be heavier "
-        "than NS in every row."
+        "Synthetic fixture violates BHNS hierarchy; BH should be heavier than NS in every row."
     )
 
 
 # ─────────────────────────────────────────────────────────────────────
-# _match_sn_to_dco vectorised join (Executor smoke + Chairman fix #2)
+# _match_sn_to_dco vectorised join
 # ─────────────────────────────────────────────────────────────────────
 def test_match_sn_to_dco_last_per_seed(synthetic_kicks_bns_path):
     """Last SN per seed (highest time) must be returned; no warning fires."""
@@ -298,8 +309,7 @@ def test_match_sn_to_dco_last_per_seed(synthetic_kicks_bns_path):
             vsys = _match_sn_to_dco(f)
 
     np.testing.assert_array_equal(vsys, expected_last_vsys)
-    sn_warnings = [w for w in caught
-                   if "DCO seeds had no matching SN" in str(w.message)]
+    sn_warnings = [w for w in caught if "DCO seeds had no matching SN" in str(w.message)]
     assert sn_warnings == [], (
         "All seeds matched; unmatched-SN warning should not fire. "
         f"Got: {[str(w.message) for w in sn_warnings]}"
@@ -307,7 +317,7 @@ def test_match_sn_to_dco_last_per_seed(synthetic_kicks_bns_path):
 
 
 def test_match_sn_to_dco_warns_on_unmatched(synthetic_kicks_unmatched_path):
-    """Unmatched DCO seeds must fire the council Contrarian #3 warning."""
+    """Unmatched DCO seeds must fire the missing-SN warning."""
     from grb_io import _match_sn_to_dco
 
     with pytest.warns(UserWarning, match="had no matching SN"):
@@ -338,8 +348,7 @@ def test_weighted_sample_mean_within_5pct():
     w = np.exp(0.5 * x)
 
     mask = np.ones(n, dtype=bool)
-    idx = weighted_sample(mask, w, n_target=10_000,
-                          rng=np.random.default_rng(7))
+    idx = weighted_sample(mask, w, n_target=10_000, rng=np.random.default_rng(7))
     sample_mean = float(np.mean(x[idx]))
     weighted_mean = float(np.average(x, weights=w))
     unweighted_mean = float(np.mean(x))
@@ -374,9 +383,9 @@ def test_weighted_sample_handles_empty_mask():
 # These tests pin (a) the round-trip from the embedded HDF5 attribute
 # to the loader output dict and (b) the model-substitution defense on
 # the four variant loaders that previously skipped validation.
-@pytest.mark.parametrize("model_letter,ns_max",
-                         [("A", 2.5), ("F", 2.5), ("G", 2.5),
-                          ("J", 2.0), ("K", 3.0)])
+@pytest.mark.parametrize(
+    "model_letter,ns_max", [("A", 2.5), ("F", 2.5), ("G", 2.5), ("J", 2.0), ("K", 3.0)]
+)
 def test_load_bns_returns_model_and_ns_max(tmp_path, model_letter, ns_max):
     from grb_io import load_bns
 
@@ -385,14 +394,12 @@ def test_load_bns_returns_model_and_ns_max(tmp_path, model_letter, ns_max):
         _write_metadata(f, kind="BNS", model=model_letter, ns_max=ns_max)
         _write_dco_group(f, n_total=4, n_merging=3)
 
-    out = load_bns(path=str(path), expected_model=model_letter,
-                   expected_ns_max=ns_max)
+    out = load_bns(path=str(path), expected_model=model_letter, expected_ns_max=ns_max)
     assert out["model"] == model_letter
     assert out["ns_max"] == ns_max
 
 
-@pytest.mark.parametrize("model_letter,ns_max",
-                         [("A", 2.5), ("J", 2.0), ("K", 3.0)])
+@pytest.mark.parametrize("model_letter,ns_max", [("A", 2.5), ("J", 2.0), ("K", 3.0)])
 def test_load_bhns_returns_model_and_ns_max(tmp_path, model_letter, ns_max):
     from grb_io import load_bhns
 
@@ -401,8 +408,7 @@ def test_load_bhns_returns_model_and_ns_max(tmp_path, model_letter, ns_max):
         _write_metadata(f, kind="BHNS", model=model_letter, ns_max=ns_max)
         _write_dco_group(f, n_total=4, n_merging=3)
 
-    out = load_bhns(path=str(path), expected_model=model_letter,
-                    expected_ns_max=ns_max)
+    out = load_bhns(path=str(path), expected_model=model_letter, expected_ns_max=ns_max)
     assert out["model"] == model_letter
     assert out["ns_max"] == ns_max
 
@@ -414,25 +420,33 @@ def test_load_bns_with_channels_validates_expected_model_mismatch(tmp_path):
     path = tmp_path / "bns_channels_mislabel.h5"
     with h5.File(path, "w") as f:
         _write_metadata(f, kind="BNS", model="F", ns_max=2.5)
-        _write_dco_group(f, n_total=3, n_merging=2,
-                         extra_cols={
-                             "M1ZAMS": np.full(3, 30.0),
-                             "M2ZAMS": np.full(3, 20.0),
-                             "doubleCommonEnvelopeFlag": np.zeros(3, int),
-                             "SemiMajorAxisPreCEE":  np.full(3, 1e10),
-                             "SemiMajorAxisPostCEE": np.full(3, 1e8),
-                         })
+        _write_dco_group(
+            f,
+            n_total=3,
+            n_merging=2,
+            extra_cols={
+                "M1ZAMS": np.full(3, 30.0),
+                "M2ZAMS": np.full(3, 20.0),
+                "doubleCommonEnvelopeFlag": np.zeros(3, int),
+                "SemiMajorAxisPreCEE": np.full(3, 1e10),
+                "SemiMajorAxisPostCEE": np.full(3, 1e8),
+            },
+        )
         fc = f.create_group("formationChannels")
-        for col in ("mt_primary_ep1", "mt_primary_ep1_K1",
-                    "mt_secondary_ep1", "mt_secondary_ep1_K2", "CEE"):
+        for col in (
+            "mt_primary_ep1",
+            "mt_primary_ep1_K1",
+            "mt_secondary_ep1",
+            "mt_secondary_ep1_K2",
+            "CEE",
+        ):
             fc.create_dataset(col, data=np.zeros((3, 1), int))
 
     with pytest.raises(ValueError, match="is model 'F', expected 'A'"):
         load_bns_with_channels(path=str(path), expected_model="A")
 
 
-def test_load_bhns_with_kicks_validates_expected_model_mismatch(
-        synthetic_kicks_bns_path):
+def test_load_bhns_with_kicks_validates_expected_model_mismatch(synthetic_kicks_bns_path):
     """The kicks variant must raise on a mislabeled model attribute.
 
     Reuses the BNS-kicks synthetic fixture (its ``stellarType1`` defaults
@@ -448,8 +462,7 @@ def test_load_bhns_with_kicks_validates_expected_model_mismatch(
         load_bhns_with_kicks(path=path, expected_model="K")
 
 
-def test_load_bns_with_kicks_validates_expected_model_mismatch(
-        synthetic_kicks_bns_path):
+def test_load_bns_with_kicks_validates_expected_model_mismatch(synthetic_kicks_bns_path):
     """The BNS-kicks variant must raise on a mislabeled model attribute."""
     from grb_io import load_bns_with_kicks
 
