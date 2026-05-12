@@ -9,6 +9,7 @@ single source of truth fail loudly.
 from __future__ import annotations
 
 import pytest
+
 from grb_plot_style import (
     APJ_RCPARAMS,
     C_FAINT,
