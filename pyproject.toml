@@ -118,6 +118,11 @@ omit = [
     "tests/*",
     "tools/*",
 ]
+# Narrow test scopes (e.g. a single section file) intentionally skip
+# modules in `source`; coverage's "module-not-imported" warning is
+# noise in that case.  The 70 percent floor in `make coverage` runs
+# the full unit + anchors selector, which does import every module.
+disable_warnings = ["module-not-imported"]
 
 [tool.coverage.report]
 exclude_lines = [

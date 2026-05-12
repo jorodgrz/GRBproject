@@ -12,12 +12,10 @@ conda activate grb-env
 python -m ipykernel install --user --name grb-env --display-name "GRB (grb-env)"
 ```
 
-[environment.yml](environment.yml) pins `compas_python_utils` to upstream commit `81722d4`.
-
 ## Data
 
 ```bash
-python tools/download_compas_data.py --tier 1 --confirm    # 5 core models A, F, G, J, K (manuscript figures)
+python tools/download_compas_data.py --tier 1 --confirm    # 5 core models A, F, G, J, K 
 python tools/download_compas_data.py --confirm    # full 20-model grid, ~45 GB
 ```
 
@@ -28,7 +26,7 @@ Files land in `Data/COMPASCompactOutput_<KIND>_<SUFFIX>.h5`. BNS catalogues from
 | File | Purpose |
 |---|---|
 | [grb_main.ipynb](grb_main.ipynb) | Main figures, Sections 1 to 12 |
-| [comparison.ipynb](comparison.ipynb) | Observational comparison; canonical ApJ rcParams block |
+| [comparison.ipynb](comparison.ipynb) | Observational comparison to Raaijmakers et al. (2021)|
 | [grb_physics.py](grb_physics.py) | Remnant mass, ejecta, EOS, Gottlieb thresholds |
 | [grb_classify.py](grb_classify.py) | BNS, BHNS, unified grid, formation channels |
 | [grb_rates.py](grb_rates.py) | MSSFR convolution, BH-spin marginalization, beaming |
@@ -39,12 +37,12 @@ Files land in `Data/COMPASCompactOutput_<KIND>_<SUFFIX>.h5`. BNS catalogues from
 
 ## Classification
 
-**BNS, Gottlieb (2024) four-class hybrid** (`classify_bns_2024`). $M_\mathrm{TOV} = 2.2\,M_\odot$, $M_\mathrm{thresh} = 1.27\*M_\mathrm{TOV}$, $q_\mathrm{thresh} = 1.2$.
+**BNS, Gottlieb (2024) four-class hybrid** (`classify_bns_2024`). $M_\mathrm{TOV} = 2.2\M_\odot$, $M_\mathrm{thresh} = 1.27\M_\mathrm{TOV}$, $q_\mathrm{thresh} = 1.2$.
 
 | Class | Condition |
 |---|---|
-| sbGRB + blue KN | $M_\mathrm{tot} < 1.2\,M_\mathrm{TOV}$ |
-| lbGRB + red KN (HMNS) | $1.2\,M_\mathrm{TOV} \leq M_\mathrm{tot} < M_\mathrm{thresh}$ |
+| sbGRB + blue KN | $M_\mathrm{tot} < 1.2\M_\mathrm{TOV}$ |
+| lbGRB + red KN (HMNS) | $1.2\M_\mathrm{TOV} \leq M_\mathrm{tot} < M_\mathrm{thresh}$ |
 | lbGRB + red KN (disk) | $M_\mathrm{tot} \geq M_\mathrm{thresh}$, $q \geq q_\mathrm{thresh}$ |
 | Faint lbGRB | $M_\mathrm{tot} \geq M_\mathrm{thresh}$, $q < q_\mathrm{thresh}$ |
 
@@ -52,9 +50,9 @@ Files land in `Data/COMPASCompactOutput_<KIND>_<SUFFIX>.h5`. BNS catalogues from
 
 | Class | Condition |
 |---|---|
-| No GRB | $M_\mathrm{disk} < 0.01\,M_\odot$ |
-| Short cbGRB | $0.01 \leq M_\mathrm{disk} < 0.1\,M_\odot$ |
-| Long cbGRB | $M_\mathrm{disk} \geq 0.1\,M_\odot$ |
+| No GRB | $M_\mathrm{disk} < 0.01\M_\odot$ |
+| Short cbGRB | $0.01 \leq M_\mathrm{disk} < 0.1\M_\odot$ |
+| Long cbGRB | $M_\mathrm{disk} \geq 0.1\M_\odot$ |
 
 
 

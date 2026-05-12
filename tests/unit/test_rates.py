@@ -406,6 +406,53 @@ def test_wanderman_piran_2015_peak_at_z_peak():
 
 
 # ─────────────────────────────────────────────────────────────────────
+# kroupa_imf return-type contract (NumPy 1.25 deprecation guard)
+# ─────────────────────────────────────────────────────────────────────
+def test_kroupa_imf_size_one_array_returns_python_float_no_deprecation():
+    """Length-1 ndarray input must return a Python ``float`` and must not
+    raise a NumPy DeprecationWarning.
+
+    Pre-fix the function returned ``float(result)`` directly on a length-1
+    ndarray with ``ndim > 0``, which trips the NumPy 1.25 deprecation
+    "Conversion of an array with ndim > 0 to a scalar is deprecated"
+    and will become a hard error in a future NumPy release.  The fix
+    routes through ``result.item()`` which is the documented scalar
+    extractor for length-1 arrays.  This test pins both the return type
+    and the warning-free contract so the regression cannot reappear.
+    """
+    import warnings
+
+    from grb_rates import kroupa_imf
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        out = kroupa_imf(np.array([0.5]))
+
+    assert isinstance(out, float), f"expected Python float, got {type(out).__name__}"
+
+
+def test_kroupa_imf_scalar_input_returns_python_float():
+    """Scalar input goes through the same ``np.atleast_1d`` -> size-1
+    branch and must also return a Python ``float`` (not a 0-d ndarray
+    or a NumPy scalar)."""
+    from grb_rates import kroupa_imf
+
+    out = kroupa_imf(0.5)
+    assert isinstance(out, float), f"expected Python float, got {type(out).__name__}"
+
+
+def test_kroupa_imf_array_input_returns_ndarray():
+    """Multi-element input keeps the ndarray return path so downstream
+    vectorised callers (Kroupa IMF integration, IMF-weighted means)
+    are not silently demoted to per-element Python floats."""
+    from grb_rates import kroupa_imf
+
+    out = kroupa_imf(np.array([0.1, 1.0]))
+    assert isinstance(out, np.ndarray), f"expected ndarray, got {type(out).__name__}"
+    assert out.shape == (2,)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # COMPAS-vs-grb_rates: numerical agreement on the same HDF5 at z = 0.
 # ─────────────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────────────
