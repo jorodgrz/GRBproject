@@ -364,3 +364,110 @@ def test_weighted_sample_handles_empty_mask():
     w = np.linspace(0.1, 1.0, n)
     idx = weighted_sample(mask, w, n_target=5)
     assert idx.size == 0
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Loader return-dict carries `model` and `ns_max` (Section 12 prereq)
+# ─────────────────────────────────────────────────────────────────────
+# Section 12 of grb_main.ipynb iterates over Broekgaarden+ 2021 Models
+# A, F, G, J, K and feeds bns['ns_max'] straight into classify_grid.
+# These tests pin (a) the round-trip from the embedded HDF5 attribute
+# to the loader output dict and (b) the model-substitution defense on
+# the four variant loaders that previously skipped validation.
+@pytest.mark.parametrize("model_letter,ns_max",
+                         [("A", 2.5), ("F", 2.5), ("G", 2.5),
+                          ("J", 2.0), ("K", 3.0)])
+def test_load_bns_returns_model_and_ns_max(tmp_path, model_letter, ns_max):
+    from grb_io import load_bns
+
+    path = tmp_path / f"bns_{model_letter}.h5"
+    with h5.File(path, "w") as f:
+        _write_metadata(f, kind="BNS", model=model_letter, ns_max=ns_max)
+        _write_dco_group(f, n_total=4, n_merging=3)
+
+    out = load_bns(path=str(path), expected_model=model_letter,
+                   expected_ns_max=ns_max)
+    assert out["model"] == model_letter
+    assert out["ns_max"] == ns_max
+
+
+@pytest.mark.parametrize("model_letter,ns_max",
+                         [("A", 2.5), ("J", 2.0), ("K", 3.0)])
+def test_load_bhns_returns_model_and_ns_max(tmp_path, model_letter, ns_max):
+    from grb_io import load_bhns
+
+    path = tmp_path / f"bhns_{model_letter}.h5"
+    with h5.File(path, "w") as f:
+        _write_metadata(f, kind="BHNS", model=model_letter, ns_max=ns_max)
+        _write_dco_group(f, n_total=4, n_merging=3)
+
+    out = load_bhns(path=str(path), expected_model=model_letter,
+                    expected_ns_max=ns_max)
+    assert out["model"] == model_letter
+    assert out["ns_max"] == ns_max
+
+
+def test_load_bns_with_channels_validates_expected_model_mismatch(tmp_path):
+    """The channels variant must raise on a mislabeled model attribute."""
+    from grb_io import load_bns_with_channels
+
+    path = tmp_path / "bns_channels_mislabel.h5"
+    with h5.File(path, "w") as f:
+        _write_metadata(f, kind="BNS", model="F", ns_max=2.5)
+        _write_dco_group(f, n_total=3, n_merging=2,
+                         extra_cols={
+                             "M1ZAMS": np.full(3, 30.0),
+                             "M2ZAMS": np.full(3, 20.0),
+                             "doubleCommonEnvelopeFlag": np.zeros(3, int),
+                             "SemiMajorAxisPreCEE":  np.full(3, 1e10),
+                             "SemiMajorAxisPostCEE": np.full(3, 1e8),
+                         })
+        fc = f.create_group("formationChannels")
+        for col in ("mt_primary_ep1", "mt_primary_ep1_K1",
+                    "mt_secondary_ep1", "mt_secondary_ep1_K2", "CEE"):
+            fc.create_dataset(col, data=np.zeros((3, 1), int))
+
+    with pytest.raises(ValueError, match="is model 'F', expected 'A'"):
+        load_bns_with_channels(path=str(path), expected_model="A")
+
+
+def test_load_bhns_with_kicks_validates_expected_model_mismatch(
+        synthetic_kicks_bns_path):
+    """The kicks variant must raise on a mislabeled model attribute.
+
+    Reuses the BNS-kicks synthetic fixture (its ``stellarType1`` defaults
+    to all-BH which is wrong for BHNS but does not affect the metadata
+    validation that runs before the body of the loader).
+    """
+    from grb_io import load_bhns_with_kicks
+
+    path, *_ = synthetic_kicks_bns_path
+    with pytest.raises(ValueError, match="kind='BNS'"):
+        # Synthetic file is BNS-kind; expected_model='K' would also raise
+        # but the kind mismatch raises first.
+        load_bhns_with_kicks(path=path, expected_model="K")
+
+
+def test_load_bns_with_kicks_validates_expected_model_mismatch(
+        synthetic_kicks_bns_path):
+    """The BNS-kicks variant must raise on a mislabeled model attribute."""
+    from grb_io import load_bns_with_kicks
+
+    path, *_ = synthetic_kicks_bns_path
+    with pytest.raises(ValueError, match="is model 'A', expected 'K'"):
+        load_bns_with_kicks(path=path, expected_model="K")
+
+
+def test_loader_returns_none_metadata_when_attributes_absent(tmp_path):
+    """Backward compatibility: un-annotated archives return model=None."""
+    from grb_io import load_bns
+
+    path = tmp_path / "bns_unannotated.h5"
+    with h5.File(path, "w") as f:
+        _write_dco_group(f, n_total=3, n_merging=2)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # silence the "no metadata" warning
+        out = load_bns(path=str(path))
+    assert out["model"] is None
+    assert out["ns_max"] is None

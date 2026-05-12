@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from grb_physics import (
+    chirp_mass,
     foucart_disk_mass,
     foucart_remnant_mass,
     bhns_dynamical_ejecta,
@@ -391,3 +392,53 @@ def test_stroopwafel_per_class_local_rates_within_band(bns_a_path):
         f"masks do not partition the BNS sample."
     )
     assert R_total == pytest.approx(R_ref, rel=1e-9)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Chirp mass: Peters (1964) PRD 136, B1224 -- definition
+# ─────────────────────────────────────────────────────────────────────
+def test_chirp_mass_equal_mass_identity():
+    """For m1 = m2 = m, M_chirp = m * (1/2)**(1/5).
+
+    Peters (1964) defines M_chirp = (m1 m2)**(3/5) / (m1 + m2)**(1/5);
+    setting m1 = m2 = m gives (m^2)**(3/5) / (2m)**(1/5)
+    = m / 2**(1/5) = m * (1/2)**(1/5) ~ 0.8706 m.  Anchors the helper
+    to the closed-form algebra.
+    """
+    m = 1.4
+    expected = m * (0.5) ** 0.2
+    assert chirp_mass(m, m) == pytest.approx(expected, rel=1e-12)
+    np.testing.assert_allclose(
+        chirp_mass(np.array([m, 2 * m]), np.array([m, 2 * m])),
+        np.array([expected, 2 * expected]), rtol=1e-12, atol=0)
+
+
+def test_chirp_mass_ordering_invariance():
+    """``chirp_mass`` is symmetric in (m1, m2): swap-invariant.
+
+    The CLAUDE.md ``m1 >= m2`` invariant is enforced at load time, but
+    chirp mass is a derived quantity that must be order-agnostic so the
+    helper does not silently shift if a future caller violates the
+    ordering.
+    """
+    rng = np.random.default_rng(0)
+    m1 = rng.uniform(0.8, 2.5, size=64)
+    m2 = rng.uniform(0.8, 2.5, size=64)
+    np.testing.assert_allclose(chirp_mass(m1, m2), chirp_mass(m2, m1),
+                               rtol=1e-15, atol=0)
+
+
+def test_chirp_mass_scalar_array_parity():
+    """Scalar and array-of-one inputs must agree to machine precision.
+
+    Vectorisation parity guard for the ``np.asarray`` cast inside
+    ``chirp_mass``.
+    """
+    m1, m2 = 1.35, 1.30
+    s = float(chirp_mass(m1, m2))
+    a = chirp_mass(np.array([m1]), np.array([m2]))
+    assert a.shape == (1,)
+    assert s == pytest.approx(float(a[0]), rel=1e-15)
+    expected = (m1 * m2) ** 0.6 / (m1 + m2) ** 0.2
+    assert s == pytest.approx(expected, rel=1e-15)
+
