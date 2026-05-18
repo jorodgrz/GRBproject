@@ -50,6 +50,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1"
+          pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
 
       - name: Run unit + anchors with coverage gate
         run: python -m pytest -m "unit or anchors" --cov-fail-under=70 --tb=short
@@ -71,6 +72,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1" "nbclient>=0.10" "nbformat>=5.10"
+          pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
 
       - name: Note about Data/
         run: |
@@ -100,13 +102,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "numpy>=1.23" "scipy>=1.10" "h5py>=3.7" "pandas>=2.0" "astropy>=5.0" "matplotlib>=3.7" "pytest>=7.4" "pytest-cov>=4.1" "nbclient>=0.10" "nbformat>=5.10"
+          pip install "git+https://github.com/TeamCOMPAS/COMPAS.git@81722d4483609446a2a40cce4028e2743544c187#egg=compas_python_utils"
 
-      - name: Note about Data/ and compas_python_utils
+      - name: Note about Data/
         run: |
-          echo "Tests gated by @pytest.mark.requires_data and @pytest.mark.requires_compas"
-          echo "auto-skip when their dependencies are missing.  Add a Data/ staging"
-          echo "step (Zenodo or artifact restore) and a compas_python_utils install"
-          echo "before this step to exercise the full suite end-to-end."
+          echo "Tests gated by @pytest.mark.requires_data auto-skip when the"
+          echo "Data/ HDF5 catalogues are missing.  Add a Data/ staging step"
+          echo "(Zenodo download or artifact restore) before this one to"
+          echo "exercise the full suite end-to-end."
 
       - name: Run full pytest suite
         run: python -m pytest -q --tb=short

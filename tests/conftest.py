@@ -39,6 +39,23 @@ if _TOOLS_DIR not in sys.path:
 _DATA_DIR = os.path.join(_REPO_ROOT, "Data")
 
 
+try:
+    import compas_python_utils  # noqa: F401
+
+    _COMPAS_AVAILABLE = True
+except ImportError:
+    _COMPAS_AVAILABLE = False
+
+
+def _data_dir_has_compas_hdf5() -> bool:
+    if not os.path.isdir(_DATA_DIR):
+        return False
+    return any(name.endswith(".h5") for name in os.listdir(_DATA_DIR))
+
+
+_DATA_PRESENT = _data_dir_has_compas_hdf5()
+
+
 def _data_path(name: str) -> str:
     return os.path.join(_DATA_DIR, name)
 
@@ -151,3 +168,11 @@ def pytest_collection_modifyitems(config, items):
                 num = tail.split("_", 1)[0]
                 if num.isdigit():
                     item.add_marker(getattr(pytest.mark, f"section_{int(num)}"))
+
+    skip_compas = pytest.mark.skip(reason="compas_python_utils not importable")
+    skip_data = pytest.mark.skip(reason="Data/ has no COMPAS HDF5 catalogues")
+    for item in items:
+        if not _COMPAS_AVAILABLE and "requires_compas" in item.keywords:
+            item.add_marker(skip_compas)
+        if not _DATA_PRESENT and "requires_data" in item.keywords:
+            item.add_marker(skip_data)
