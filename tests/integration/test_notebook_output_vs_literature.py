@@ -130,7 +130,9 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
         Z_range = (float(min(Z_bns.min(), Z_bhns.min())), float(max(Z_bns.max(), Z_bhns.max())))
 
     dPdlogZ, metallicities, p_draw = fci.find_metallicity_distribution(
-        redshifts, min_logZ_COMPAS=np.log(Z_range[0]), max_logZ_COMPAS=np.log(Z_range[1]),
+        redshifts,
+        min_logZ_COMPAS=np.log(Z_range[0]),
+        max_logZ_COMPAS=np.log(Z_range[1]),
         **MSSFR_PARAMS_LEVINA26_TNG100,
     )
 
@@ -138,14 +140,26 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     expected_rate_bhns = read_expected_local_rate(bhns_a_path)
 
     mean_mass_bns = calibrate_mean_mass_evolved(
-        redshifts, times, time_first_SF,
-        Z_bns, delay_bns, w_bns, expected_rate_bns,
-        Z_min_COMPAS=Z_range[0], Z_max_COMPAS=Z_range[1],
+        redshifts,
+        times,
+        time_first_SF,
+        Z_bns,
+        delay_bns,
+        w_bns,
+        expected_rate_bns,
+        Z_min_COMPAS=Z_range[0],
+        Z_max_COMPAS=Z_range[1],
     )
     mean_mass_bhns = calibrate_mean_mass_evolved(
-        redshifts, times, time_first_SF,
-        Z_bhns, delay_bhns, w_bhns, expected_rate_bhns,
-        Z_min_COMPAS=Z_range[0], Z_max_COMPAS=Z_range[1],
+        redshifts,
+        times,
+        time_first_SF,
+        Z_bhns,
+        delay_bhns,
+        w_bhns,
+        expected_rate_bhns,
+        Z_min_COMPAS=Z_range[0],
+        Z_max_COMPAS=Z_range[1],
     )
     n_formed_BNS = sfr / mean_mass_bns
     n_formed_BHNS = sfr / mean_mass_bhns
@@ -162,9 +176,16 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     }
     merger_rates_BNS = {
         label: compute_merger_rate(
-            redshifts, times, time_first_SF, n_formed_BNS, p_draw,
-            dPdlogZ, metallicities,
-            Z_bns[mask], delay_bns[mask], w_bns[mask],
+            redshifts,
+            times,
+            time_first_SF,
+            n_formed_BNS,
+            p_draw,
+            dPdlogZ,
+            metallicities,
+            Z_bns[mask],
+            delay_bns[mask],
+            w_bns[mask],
         )
         for label, mask in bns_class_masks.items()
     }
@@ -173,16 +194,30 @@ def notebook_pipeline(bns_a_path, bhns_a_path):
     # All-BHNS rate at the fiducial a_BH = 0.5 (notebook Section 8).
     # ------------------------------------------------------------------
     rate_bhns_all = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed_BHNS, p_draw,
-        dPdlogZ, metallicities,
-        Z_bhns, delay_bhns, w_bhns,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed_BHNS,
+        p_draw,
+        dPdlogZ,
+        metallicities,
+        Z_bhns,
+        delay_bhns,
+        w_bhns,
     )
     rate_bhns_all_misaligned = apply_bhns_misalignment(rate_bhns_all)
 
     rate_bhns_long = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed_BHNS, p_draw,
-        dPdlogZ, metallicities,
-        Z_bhns[bhns_long], delay_bhns[bhns_long], w_bhns[bhns_long],
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed_BHNS,
+        p_draw,
+        dPdlogZ,
+        metallicities,
+        Z_bhns[bhns_long],
+        delay_bhns[bhns_long],
+        w_bhns[bhns_long],
     )
 
     iz0 = int(np.argmin(np.abs(redshifts)))

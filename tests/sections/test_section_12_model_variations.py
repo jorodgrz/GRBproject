@@ -144,28 +144,52 @@ def _get_model(letter: str) -> dict:
     p_draw = float(p_draw)
 
     mme_bns = calibrate_mean_mass_evolved(
-        redshifts, times, time_first_SF,
-        bns["metallicity"], bns["delay_time"], bns["weights"],
+        redshifts,
+        times,
+        time_first_SF,
+        bns["metallicity"],
+        bns["delay_time"],
+        bns["weights"],
         read_expected_local_rate(bns_path),
-        Z_min_COMPAS=METALLICITY_GRID[0], Z_max_COMPAS=METALLICITY_GRID[-1],
+        Z_min_COMPAS=METALLICITY_GRID[0],
+        Z_max_COMPAS=METALLICITY_GRID[-1],
     )
     mme_bhns = calibrate_mean_mass_evolved(
-        redshifts, times, time_first_SF,
-        bhns["metallicity"], bhns["delay_time"], bhns["weights"],
+        redshifts,
+        times,
+        time_first_SF,
+        bhns["metallicity"],
+        bhns["delay_time"],
+        bhns["weights"],
         read_expected_local_rate(bhns_path),
-        Z_min_COMPAS=METALLICITY_GRID[0], Z_max_COMPAS=METALLICITY_GRID[-1],
+        Z_min_COMPAS=METALLICITY_GRID[0],
+        Z_max_COMPAS=METALLICITY_GRID[-1],
     )
 
     R_bns = compute_merger_rate(
-        redshifts, times, time_first_SF, sfr / mme_bns, p_draw,
-        dPdlogZ, mets,
-        bns["metallicity"], bns["delay_time"], bns["weights"],
+        redshifts,
+        times,
+        time_first_SF,
+        sfr / mme_bns,
+        p_draw,
+        dPdlogZ,
+        mets,
+        bns["metallicity"],
+        bns["delay_time"],
+        bns["weights"],
         smooth_sigma=0,
     )
     R_bhns = compute_merger_rate(
-        redshifts, times, time_first_SF, sfr / mme_bhns, p_draw,
-        dPdlogZ, mets,
-        bhns["metallicity"], bhns["delay_time"], bhns["weights"],
+        redshifts,
+        times,
+        time_first_SF,
+        sfr / mme_bhns,
+        p_draw,
+        dPdlogZ,
+        mets,
+        bhns["metallicity"],
+        bhns["delay_time"],
+        bhns["weights"],
         smooth_sigma=0,
     )
     iz0 = int(np.argmin(np.abs(redshifts)))

@@ -113,13 +113,21 @@ def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
     )
     sfr = setup.fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
     dPdlogZ, mets, p_draw = setup.fci.find_metallicity_distribution(
-        redshifts, min_logZ_COMPAS=np.log(setup.Z.min()), max_logZ_COMPAS=np.log(setup.Z.max()),
+        redshifts,
+        min_logZ_COMPAS=np.log(setup.Z.min()),
+        max_logZ_COMPAS=np.log(setup.Z.max()),
         **MSSFR_PARAMS_LEVINA26_TNG100,
     )
     mean_mass = setup.calibrate_mean_mass_evolved(
-        redshifts, times, time_first_SF,
-        setup.Z, setup.delays, setup.w, setup.expected_local_rate,
-        Z_min_COMPAS=setup.Z.min(), Z_max_COMPAS=setup.Z.max(),
+        redshifts,
+        times,
+        time_first_SF,
+        setup.Z,
+        setup.delays,
+        setup.w,
+        setup.expected_local_rate,
+        Z_min_COMPAS=setup.Z.min(),
+        Z_max_COMPAS=setup.Z.max(),
     )
     n_formed = sfr / mean_mass
     return SimpleNamespace(
@@ -199,9 +207,15 @@ def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
         )
         # Calibrate with the Neijssel-anchored helper.
         mean_mass = calibrate_mean_mass_evolved(
-            redshifts, times, time_first_SF,
-            setup.Z, setup.delays, setup.w, setup.expected_local_rate,
-            Z_min_COMPAS=setup.Z.min(), Z_max_COMPAS=setup.Z.max(),
+            redshifts,
+            times,
+            time_first_SF,
+            setup.Z,
+            setup.delays,
+            setup.w,
+            setup.expected_local_rate,
+            Z_min_COMPAS=setup.Z.min(),
+            Z_max_COMPAS=setup.Z.max(),
         )
         # Run forward with the same Neijssel MSSFR (round-trip).
         sfr = find_sfr(redshifts)
@@ -211,8 +225,16 @@ def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
             max_logZ_COMPAS=np.log(setup.Z.max()),
         )
         R_full = compute_merger_rate(
-            redshifts, times, time_first_SF, sfr / mean_mass, p_draw,
-            dPdlogZ, mets, setup.Z, setup.delays, setup.w,
+            redshifts,
+            times,
+            time_first_SF,
+            sfr / mean_mass,
+            p_draw,
+            dPdlogZ,
+            mets,
+            setup.Z,
+            setup.delays,
+            setup.w,
             smooth_sigma=0,
         )
         rel = abs(R_full[0] / setup.expected_local_rate - 1.0)
@@ -221,9 +243,9 @@ def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
 
 @pytest.mark.xfail(
     reason="sbGRB+blueKN bimodality is a Neijssel-fiducial feature; Levina TNG100-1 "
-           "(omega_0 = 1.15 vs Neijssel 0.39) smears the metallicity weighting and "
-           "the dip-and-recovery flattens.  Test is preserved as documentation; "
-           "rerun on the Neijssel sweep variant when one is added.",
+    "(omega_0 = 1.15 vs Neijssel 0.39) smears the metallicity weighting and "
+    "the dip-and-recovery flattens.  Test is preserved as documentation; "
+    "rerun on the Neijssel sweep variant when one is added.",
     strict=False,
 )
 @pytest.mark.requires_data
@@ -391,8 +413,8 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
 
 @pytest.mark.xfail(
     reason="sbGRB+blueKN dip is Neijssel-specific; under Levina TNG100-1 there is "
-           "no dip, so 'N_eff at the dip' is meaningless.  Same provenance as "
-           "test_sbGRB_rate_dip_redshift_binning_invariant.",
+    "no dip, so 'N_eff at the dip' is meaningless.  Same provenance as "
+    "test_sbGRB_rate_dip_redshift_binning_invariant.",
     strict=False,
 )
 @pytest.mark.requires_data

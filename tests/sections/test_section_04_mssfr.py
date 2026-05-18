@@ -64,12 +64,21 @@ def _build_tng_sweep_setup(bns_a_path):
     w = data["weights"]
 
     redshifts, _, times, time_first_SF, _, _ = calculate_redshift_related_params(
-        max_redshift=10.0, redshift_step=0.05, cosmology=Planck15,
+        max_redshift=10.0,
+        redshift_step=0.05,
+        cosmology=Planck15,
     )
     expected_local_rate = read_expected_local_rate(bns_a_path)
     mean_mass = calibrate_mean_mass_evolved(
-        redshifts, times, time_first_SF, Z, delays, w, expected_local_rate,
-        Z_min_COMPAS=METALLICITY_GRID[0], Z_max_COMPAS=METALLICITY_GRID[-1],
+        redshifts,
+        times,
+        time_first_SF,
+        Z,
+        delays,
+        w,
+        expected_local_rate,
+        Z_min_COMPAS=METALLICITY_GRID[0],
+        Z_max_COMPAS=METALLICITY_GRID[-1],
     )
 
     R_per_tng = {}
@@ -82,8 +91,17 @@ def _build_tng_sweep_setup(bns_a_path):
             **mssfr_p,
         )
         R_per_tng[name] = compute_merger_rate(
-            redshifts, times, time_first_SF, sfr_v / mean_mass, p_draw_v,
-            dPdlogZ_v, mets_v, Z, delays, w, smooth_sigma=0,
+            redshifts,
+            times,
+            time_first_SF,
+            sfr_v / mean_mass,
+            p_draw_v,
+            dPdlogZ_v,
+            mets_v,
+            Z,
+            delays,
+            w,
+            smooth_sigma=0,
         )
     return redshifts, R_per_tng
 

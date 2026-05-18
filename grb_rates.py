@@ -8,8 +8,6 @@ fit to IllustrisTNG TNG100-1 (Table 1).  Also includes Kroupa (2001) IMF
 verification, per-system rate weights, EOS / spin / beaming sweeps.
 """
 
-import warnings
-
 import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
@@ -75,7 +73,7 @@ MSSFR_PARAMS_LEVINA26_TNG300 = {
 
 # Convenience grouping used by the TNG-resolution sweep notebook section.
 LEVINA26_TNG_VARIANTS = {
-    "TNG50-1":  (SFR_PARAMS_LEVINA26_TNG50,  MSSFR_PARAMS_LEVINA26_TNG50),
+    "TNG50-1": (SFR_PARAMS_LEVINA26_TNG50, MSSFR_PARAMS_LEVINA26_TNG50),
     "TNG100-1": (SFR_PARAMS_LEVINA26_TNG100, MSSFR_PARAMS_LEVINA26_TNG100),
     "TNG300-1": (SFR_PARAMS_LEVINA26_TNG300, MSSFR_PARAMS_LEVINA26_TNG300),
 }
@@ -88,7 +86,7 @@ LEVINA26_TNG_VARIANTS = {
 # (constants pinned in tests/anchors/test_literature_anchors.py) and as the
 # context for the TNG-resolution sweep in Section 4b.
 LEVINA26_BBH_LOCAL_RATES = {
-    "TNG50-1":  {"R_sim": 58.92, "R_fit": 73.72},
+    "TNG50-1": {"R_sim": 58.92, "R_fit": 73.72},
     "TNG100-1": {"R_sim": 42.91, "R_fit": 45.53},
     "TNG300-1": {"R_sim": 29.34, "R_fit": 27.81},
 }
@@ -189,9 +187,7 @@ def compute_merger_rate(
 # ═══════════════════════════════════════════════════════════════════════════
 # GW detection-rate via FCI selection effects
 # ═══════════════════════════════════════════════════════════════════════════
-def _build_snr_detection_grids(
-    sensitivity="O3", snr_threshold=8.0, Mc_max=300.0, eta_step=0.01
-):
+def _build_snr_detection_grids(sensitivity="O3", snr_threshold=8.0, Mc_max=300.0, eta_step=0.01):
     """Wrapper around FCI ``compute_snr_and_detection_grids``.
 
     Returns the SNR-vs-(M_c, eta) grid evaluated at 1 Mpc plus a 1-D
@@ -308,7 +304,8 @@ def detected_rate(
     eta = (m1 * m2) / (m1 + m2) ** 2
 
     snr_grid_at_1Mpc, det_prob_from_snr = _build_snr_detection_grids(
-        sensitivity=sensitivity, snr_threshold=snr_threshold,
+        sensitivity=sensitivity,
+        snr_threshold=snr_threshold,
     )
 
     total = np.zeros(n_redshifts_detection)

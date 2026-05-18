@@ -1002,11 +1002,11 @@ def test_levina_2026_tng100_mssfr_parameters_match_table_1():
     """MSSFR_PARAMS_LEVINA26_TNG100 must match Levina+ 2026 Table 1, TNG100-1 column."""
     from grb_rates import MSSFR_PARAMS_LEVINA26_TNG100 as P
 
-    assert P["mu0"]     == pytest.approx(0.0247,  rel=1e-9), P["mu0"]
-    assert P["muz"]     == pytest.approx(-0.0521, rel=1e-9), P["muz"]
-    assert P["sigma_0"] == pytest.approx(1.1509,  rel=1e-9), P["sigma_0"]
-    assert P["sigma_z"] == pytest.approx(0.0477,  rel=1e-9), P["sigma_z"]
-    assert P["alpha"]   == pytest.approx(-1.8801, rel=1e-9), P["alpha"]
+    assert P["mu0"] == pytest.approx(0.0247, rel=1e-9), P["mu0"]
+    assert P["muz"] == pytest.approx(-0.0521, rel=1e-9), P["muz"]
+    assert P["sigma_0"] == pytest.approx(1.1509, rel=1e-9), P["sigma_0"]
+    assert P["sigma_z"] == pytest.approx(0.0477, rel=1e-9), P["sigma_z"]
+    assert P["alpha"] == pytest.approx(-1.8801, rel=1e-9), P["alpha"]
 
 
 def test_levina_2026_tng100_sfr_parameters_match_table_1():
@@ -1064,11 +1064,11 @@ def test_levina_2026_tng50_parameters_match_table_1():
     assert SFR_PARAMS_LEVINA26_TNG50["c"] == pytest.approx(3.8412, rel=1e-9)
     assert SFR_PARAMS_LEVINA26_TNG50["d"] == pytest.approx(5.0994, rel=1e-9)
 
-    assert MSSFR_PARAMS_LEVINA26_TNG50["mu0"]     == pytest.approx(0.0282,  rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG50["muz"]     == pytest.approx(-0.0314, rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG50["sigma_0"] == pytest.approx(1.1136,  rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG50["sigma_z"] == pytest.approx(0.0592,  rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG50["alpha"]   == pytest.approx(-1.7353, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["mu0"] == pytest.approx(0.0282, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["muz"] == pytest.approx(-0.0314, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["sigma_0"] == pytest.approx(1.1136, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["sigma_z"] == pytest.approx(0.0592, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["alpha"] == pytest.approx(-1.7353, rel=1e-9)
 
 
 def test_levina_2026_tng300_parameters_match_table_1():
@@ -1083,11 +1083,11 @@ def test_levina_2026_tng300_parameters_match_table_1():
     assert SFR_PARAMS_LEVINA26_TNG300["c"] == pytest.approx(4.5428, rel=1e-9)
     assert SFR_PARAMS_LEVINA26_TNG300["d"] == pytest.approx(6.8266, rel=1e-9)
 
-    assert MSSFR_PARAMS_LEVINA26_TNG300["mu0"]     == pytest.approx(0.0237,  rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG300["muz"]     == pytest.approx(-0.0687, rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG300["sigma_0"] == pytest.approx(1.1196,  rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG300["sigma_z"] == pytest.approx(0.0481,  rel=1e-9)
-    assert MSSFR_PARAMS_LEVINA26_TNG300["alpha"]   == pytest.approx(-2.2726, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["mu0"] == pytest.approx(0.0237, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["muz"] == pytest.approx(-0.0687, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["sigma_0"] == pytest.approx(1.1196, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["sigma_z"] == pytest.approx(0.0481, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["alpha"] == pytest.approx(-2.2726, rel=1e-9)
 
 
 def test_levina_2026_bbh_local_rates_match_table_2():
@@ -1095,16 +1095,14 @@ def test_levina_2026_bbh_local_rates_match_table_2():
     from grb_rates import LEVINA26_BBH_LOCAL_RATES
 
     expected = {
-        "TNG50-1":  {"R_sim": 58.92, "R_fit": 73.72},
+        "TNG50-1": {"R_sim": 58.92, "R_fit": 73.72},
         "TNG100-1": {"R_sim": 42.91, "R_fit": 45.53},
         "TNG300-1": {"R_sim": 29.34, "R_fit": 27.81},
     }
     for tng, vals in expected.items():
         assert tng in LEVINA26_BBH_LOCAL_RATES
         for key, val in vals.items():
-            assert LEVINA26_BBH_LOCAL_RATES[tng][key] == pytest.approx(val, rel=1e-9), (
-                tng, key
-            )
+            assert LEVINA26_BBH_LOCAL_RATES[tng][key] == pytest.approx(val, rel=1e-9), (tng, key)
 
 
 def test_levina_tng_resolution_monotonic_R_local_under_analytical_fit():
@@ -1116,12 +1114,12 @@ def test_levina_tng_resolution_monotonic_R_local_under_analytical_fit():
     """
     from grb_rates import LEVINA26_BBH_LOCAL_RATES
 
-    R_50  = LEVINA26_BBH_LOCAL_RATES["TNG50-1"]["R_fit"]
+    R_50 = LEVINA26_BBH_LOCAL_RATES["TNG50-1"]["R_fit"]
     R_100 = LEVINA26_BBH_LOCAL_RATES["TNG100-1"]["R_fit"]
     R_300 = LEVINA26_BBH_LOCAL_RATES["TNG300-1"]["R_fit"]
     assert R_50 > R_100 > R_300, (R_50, R_100, R_300)
 
-    R_50_sim  = LEVINA26_BBH_LOCAL_RATES["TNG50-1"]["R_sim"]
+    R_50_sim = LEVINA26_BBH_LOCAL_RATES["TNG50-1"]["R_sim"]
     R_100_sim = LEVINA26_BBH_LOCAL_RATES["TNG100-1"]["R_sim"]
     R_300_sim = LEVINA26_BBH_LOCAL_RATES["TNG300-1"]["R_sim"]
     assert R_50_sim > R_100_sim > R_300_sim, (R_50_sim, R_100_sim, R_300_sim)

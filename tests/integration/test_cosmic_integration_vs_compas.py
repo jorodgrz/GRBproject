@@ -91,16 +91,29 @@ def compas_xcheck_pipeline(bns_a_path):
     expected_local_rate = read_expected_local_rate(bns_a_path)
     Z_grid = np.unique(Z)
     mean_mass = calibrate_mean_mass_evolved(
-        redshifts, times, time_first_SF,
-        Z, delays, w, expected_local_rate,
-        Z_min_COMPAS=Z.min(), Z_max_COMPAS=Z.max(),
+        redshifts,
+        times,
+        time_first_SF,
+        Z,
+        delays,
+        w,
+        expected_local_rate,
+        Z_min_COMPAS=Z.min(),
+        Z_max_COMPAS=Z.max(),
     )
     n_formed = sfr / mean_mass
 
     R_ours = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        dPdlogZ_compas, metallicities,
-        Z, delays, w,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        dPdlogZ_compas,
+        metallicities,
+        Z,
+        delays,
+        w,
         smooth_sigma=0,
     )
 

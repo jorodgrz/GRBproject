@@ -203,15 +203,19 @@ def test_per_class_rates_partition_total_bns_2024():
     )
 
     R_total = compute_merger_rate(
-        COMPAS_Z=Z_compas, COMPAS_delay_times=delays, COMPAS_weights=weights,
+        COMPAS_Z=Z_compas,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=weights,
         **common,
     )
 
     R_per_class = {}
     for label, mask in cls.items():
         R_per_class[label] = compute_merger_rate(
-            COMPAS_Z=Z_compas[mask], COMPAS_delay_times=delays[mask],
-            COMPAS_weights=weights[mask], **common,
+            COMPAS_Z=Z_compas[mask],
+            COMPAS_delay_times=delays[mask],
+            COMPAS_weights=weights[mask],
+            **common,
         )
     R_sum = sum(R_per_class.values())
 
@@ -258,10 +262,15 @@ def test_calibrate_mean_mass_evolved_redshift_step_invariant():
             max_redshift=10.0, redshift_step=dz, cosmology=Planck15
         )
         return calibrate_mean_mass_evolved(
-            redshifts, times, time_first_SF=time_first_SF,
-            COMPAS_Z=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
+            redshifts,
+            times,
+            time_first_SF=time_first_SF,
+            COMPAS_Z=Z,
+            COMPAS_delay_times=delays,
+            COMPAS_weights=w,
             expected_local_rate=expected,
-            Z_min_COMPAS=Z_grid[0], Z_max_COMPAS=Z_grid[-1],
+            Z_min_COMPAS=Z_grid[0],
+            Z_max_COMPAS=Z_grid[-1],
         )
 
     m_coarse = _calibrate(0.01)
@@ -372,15 +381,22 @@ def test_compute_merger_rate_chunking_is_idempotent():
         max_logZ_COMPAS=np.log(Z_grid[-1]),
     )
     common = dict(
-        redshifts=redshifts, times=times, time_first_SF=times.min() + 10.0,
-        n_formed=n_formed, p_draw=p_draw, dPdlogZ=dPdlogZ, metallicities=mets,
-        COMPAS_Z=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=times.min() + 10.0,
+        n_formed=n_formed,
+        p_draw=p_draw,
+        dPdlogZ=dPdlogZ,
+        metallicities=mets,
+        COMPAS_Z=Z,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=w,
         smooth_sigma=0,
     )
-    R_500   = compute_merger_rate(n_chunk=500,   **common)
-    R_5000  = compute_merger_rate(n_chunk=5_000, **common)
+    R_500 = compute_merger_rate(n_chunk=500, **common)
+    R_5000 = compute_merger_rate(n_chunk=5_000, **common)
     R_50000 = compute_merger_rate(n_chunk=50_000, **common)
-    np.testing.assert_allclose(R_500,  R_5000, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(R_500, R_5000, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(R_5000, R_50000, rtol=1e-12, atol=1e-12)
 
 
@@ -395,9 +411,13 @@ def test_compute_merger_rate_empty_population_returns_zeros():
     # Empty sample: dPdlogZ / metallicities are unused, but compute_merger_rate
     # short-circuits on len(COMPAS_delay_times)==0 before consuming them.
     R = compute_merger_rate(
-        redshifts, times, time_first_SF=times.min() + 10.0,
-        n_formed=n_formed, p_draw=0.1,
-        dPdlogZ=np.zeros((100, 1)), metallicities=np.array([1e-2]),
+        redshifts,
+        times,
+        time_first_SF=times.min() + 10.0,
+        n_formed=n_formed,
+        p_draw=0.1,
+        dPdlogZ=np.zeros((100, 1)),
+        metallicities=np.array([1e-2]),
         COMPAS_Z=np.array([]),
         COMPAS_delay_times=np.array([]),
         COMPAS_weights=np.array([]),
@@ -410,11 +430,10 @@ def test_compute_merger_rate_empty_population_returns_zeros():
 @pytest.mark.requires_compas
 def test_compute_merger_rate_smoothing_intact():
     """smooth_sigma applies a Gaussian kernel to the unsmoothed rate."""
-    from scipy.ndimage import gaussian_filter1d
-
     from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
         find_metallicity_distribution,
     )
+    from scipy.ndimage import gaussian_filter1d
 
     from grb_rates import compute_merger_rate
 
@@ -429,16 +448,25 @@ def test_compute_merger_rate_smoothing_intact():
     )
 
     common = dict(
-        redshifts=redshifts, times=times, time_first_SF=times.min() + 10.0,
-        n_formed=n_formed, p_draw=p_draw, dPdlogZ=dPdlogZ, metallicities=mets,
-        COMPAS_Z=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=times.min() + 10.0,
+        n_formed=n_formed,
+        p_draw=p_draw,
+        dPdlogZ=dPdlogZ,
+        metallicities=mets,
+        COMPAS_Z=Z,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=w,
     )
 
     R_unsmoothed = compute_merger_rate(smooth_sigma=0, **common)
     R_smoothed = compute_merger_rate(smooth_sigma=30, **common)
     np.testing.assert_allclose(
-        R_smoothed, gaussian_filter1d(R_unsmoothed, sigma=30),
-        rtol=1e-12, atol=1e-12,
+        R_smoothed,
+        gaussian_filter1d(R_unsmoothed, sigma=30),
+        rtol=1e-12,
+        atol=1e-12,
     )
 
 
@@ -467,9 +495,9 @@ def test_compute_merger_rate_matches_compas_exactly(bns_a_path):
 
     from grb_io import load_bns
     from grb_rates import (
-        compute_merger_rate,
-        SFR_PARAMS_LEVINA26_TNG100,
         MSSFR_PARAMS_LEVINA26_TNG100,
+        SFR_PARAMS_LEVINA26_TNG100,
+        compute_merger_rate,
     )
 
     data = load_bns(path=bns_a_path)
@@ -495,23 +523,40 @@ def test_compute_merger_rate_matches_compas_exactly(bns_a_path):
     n_formed = sfr
 
     R_ours = compute_merger_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        dPdlogZ, metallicities, Z, delays, w,
-        smooth_sigma=0, n_chunk=len(Z),
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        dPdlogZ,
+        metallicities,
+        Z,
+        delays,
+        w,
+        smooth_sigma=0,
+        n_chunk=len(Z),
     )
 
     _, merger_rate_compas = find_formation_and_merger_rates(
         n_binaries=len(Z),
-        redshifts=redshifts, times=times, time_first_SF=time_first_SF,
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=time_first_SF,
         n_formed=n_formed,
-        dPdlogZ=dPdlogZ, metallicities=metallicities,
+        dPdlogZ=dPdlogZ,
+        metallicities=metallicities,
         p_draw_metallicity=p_draw,
-        COMPAS_metallicites=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
+        COMPAS_metallicites=Z,
+        COMPAS_delay_times=delays,
+        COMPAS_weights=w,
     )
     R_compas = merger_rate_compas.sum(axis=0)
 
     np.testing.assert_allclose(
-        R_ours, R_compas, rtol=1e-12, atol=1e-12,
+        R_ours,
+        R_compas,
+        rtol=1e-12,
+        atol=1e-12,
         err_msg="compute_merger_rate must equal sum-axis-0 of FCI exactly.",
     )
 
@@ -540,7 +585,9 @@ def test_per_system_rate_weights_matches_fci_formation_column_at_grid_aligned_z_
     from grb_rates import per_system_rate_weights
 
     redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
-        max_redshift=2.0, redshift_step=0.01, cosmology=Planck15,
+        max_redshift=2.0,
+        redshift_step=0.01,
+        cosmology=Planck15,
     )
     sfr = fci.find_sfr(redshifts)
 
@@ -551,7 +598,9 @@ def test_per_system_rate_weights_matches_fci_formation_column_at_grid_aligned_z_
     w = np.full_like(Z, 1.0)
 
     dPdlogZ, mets, p_draw = fci.find_metallicity_distribution(
-        redshifts, min_logZ_COMPAS=np.log(Z_lo), max_logZ_COMPAS=np.log(Z_hi),
+        redshifts,
+        min_logZ_COMPAS=np.log(Z_lo),
+        max_logZ_COMPAS=np.log(Z_hi),
     )
     # n_formed scale cancels: identical inputs feed both pipelines.
     n_formed = sfr / 1.0e7
@@ -560,9 +609,17 @@ def test_per_system_rate_weights_matches_fci_formation_column_at_grid_aligned_z_
     z_target = float(redshifts[j_target])
 
     proj = per_system_rate_weights(
-        z_target, redshifts, times, time_first_SF,
-        n_formed, p_draw, dPdlogZ, mets,
-        Z, delays, w,
+        z_target,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        dPdlogZ,
+        mets,
+        Z,
+        delays,
+        w,
     )
     formation_rate_fci, _ = fci.find_formation_and_merger_rates(
         n_binaries=len(Z),
@@ -578,7 +635,10 @@ def test_per_system_rate_weights_matches_fci_formation_column_at_grid_aligned_z_
         COMPAS_weights=w,
     )
     np.testing.assert_allclose(
-        proj, formation_rate_fci[:, j_target], rtol=1e-12, atol=0.0,
+        proj,
+        formation_rate_fci[:, j_target],
+        rtol=1e-12,
+        atol=0.0,
         err_msg=(
             "per_system_rate_weights drifted from FCI's formation_rate "
             "column at a grid-aligned z_target; the np.digitize column "
@@ -620,15 +680,17 @@ def test_detected_rate_non_negative_and_empty_guard():
         detected_rate,
     )
 
-    redshifts, n_z_det, times, time_first_SF, distances, _ = (
-        calculate_redshift_related_params(
-            max_redshift=10.0, max_redshift_detection=2.0,
-            redshift_step=0.05, cosmology=Planck15,
-        )
+    redshifts, n_z_det, times, time_first_SF, distances, _ = calculate_redshift_related_params(
+        max_redshift=10.0,
+        max_redshift_detection=2.0,
+        redshift_step=0.05,
+        cosmology=Planck15,
     )
     sfr = find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
     dPdlogZ, mets, p_draw = find_metallicity_distribution(
-        redshifts, min_logZ_COMPAS=np.log(1e-4), max_logZ_COMPAS=np.log(0.03),
+        redshifts,
+        min_logZ_COMPAS=np.log(1e-4),
+        max_logZ_COMPAS=np.log(0.03),
         **MSSFR_PARAMS_LEVINA26_TNG100,
     )
     n_formed = sfr / 1e8
@@ -637,9 +699,22 @@ def test_detected_rate_non_negative_and_empty_guard():
     m1, m2, Z, delays, w = _make_synth_population_for_detection(N=200, rng=rng)
 
     R_det = detected_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        dPdlogZ, mets, m1, m2, Z, delays, w, distances, n_z_det,
-        sensitivity="O3", snr_threshold=8.0,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        dPdlogZ,
+        mets,
+        m1,
+        m2,
+        Z,
+        delays,
+        w,
+        distances,
+        n_z_det,
+        sensitivity="O3",
+        snr_threshold=8.0,
     )
     assert R_det.shape == (n_z_det,)
     assert np.all(R_det >= 0.0), R_det.min()
@@ -649,10 +724,20 @@ def test_detected_rate_non_negative_and_empty_guard():
     assert R_det.max() > 0.0, R_det
 
     R_empty = detected_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        dPdlogZ, mets,
-        np.array([]), np.array([]), np.array([]),
-        np.array([]), np.array([]), distances, n_z_det,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        dPdlogZ,
+        mets,
+        np.array([]),
+        np.array([]),
+        np.array([]),
+        np.array([]),
+        np.array([]),
+        distances,
+        n_z_det,
     )
     assert R_empty.shape == (n_z_det,)
     assert np.all(R_empty == 0.0)
@@ -676,15 +761,17 @@ def test_detected_rate_decreases_with_higher_snr_threshold():
         detected_rate,
     )
 
-    redshifts, n_z_det, times, time_first_SF, distances, _ = (
-        calculate_redshift_related_params(
-            max_redshift=10.0, max_redshift_detection=2.0,
-            redshift_step=0.05, cosmology=Planck15,
-        )
+    redshifts, n_z_det, times, time_first_SF, distances, _ = calculate_redshift_related_params(
+        max_redshift=10.0,
+        max_redshift_detection=2.0,
+        redshift_step=0.05,
+        cosmology=Planck15,
     )
     sfr = find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
     dPdlogZ, mets, p_draw = find_metallicity_distribution(
-        redshifts, min_logZ_COMPAS=np.log(1e-4), max_logZ_COMPAS=np.log(0.03),
+        redshifts,
+        min_logZ_COMPAS=np.log(1e-4),
+        max_logZ_COMPAS=np.log(0.03),
         **MSSFR_PARAMS_LEVINA26_TNG100,
     )
     n_formed = sfr / 1e8
@@ -692,14 +779,40 @@ def test_detected_rate_decreases_with_higher_snr_threshold():
     m1, m2, Z, delays, w = _make_synth_population_for_detection(N=200, rng=rng)
 
     R_8 = detected_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        dPdlogZ, mets, m1, m2, Z, delays, w, distances, n_z_det,
-        sensitivity="O3", snr_threshold=8.0,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        dPdlogZ,
+        mets,
+        m1,
+        m2,
+        Z,
+        delays,
+        w,
+        distances,
+        n_z_det,
+        sensitivity="O3",
+        snr_threshold=8.0,
     )
     R_12 = detected_rate(
-        redshifts, times, time_first_SF, n_formed, p_draw,
-        dPdlogZ, mets, m1, m2, Z, delays, w, distances, n_z_det,
-        sensitivity="O3", snr_threshold=12.0,
+        redshifts,
+        times,
+        time_first_SF,
+        n_formed,
+        p_draw,
+        dPdlogZ,
+        mets,
+        m1,
+        m2,
+        Z,
+        delays,
+        w,
+        distances,
+        n_z_det,
+        sensitivity="O3",
+        snr_threshold=12.0,
     )
     # Elementwise non-increasing within float tolerance.
     assert np.all(R_12 <= R_8 + 1e-12), (R_8, R_12)
