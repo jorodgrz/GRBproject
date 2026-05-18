@@ -126,67 +126,46 @@ def _get_model(letter: str) -> dict:
         bns["m1"], bns["m2"], weights=bns["weights"], rng=rng
     )
 
+    from grb_rates import (
+        MSSFR_PARAMS_LEVINA26_TNG100,
+        SFR_PARAMS_LEVINA26_TNG100,
+    )
+
     redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
         max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
     )
-    sfr = fci.find_sfr(redshifts)
-    _, _, p_draw = fci.find_metallicity_distribution(
+    sfr = fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
+    dPdlogZ, mets, p_draw = fci.find_metallicity_distribution(
         redshifts,
         min_logZ_COMPAS=float(np.log(METALLICITY_GRID[0])),
         max_logZ_COMPAS=float(np.log(METALLICITY_GRID[-1])),
+        **MSSFR_PARAMS_LEVINA26_TNG100,
     )
     p_draw = float(p_draw)
 
-    Z_grid_BNS = np.unique(bns["metallicity"])
-    Z_grid_BHNS = np.unique(bhns["metallicity"])
-
-    mme_bns, _ = calibrate_mean_mass_evolved(
-        sfr,
-        redshifts,
-        times,
-        time_first_SF,
-        p_draw,
-        bns["metallicity"],
-        bns["delay_time"],
-        bns["weights"],
+    mme_bns = calibrate_mean_mass_evolved(
+        redshifts, times, time_first_SF,
+        bns["metallicity"], bns["delay_time"], bns["weights"],
         read_expected_local_rate(bns_path),
-        Z_grid=Z_grid_BNS,
+        Z_min_COMPAS=METALLICITY_GRID[0], Z_max_COMPAS=METALLICITY_GRID[-1],
     )
-    mme_bhns, _ = calibrate_mean_mass_evolved(
-        sfr,
-        redshifts,
-        times,
-        time_first_SF,
-        p_draw,
-        bhns["metallicity"],
-        bhns["delay_time"],
-        bhns["weights"],
+    mme_bhns = calibrate_mean_mass_evolved(
+        redshifts, times, time_first_SF,
+        bhns["metallicity"], bhns["delay_time"], bhns["weights"],
         read_expected_local_rate(bhns_path),
-        Z_grid=Z_grid_BHNS,
+        Z_min_COMPAS=METALLICITY_GRID[0], Z_max_COMPAS=METALLICITY_GRID[-1],
     )
 
     R_bns = compute_merger_rate(
-        redshifts,
-        times,
-        time_first_SF,
-        sfr / mme_bns,
-        p_draw,
-        bns["metallicity"],
-        bns["delay_time"],
-        bns["weights"],
-        Z_grid=Z_grid_BNS,
+        redshifts, times, time_first_SF, sfr / mme_bns, p_draw,
+        dPdlogZ, mets,
+        bns["metallicity"], bns["delay_time"], bns["weights"],
         smooth_sigma=0,
     )
     R_bhns = compute_merger_rate(
-        redshifts,
-        times,
-        time_first_SF,
-        sfr / mme_bhns,
-        p_draw,
-        bhns["metallicity"],
-        bhns["delay_time"],
-        bhns["weights"],
-        Z_grid=Z_grid_BHNS,
+        redshifts, times, time_first_SF, sfr / mme_bhns, p_draw,
+        dPdlogZ, mets,
+        bhns["metallicity"], bhns["delay_time"], bhns["weights"],
         smooth_sigma=0,
     )
     iz0 = int(np.argmin(np.abs(redshifts)))

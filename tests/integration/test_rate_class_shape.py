@@ -100,30 +100,26 @@ def _build_setup(bns_a_path):
 
 
 def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
-    """Run the FastCosmicIntegration plumbing at a chosen redshift step.
-
-    Returns redshifts / times / time_first_SF / n_formed / p_draw with
-    ``mean_mass_evolved`` calibrated against the BNS A pre-tabulated
-    local rate so R_ours(z = 0) matches the HDF5 fiducial.
+    """Run the FastCosmicIntegration plumbing at a chosen redshift step
+    using Levina+ 2026 TNG100-1 parameters.
     """
+    from grb_rates import (
+        MSSFR_PARAMS_LEVINA26_TNG100,
+        SFR_PARAMS_LEVINA26_TNG100,
+    )
+
     redshifts, _, times, time_first_SF, _, _ = setup.fci.calculate_redshift_related_params(
         max_redshift=max_redshift, redshift_step=redshift_step, cosmology=setup.Planck15
     )
-    sfr = setup.fci.find_sfr(redshifts)
-    _, _, p_draw = setup.fci.find_metallicity_distribution(
-        redshifts, min_logZ_COMPAS=np.log(setup.Z.min()), max_logZ_COMPAS=np.log(setup.Z.max())
+    sfr = setup.fci.find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
+    dPdlogZ, mets, p_draw = setup.fci.find_metallicity_distribution(
+        redshifts, min_logZ_COMPAS=np.log(setup.Z.min()), max_logZ_COMPAS=np.log(setup.Z.max()),
+        **MSSFR_PARAMS_LEVINA26_TNG100,
     )
-    mean_mass, _ = setup.calibrate_mean_mass_evolved(
-        sfr,
-        redshifts,
-        times,
-        time_first_SF,
-        p_draw,
-        setup.Z,
-        setup.delays,
-        setup.w,
-        setup.expected_local_rate,
-        Z_grid=setup.Z_grid,
+    mean_mass = setup.calibrate_mean_mass_evolved(
+        redshifts, times, time_first_SF,
+        setup.Z, setup.delays, setup.w, setup.expected_local_rate,
+        Z_min_COMPAS=setup.Z.min(), Z_max_COMPAS=setup.Z.max(),
     )
     n_formed = sfr / mean_mass
     return SimpleNamespace(
@@ -132,19 +128,13 @@ def _cosmic_grid(setup, redshift_step, max_redshift=10.0):
         time_first_SF=time_first_SF,
         n_formed=n_formed,
         p_draw=p_draw,
+        dPdlogZ=dPdlogZ,
+        metallicities=mets,
     )
 
 
 def _R_sbgrb(setup, grid, smooth_sigma):
-    """Per-class compute_merger_rate for the sbGRB + blue KN subset.
-
-    The caller chooses ``smooth_sigma`` (in bin units).  Test 1 passes a
-    matched physical kernel across coarse / fine grids
-    (``smooth_sigma * redshift_step`` constant) so the binning-invariance
-    assertion is on the same Gaussian-smoothed curve the production
-    figure plots, not on the raw per-bin convolution which carries
-    sub-kernel discretization wobble.
-    """
+    """Per-class compute_merger_rate for the sbGRB + blue KN subset."""
     from grb_rates import compute_merger_rate
 
     return compute_merger_rate(
@@ -153,10 +143,11 @@ def _R_sbgrb(setup, grid, smooth_sigma):
         grid.time_first_SF,
         grid.n_formed,
         grid.p_draw,
+        grid.dPdlogZ,
+        grid.metallicities,
         setup.Z[setup.mask],
         setup.delays[setup.mask],
         setup.w[setup.mask],
-        Z_grid=setup.Z_grid,
         smooth_sigma=smooth_sigma,
     )
 
@@ -179,48 +170,62 @@ def _find_extremum(redshifts, R, z_lo, z_hi, kind):
 @pytest.mark.requires_compas
 @pytest.mark.slow
 def test_calibrated_rate_matches_expected_local_rate_at_z0(bns_a_path):
-    """After ``calibrate_mean_mass_evolved`` was switched to
-    ``smooth_sigma=0`` (sharp z=0 anchor), the unsmoothed full-population
-    R(z=0) must equal ``expected_local_rate`` from the Broekgaarden+
-    2021 ``weights_intrinsic/w_000`` column to within numerical
-    precision at every ``redshift_step`` choice.  Pre-fix the
-    calibration helper inherited ``compute_merger_rate``'s default
-    ``smooth_sigma=30`` in BIN units, so the boundary-reflective
-    Gaussian at z=0 mixed in a different physical width of the rising
-    R(z) at different ``redshift_step`` and let MEAN_MASS_EVOLVED
-    drift ~30 percent across ``dz in [0.0025, 0.01]``.
+    """Round-trip: running the calibrated forward pass with the SAME
+    Neijssel MSSFR that the upstream Broekgaarden+ 2021 pipeline used
+    to compute ``weights_intrinsic/w_000`` reproduces
+    ``expected_local_rate`` to within numerical precision at every
+    ``redshift_step``.  This is the contract of
+    ``calibrate_mean_mass_evolved`` (back-derives MEAN_MASS_EVOLVED
+    from the Neijssel z=0 anchor).
 
-    Loops over ``dz in (0.01, 0.005)`` so a single test catches both
-    the calibration drift and any future bias regression.
+    The science-path forward pass uses Levina TNG100-1 and so produces
+    a different absolute R(z=0); that is a physics outcome, not a
+    calibration drift, and is exercised in
+    ``test_section_07_*`` integration tests instead.
     """
-    from grb_rates import compute_merger_rate
+    from astropy.cosmology import Planck15
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        calculate_redshift_related_params,
+        find_metallicity_distribution,
+        find_sfr,
+    )
+
+    from grb_rates import calibrate_mean_mass_evolved, compute_merger_rate
 
     setup = _build_setup(bns_a_path)
     for dz in (0.01, 0.005):
-        grid = _cosmic_grid(setup, redshift_step=dz)
+        redshifts, _, times, time_first_SF, _, _ = calculate_redshift_related_params(
+            max_redshift=10.0, redshift_step=dz, cosmology=Planck15
+        )
+        # Calibrate with the Neijssel-anchored helper.
+        mean_mass = calibrate_mean_mass_evolved(
+            redshifts, times, time_first_SF,
+            setup.Z, setup.delays, setup.w, setup.expected_local_rate,
+            Z_min_COMPAS=setup.Z.min(), Z_max_COMPAS=setup.Z.max(),
+        )
+        # Run forward with the same Neijssel MSSFR (round-trip).
+        sfr = find_sfr(redshifts)
+        dPdlogZ, mets, p_draw = find_metallicity_distribution(
+            redshifts,
+            min_logZ_COMPAS=np.log(setup.Z.min()),
+            max_logZ_COMPAS=np.log(setup.Z.max()),
+        )
         R_full = compute_merger_rate(
-            grid.redshifts,
-            grid.times,
-            grid.time_first_SF,
-            grid.n_formed,
-            grid.p_draw,
-            setup.Z,
-            setup.delays,
-            setup.w,
-            Z_grid=setup.Z_grid,
+            redshifts, times, time_first_SF, sfr / mean_mass, p_draw,
+            dPdlogZ, mets, setup.Z, setup.delays, setup.w,
             smooth_sigma=0,
         )
         rel = abs(R_full[0] / setup.expected_local_rate - 1.0)
-        assert rel < 1e-3, (
-            f"At dz={dz}, unsmoothed R_full(z=0) = {R_full[0]:.4f} does "
-            f"not match expected_local_rate = "
-            f"{setup.expected_local_rate:.4f} (relative {rel * 100:.3f}%); "
-            f"calibrate_mean_mass_evolved is no longer producing a sharp "
-            f"z=0 anchor.  Check that smooth_sigma=0 is still being "
-            f"passed to its internal compute_merger_rate call."
-        )
+        assert rel < 1e-3, (dz, R_full[0], setup.expected_local_rate, rel)
 
 
+@pytest.mark.xfail(
+    reason="sbGRB+blueKN bimodality is a Neijssel-fiducial feature; Levina TNG100-1 "
+           "(omega_0 = 1.15 vs Neijssel 0.39) smears the metallicity weighting and "
+           "the dip-and-recovery flattens.  Test is preserved as documentation; "
+           "rerun on the Neijssel sweep variant when one is added.",
+    strict=False,
+)
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
@@ -384,6 +389,12 @@ def test_sbGRB_rate_dip_redshift_binning_invariant(bns_a_path):
     )
 
 
+@pytest.mark.xfail(
+    reason="sbGRB+blueKN dip is Neijssel-specific; under Levina TNG100-1 there is "
+           "no dip, so 'N_eff at the dip' is meaningless.  Same provenance as "
+           "test_sbGRB_rate_dip_redshift_binning_invariant.",
+    strict=False,
+)
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
@@ -428,10 +439,11 @@ def test_sbGRB_rate_dip_n_eff_above_threshold(bns_a_path):
             grid.time_first_SF,
             grid.n_formed,
             grid.p_draw,
+            grid.dPdlogZ,
+            grid.metallicities,
             setup.Z[setup.mask],
             setup.delays[setup.mask],
             setup.w[setup.mask],
-            Z_grid=setup.Z_grid,
         )
         wsum = float(wi.sum())
         wsum2 = float((wi**2).sum())

@@ -1,9 +1,11 @@
 """
 Cosmic merger rate computation and related utilities.
 
-compute_merger_rate implements the MSSFR convolution from Neijssel et al. (2019)
-using COMPAS FastCosmicIntegration infrastructure.  Also includes Kroupa IMF
-verification, per-system rate weights, and BH spin marginalization.
+compute_merger_rate is a thin chunked accumulator around
+``compas_python_utils.cosmic_integration.FastCosmicIntegration.find_formation_and_merger_rates``;
+the MSSFR fiducial is the Levina+ 2026 (arXiv:2601.20202) skewed log-normal
+fit to IllustrisTNG TNG100-1 (Table 1).  Also includes Kroupa (2001) IMF
+verification, per-system rate weights, EOS / spin / beaming sweeps.
 """
 
 import warnings
@@ -12,365 +14,332 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
-from scipy.stats import norm as _NormDist
 
 from grb_physics import MISALIGNMENT_SYSTEMATIC_FACTOR
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Cosmic integration
+# MSSFR / SFR parameters: Levina+ 2026 IllustrisTNG TNG100-1 fiducial
 # ═══════════════════════════════════════════════════════════════════════════
+# Madau and Dickinson (2014) functional form S(z) = a (1+z)^b / (1 + ((1+z)/c)^d),
+# best-fit to TNG100-1 in Levina+ 2026 Table 1.
+SFR_PARAMS_LEVINA26_TNG100 = {
+    "a": 0.0172,
+    "b": 1.4425,
+    "c": 4.5299,
+    "d": 6.2261,
+}
 
-# Neijssel et al. (2019) / COMPAS default MSSFR parameters.
-# These must match the values passed to find_metallicity_distribution().
-_MU0 = 0.035
-_MUZ = -0.23
-_SIGMA_0 = 0.39
-_SIGMA_Z = 0.0
+# Skewed log-normal metallicity PDF (Azzalini), best-fit to TNG100-1 in
+# Levina+ 2026 Table 1.  Eq. (3)-(6) of Levina+ 2026 use the parametrisation
+#   <Z>(z) = mu0 * 10^(muz * z),   omega(z) = omega0 * 10^(omegaz * z)
+# which matches COMPAS ``find_metallicity_distribution`` exactly: Levina's
+# (omega0, omegaz) maps onto COMPAS (sigma_0, sigma_z), and Levina's alpha
+# is the COMPAS skewness parameter.
+MSSFR_PARAMS_LEVINA26_TNG100 = {
+    "mu0": 0.0247,
+    "muz": -0.0521,
+    "sigma_0": 1.1509,
+    "sigma_z": 0.0477,
+    "alpha": -1.8801,
+}
 
+# Levina+ 2026 Table 1 TNG50-1 column (highest resolution, smallest box).
+SFR_PARAMS_LEVINA26_TNG50 = {
+    "a": 0.0329,
+    "b": 1.4668,
+    "c": 3.8412,
+    "d": 5.0994,
+}
+MSSFR_PARAMS_LEVINA26_TNG50 = {
+    "mu0": 0.0282,
+    "muz": -0.0314,
+    "sigma_0": 1.1136,
+    "sigma_z": 0.0592,
+    "alpha": -1.7353,
+}
 
-def _bin_averaged_dPdlogZ(
-    redshifts, COMPAS_Z, Z_grid=None, mu0=_MU0, muz=_MUZ, sigma_0=_SIGMA_0, sigma_z=_SIGMA_Z
-):
-    """Analytic bin-integrated metallicity weights via the normal CDF.
+# Levina+ 2026 Table 1 TNG300-1 column (largest box, lowest resolution).
+SFR_PARAMS_LEVINA26_TNG300 = {
+    "a": 0.0097,
+    "b": 1.5747,
+    "c": 4.5428,
+    "d": 6.8266,
+}
+MSSFR_PARAMS_LEVINA26_TNG300 = {
+    "mu0": 0.0237,
+    "muz": -0.0687,
+    "sigma_0": 1.1196,
+    "sigma_z": 0.0481,
+    "alpha": -2.2726,
+}
 
-    For each COMPAS birth metallicity Z_k, compute the exact integral of
-    the Neijssel et al. (2019) log-normal metallicity PDF over the
-    Voronoi cell [ln Z_lo, ln Z_hi] at every redshift:
+# Convenience grouping used by the TNG-resolution sweep notebook section.
+LEVINA26_TNG_VARIANTS = {
+    "TNG50-1":  (SFR_PARAMS_LEVINA26_TNG50,  MSSFR_PARAMS_LEVINA26_TNG50),
+    "TNG100-1": (SFR_PARAMS_LEVINA26_TNG100, MSSFR_PARAMS_LEVINA26_TNG100),
+    "TNG300-1": (SFR_PARAMS_LEVINA26_TNG300, MSSFR_PARAMS_LEVINA26_TNG300),
+}
 
-        P_bin(z, k) = Phi((ln Z_hi - mu(z)) / sigma(z))
-                    - Phi((ln Z_lo - mu(z)) / sigma(z))
-
-    where Phi is the standard normal CDF, and mu(z), sigma(z) are the
-    redshift-dependent log-normal parameters (Langer & Norman 2006;
-    Neijssel et al. 2019 Eq. 2; Broekgaarden et al. 2021, Section 2.4).
-
-    This replaces the Riemann-sum approximation on the fine dPdlogZ grid,
-    which produced residual aliasing from the non-uniform spacing of the
-    53-point COMPAS metallicity grid.
-
-    Parameters
-    ----------
-    redshifts : 1-D array, shape (n_z,)
-        Redshift grid.
-    COMPAS_Z : 1-D array, shape (n_systems,)
-        Birth metallicity of each COMPAS binary.  May be a class subset
-        of the full population.
-    Z_grid : 1-D array, optional
-        Simulation's full metallicity discretization (for the
-        Broekgaarden+ 2021 COMPAS runs this is the 53-element grid in
-        ``grb_io.METALLICITY_GRID``; equivalently ``np.unique(Z_full)``
-        for the parent population).  When provided, the Voronoi cells
-        and the [ln Z_min, ln Z_max] renormalisation range are
-        determined by ``Z_grid``, NOT by ``np.unique(COMPAS_Z)``.
-
-        Pass this argument whenever ``COMPAS_Z`` is a class subset.
-        Without it, the Voronoi bin widths and the renormalisation
-        range shrink with the subset's Z range, and the high-z
-        amplification factor (``norm / total_bin`` below) becomes
-        subset-dependent.  That is what produces the unphysical
-        dip-and-recovery wiggles in per-class merger rate density
-        curves: each sub-class has a different effective [ln Z_min,
-        ln Z_max] window, so the analytic-extrapolation correction
-        applied at high z (where the MSSFR log-normal sits below the
-        COMPAS Z grid) differs across sub-classes.  When ``Z_grid`` is
-        None (default), the previous behaviour is retained for
-        backward compatibility with full-population callers.
-    mu0, muz, sigma_0, sigma_z : float
-        MSSFR log-normal parameters (must match those used in
-        ``find_metallicity_distribution``).
-
-    Returns
-    -------
-    dPdlogZ_binned : 2-D array, shape (n_z, n_bins)
-        Bin-integrated metallicity weight for each cell of the chosen
-        grid (``Z_grid`` if supplied, else ``np.unique(COMPAS_Z)``).
-    sys_col_idx : 1-D int array, shape (n_systems,)
-        Column index into ``dPdlogZ_binned`` for each COMPAS system.
-    """
-    COMPAS_Z = np.asarray(COMPAS_Z, dtype=float)
-    n_z = len(redshifts)
-
-    # Empty-population guard: when a downstream class mask is empty,
-    # return zero-sized weights and an empty column-index array so the
-    # caller produces a zero rate vector instead of an IndexError.
-    if COMPAS_Z.size == 0:
-        return np.zeros((n_z, 0)), np.zeros(0, dtype=int)
-
-    # Reproduce mu(z) and sigma(z) from Neijssel+19 / COMPAS defaults.
-    # With alpha=0 (pure log-normal, no skewness) the mu simplification
-    # is: mu = ln(mean_Z) - sigma^2/2  (standard log-normal identity).
-    sigma = sigma_0 * 10.0 ** (sigma_z * redshifts)  # (n_z,)
-    mean_Z = mu0 * 10.0 ** (muz * redshifts)  # (n_z,)
-    mu = np.log(mean_Z) - 0.5 * sigma**2  # (n_z,)
-
-    if Z_grid is None:
-        unique_Z = np.unique(COMPAS_Z)
-    else:
-        unique_Z = np.unique(np.asarray(Z_grid, dtype=float))
-    log_unique = np.log(unique_Z)
-    n_bins = len(unique_Z)
-
-    # Single-Z degenerate case: a half-decade-wide window around the lone bin.
-    if n_bins == 1:
-        half_width = 0.5 * np.log(10.0)
-        lo_edges = np.array([log_unique[0] - half_width])
-        hi_edges = np.array([log_unique[0] + half_width])
-    else:
-        # Voronoi boundaries: geometric midpoints between adjacent COMPAS Z values
-        mid = 0.5 * (log_unique[:-1] + log_unique[1:])
-        lo_edges = np.empty(n_bins)
-        hi_edges = np.empty(n_bins)
-        # First/last bin edges are snapped to log_unique[0] and
-        # log_unique[-1] so they coincide with the renormalization
-        # range used below (ln_Z_min / ln_Z_max).  The previous
-        # symmetric extrapolation by half the adjacent spacing
-        # extended outside [ln_Z_min, ln_Z_max], so probability
-        # captured in the extrapolated tails was rescaled away by
-        # the renormalization step -- harmless but logically
-        # inconsistent.  Effect on the first/last bin is sub-1%.
-        lo_edges[0] = log_unique[0]
-        lo_edges[1:] = mid
-        hi_edges[:-1] = mid
-        hi_edges[-1] = log_unique[-1]
-
-    # Analytic CDF evaluation: P_bin(z,k) = Phi(hi_std) - Phi(lo_std)
-    # Vectorised over redshifts (axis 0) and bins (axis 1).
-    inv_sigma = 1.0 / sigma  # (n_z,)
-    lo_std = (lo_edges[np.newaxis, :] - mu[:, np.newaxis]) * inv_sigma[:, np.newaxis]
-    hi_std = (hi_edges[np.newaxis, :] - mu[:, np.newaxis]) * inv_sigma[:, np.newaxis]
-    dPdlogZ_binned = _NormDist.cdf(hi_std) - _NormDist.cdf(lo_std)  # (n_z, n_bins)
-
-    # Normalize: COMPAS convention clips to the sampled Z range and
-    # rescales the bin probabilities so their sum equals
-    #   norm(z) = Phi((ln Z_max - mu(z)) / sigma(z))
-    #           - Phi((ln Z_min - mu(z)) / sigma(z))
-    # the integrated log-normal probability that falls inside
-    # [ln_Z_min, ln_Z_max].  This is < 1 in general and approaches 0
-    # at high z, where the MSSFR log-normal sits well below the
-    # COMPAS Z grid (see the diagnostic warning below).  The bins do
-    # NOT renormalize to 1.
-    ln_Z_min = log_unique[0]
-    ln_Z_max = log_unique[-1]
-    norm = _NormDist.cdf((ln_Z_max - mu) / sigma) - _NormDist.cdf((ln_Z_min - mu) / sigma)  # (n_z,)
-    norm = np.where(norm > 0, norm, 1.0)
-    total_bin = dPdlogZ_binned.sum(axis=1)  # (n_z,)
-    total_bin_safe = np.where(total_bin > 0, total_bin, 1.0)
-    dPdlogZ_binned *= (norm / total_bin_safe)[:, np.newaxis]
-
-    # Diagnostic: at high z the MSSFR log-normal sits well below the
-    # COMPAS Z grid lower edge, so the Voronoi bin probabilities sum
-    # to a tiny ``total_bin`` and the renormalization factor blows up.
-    # Levina+ 2026 (arXiv:2601.20202) shows this kind of analytical
-    # extrapolation overestimates high-z BBH rates by 10 - 1e4x.  Warn
-    # when any redshift slice has > 10x amplification so callers know
-    # their high-z rates are extrapolation-dominated.
-    amplification = norm / total_bin_safe
-    if np.any(amplification > 10.0):
-        bad = amplification > 10.0
-        z_bad = redshifts[bad]
-        warnings.warn(
-            f"Metallicity grid does not span the MSSFR PDF at z = "
-            f"[{z_bad.min():.1f}, {z_bad.max():.1f}] "
-            f"(max amplification {amplification.max():.1f}x).  "
-            f"High-z rates are extrapolation-dominated; consider "
-            f"extending the COMPAS Z grid or capping max(z).",
-            stacklevel=2,
-        )
-
-    # Map each COMPAS system to its unique-Z column index.  Use
-    # searchsorted on log-space (unique_Z is monotonic from np.unique)
-    # so the lookup remains correct when ``Z_grid`` is the full COMPAS
-    # grid and ``COMPAS_Z`` is a subset.  An exact-match assertion
-    # catches floating-point drift (e.g. a Z value that was not part of
-    # the simulation grid being passed in).
-    log_compas = np.log(COMPAS_Z)
-    sys_col_idx = np.searchsorted(log_unique, log_compas)
-    sys_col_idx = np.clip(sys_col_idx, 0, n_bins - 1)
-    # searchsorted returns the upper insertion point; the matching grid
-    # value can be at sys_col_idx or sys_col_idx - 1.  Pick the closer.
-    left = np.clip(sys_col_idx - 1, 0, n_bins - 1)
-    use_left = np.abs(log_unique[left] - log_compas) < np.abs(log_unique[sys_col_idx] - log_compas)
-    sys_col_idx = np.where(use_left, left, sys_col_idx)
-    if not np.allclose(log_unique[sys_col_idx], log_compas, atol=1e-9):
-        bad = np.where(~np.isclose(log_unique[sys_col_idx], log_compas, atol=1e-9))[0]
-        raise ValueError(
-            f"{len(bad)} COMPAS_Z values are not present in the "
-            f"supplied Z_grid (first offender: Z = "
-            f"{COMPAS_Z[bad[0]]:.6g}).  Pass Z_grid = "
-            f"np.unique(Z_full_population) when COMPAS_Z is a subset."
-        )
-
-    return dPdlogZ_binned, sys_col_idx
+# Levina+ 2026 Table 2 published BBH local merger rates [Gpc^-3 yr^-1].
+# ``R_sim`` integrates the simulation S(Z, z) directly; ``R_fit`` integrates
+# the analytical skewed log-normal fit (the parameter sets above).  These
+# are reference values; the project does not load BBH samples and cannot
+# reproduce them end-to-end on BNS / BHNS data.  Used as a numerical anchor
+# (constants pinned in tests/anchors/test_literature_anchors.py) and as the
+# context for the TNG-resolution sweep in Section 4b.
+LEVINA26_BBH_LOCAL_RATES = {
+    "TNG50-1":  {"R_sim": 58.92, "R_fit": 73.72},
+    "TNG100-1": {"R_sim": 42.91, "R_fit": 45.53},
+    "TNG300-1": {"R_sim": 29.34, "R_fit": 27.81},
+}
 
 
-def _interp_formation_rate(n_formed, dPdlogZ_col, p_draw, weight, z_form, redshift_step, n_z):
-    """Shared interpolation of the formation rate at arbitrary z_form.
-
-    Both ``compute_merger_rate`` and ``per_system_rate_weights`` use this
-    to evaluate  n_formed(z_form) * dPdlogZ_binned(z_form) / p_draw * w
-    via linear interpolation on the uniform redshift grid.
-
-    Parameters
-    ----------
-    dPdlogZ_col : 1-D array, shape (n_z,)
-        Bin-integrated metallicity weight for this system (or array of
-        systems when called from ``per_system_rate_weights``), already
-        selected from the ``dPdlogZ_binned`` columns.
-    """
-    z_idx_float = z_form / redshift_step
-    z_lo = np.clip(np.floor(z_idx_float).astype(int), 0, n_z - 1)
-    z_hi = np.clip(z_lo + 1, 0, n_z - 1)
-    frac = z_idx_float - np.floor(z_idx_float)
-
-    form_lo = n_formed[z_lo] * dPdlogZ_col[z_lo] / p_draw * weight
-    form_hi = n_formed[z_hi] * dPdlogZ_col[z_hi] / p_draw * weight
-    return form_lo * (1.0 - frac) + form_hi * frac
-
-
+# ═══════════════════════════════════════════════════════════════════════════
+# Cosmic integration: chunked wrapper around FastCosmicIntegration
+# ═══════════════════════════════════════════════════════════════════════════
 def compute_merger_rate(
     redshifts,
     times,
     time_first_SF,
     n_formed,
     p_draw,
+    dPdlogZ,
+    metallicities,
     COMPAS_Z,
     COMPAS_delay_times,
     COMPAS_weights,
     smooth_sigma=30,
-    Z_grid=None,
+    n_chunk=10_000,
 ):
-    """
-    Intrinsic merger rate density [Gpc^-3 yr^-1] vs redshift.
+    """Cosmic merger rate density [Gpc^-3 yr^-1] vs redshift, via FCI.
 
-    For each binary the formation rate is:
-        SFR(z) * dP/dlogZ(z, Z_i) / p_draw * weight_i / meanMassEvolved
+    Thin chunked accumulator around
+    ``compas_python_utils.cosmic_integration.FastCosmicIntegration.find_formation_and_merger_rates``.
+    FCI returns an ``(n_binaries, n_z)`` merger-rate matrix; at BHNS sample
+    size (~1.5e6 systems) with dz = 0.01 (~1e3 redshift bins) that is
+    ~24 GB and OOMs on most laptops.  We loop over chunks of ``n_chunk``
+    binaries, sum each chunk's merger_rate axis-0 into a running
+    ``(n_z,)`` accumulator, and keep peak allocation at
+    ``n_chunk * n_z * 8 bytes ~= 80 MB`` per chunk.
 
-    The metallicity weight dP/dlogZ is integrated over each COMPAS
-    metallicity's Voronoi cell (bin-averaged) rather than point-evaluated,
-    following Neijssel et al. (2019) Eq. 2 and Broekgaarden et al. (2021)
-    Section 2.4.  Bin probabilities are computed internally via
-    ``_bin_averaged_dPdlogZ``; pass ``Z_grid`` whenever ``COMPAS_Z`` is a
-    class subset so the Voronoi cells track the full simulation grid.
-    This eliminates aliasing artifacts caused by the discrete COMPAS
-    metallicity grid.
+    The caller computes ``dPdlogZ`` / ``metallicities`` / ``p_draw`` once
+    via ``find_metallicity_distribution`` and passes them in, so the MSSFR
+    convolution is not redone per spin / EOS / class subset.
 
-    A light Gaussian kernel (``smooth_sigma`` redshift bins, default 30
-    = dz 0.3 at step 0.01) suppresses the residual ~3% Monte Carlo
-    wobble from the finite number of discrete COMPAS metallicities.
-    Set ``smooth_sigma=0`` to disable smoothing.
+    ``n_formed`` must already include the 1/MEAN_MASS_EVOLVED factor.
+    ``find_sfr`` returns raw SFR in Msun/yr/Gpc^3; divide by the
+    IMF-analytical value from
+    ``calibrate_mean_mass_evolved(n_systems_drawn=...)`` first.
 
-    Important: ``n_formed`` must already contain the 1/MEAN_MASS_EVOLVED
-    normalisation.  ``find_sfr()`` returns *raw* SFR in Msun/yr/Gpc^3 and
-    does NOT include the 1/MEAN_MASS_EVOLVED factor.  Divide explicitly::
-
-        n_formed = find_sfr(redshifts) / MEAN_MASS_EVOLVED
-
-    Each population (BNS, BHNS) has its own MEAN_MASS_EVOLVED because
-    the Broekgaarden et al. simulations evolve different total masses.
+    A light Gaussian kernel (``smooth_sigma`` redshift bins, default 30 =
+    dz 0.3 at step 0.01) suppresses residual Monte-Carlo wobble from the
+    discrete COMPAS metallicity grid.  Pass ``smooth_sigma=0`` to disable.
 
     Parameters
     ----------
     p_draw : float
-        COMPAS metallicity sampling density (= 1 / (max_logZ_COMPAS -
-        min_logZ_COMPAS) for a flat-in-lnZ prior; see COMPAS
-        ``find_metallicity_distribution``).
-    Z_grid : 1-D array, optional
-        Full simulation metallicity grid (e.g. ``np.unique(Z_full)`` for
-        the parent population).  REQUIRED whenever ``COMPAS_Z``,
-        ``COMPAS_delay_times``, ``COMPAS_weights`` are a class subset:
-        without it the Voronoi bin widths and the high-z renormalisation
-        range collapse to the subset's Z range, producing unphysical
-        per-class shape distortions.  See ``_bin_averaged_dPdlogZ``.
+        COMPAS metallicity sampling density
+        (= 1 / (max_logZ_COMPAS - min_logZ_COMPAS)).
+    dPdlogZ : 2-D array, shape (n_z, n_metallicities)
+        Pointwise metallicity PDF from
+        ``FastCosmicIntegration.find_metallicity_distribution``.
+    metallicities : 1-D array
+        Metallicity grid on which ``dPdlogZ`` is evaluated.
+    n_chunk : int
+        Number of binaries per chunk; default 10_000 keeps the per-chunk
+        allocation at ~80 MB for n_z ~ 1000.  Result is independent of
+        ``n_chunk`` (regression-tested).
     """
-    n_z = len(redshifts)
-    redshift_step = redshifts[1] - redshifts[0]
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        find_formation_and_merger_rates,
+    )
 
-    # Empty-population guard: a class mask with zero True entries (a
-    # high-spin clip wiping out all Long cbGRB systems) returns a zero
-    # rate vector instead of erroring.  Same shape as the redshift grid
-    # so downstream array operations remain consistent.
+    n_z = len(redshifts)
     if len(COMPAS_delay_times) == 0:
         return np.zeros(n_z)
 
-    # Cross-module Z_grid alignment guard.  The Voronoi renormalisation in
-    # _bin_averaged_dPdlogZ assumes every COMPAS_Z value lands on a cell of
-    # the supplied grid; otherwise the high-z amplification factor and the
-    # bin-width allocation become subset-dependent (silent class-shape bias).
-    if Z_grid is not None:
-        Z_grid_unique = np.unique(np.asarray(Z_grid, dtype=float))
-        compas_unique = np.unique(np.asarray(COMPAS_Z, dtype=float))
-        if not np.all(np.isin(compas_unique, Z_grid_unique)):
-            missing = compas_unique[~np.isin(compas_unique, Z_grid_unique)]
-            raise ValueError(
-                f"{len(missing)} COMPAS_Z values are not present in "
-                f"Z_grid (first offender: Z = {missing[0]:.6g}).  Pass "
-                f"Z_grid = np.unique(Z_full_population) when COMPAS_Z is "
-                f"a class subset."
-            )
-
-    times_to_z = interp1d(times, redshifts)
-
-    dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(redshifts, COMPAS_Z, Z_grid=Z_grid)
-
-    t_min = max(time_first_SF, times.min())
-    total_merger = np.zeros(n_z)
-
-    # Vectorized formation-rate accumulation (CLAUDE.md "Vectorize" rule).
-    # Replaces the per-binary Python loop with a chunked (n, n_z) batched
-    # evaluation: each chunk builds the formation-time matrix t_form[i, j]
-    # = times[j] - delay[i], maps it to a formation redshift and an
-    # n_formed * dP/dlogZ contribution at every (i, j), masks out invalid
-    # (i, j) pairs (where t_form < t_min), and sums over the system axis.
-    # Memory per chunk: n * n_z * 8 bytes = O(80 MB) at n=N_CHUNK=10_000
-    # and n_z ~ 1000, so even the largest BNS or BHNS population (~10^6
-    # systems) processes in ~100 chunks without exceeding RAM.  Numerical
-    # output matches the legacy loop to ~1e-6 rtol (regression test in
-    # tests/unit/test_rates.py).
-    N_CHUNK = 10_000
-    n_systems = len(COMPAS_delay_times)
+    Z_arr = np.asarray(COMPAS_Z, dtype=float)
     delays = np.asarray(COMPAS_delay_times, dtype=float)
-    weights_arr = np.asarray(COMPAS_weights, dtype=float)
-    sys_col = np.asarray(sys_col, dtype=int)
-    inv_p_draw = 1.0 / p_draw
+    w = np.asarray(COMPAS_weights, dtype=float)
+    n_total = len(Z_arr)
 
-    for start in range(0, n_systems, N_CHUNK):
-        end = min(start + N_CHUNK, n_systems)
-        delay_c = delays[start:end]
-        w_c = weights_arr[start:end]
-        cols_c = sys_col[start:end]
-
-        # (n, n_z) formation-time grid: t_form[i, j] = times[j] - delay[i].
-        t_form = times[None, :] - delay_c[:, None]
-        valid = t_form >= t_min  # (n, n_z) bool
-
-        # Replace invalid entries with t_min so times_to_z stays in range;
-        # the contribution is masked back to zero by `valid` below.
-        t_form_clipped = np.where(valid, t_form, t_min)
-        z_form = times_to_z(t_form_clipped)  # (n, n_z)
-
-        # Linear-interpolation indices on the uniform redshift grid.
-        z_idx_float = z_form / redshift_step
-        z_lo = np.clip(np.floor(z_idx_float).astype(np.int64), 0, n_z - 1)
-        z_hi = np.clip(z_lo + 1, 0, n_z - 1)
-        frac = z_idx_float - np.floor(z_idx_float)  # (n, n_z)
-
-        # dPdlogZ_binned has shape (n_z, n_bins); we want one column per
-        # system per (z_lo, z_hi).  Fancy index over (system axis, z axis)
-        # via advanced indexing: dPdlogZ_binned[z_lo, cols_c[:, None]] -> (n, n_z).
-        dP_lo = dPdlogZ_binned[z_lo, cols_c[:, None]]
-        dP_hi = dPdlogZ_binned[z_hi, cols_c[:, None]]
-
-        # Formation rate at lo/hi neighbour, broadcast n_formed across systems.
-        f_lo = n_formed[z_lo] * dP_lo * inv_p_draw * w_c[:, None]
-        f_hi = n_formed[z_hi] * dP_hi * inv_p_draw * w_c[:, None]
-
-        contrib = (f_lo * (1.0 - frac) + f_hi * frac) * valid  # (n, n_z)
-        total_merger += contrib.sum(axis=0)
+    total = np.zeros(n_z)
+    for s in range(0, n_total, n_chunk):
+        e = min(s + n_chunk, n_total)
+        _, mr = find_formation_and_merger_rates(
+            n_binaries=e - s,
+            redshifts=redshifts,
+            times=times,
+            time_first_SF=time_first_SF,
+            n_formed=n_formed,
+            dPdlogZ=dPdlogZ,
+            metallicities=metallicities,
+            p_draw_metallicity=p_draw,
+            COMPAS_metallicites=Z_arr[s:e],
+            COMPAS_delay_times=delays[s:e],
+            COMPAS_weights=w[s:e],
+        )
+        total += mr.sum(axis=0)
 
     if smooth_sigma > 0:
-        total_merger = _gaussian_filter1d(total_merger, sigma=smooth_sigma)
+        total = _gaussian_filter1d(total, sigma=smooth_sigma)
+    return total
 
-    return total_merger
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GW detection-rate via FCI selection effects
+# ═══════════════════════════════════════════════════════════════════════════
+def _build_snr_detection_grids(
+    sensitivity="O3", snr_threshold=8.0, Mc_max=300.0, eta_step=0.01
+):
+    """Wrapper around FCI ``compute_snr_and_detection_grids``.
+
+    Returns the SNR-vs-(M_c, eta) grid evaluated at 1 Mpc plus a 1-D
+    detection-probability table indexed by SNR.  Builds them once per
+    sensitivity choice; caching is the caller's responsibility (these
+    arrays are < 1 MB and cheap to recompute).
+    """
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        compute_snr_and_detection_grids,
+    )
+
+    # dco_type is a no-op for non-WD types in current FCI: the (M_c, eta)
+    # grid is set by Mc_max=300 Msun, Mc_step=0.1, eta_max=0.25, eta_step=0.01
+    # and is independent of dco_type.  The argument only fires a warning for
+    # {WDWD, NSWD, WDBH} (no LVK sensitivity defined for those).  Our BNS
+    # (M_c ~ 0.9-2.2, eta ~ 0.24-0.25) and BHNS (M_c ~ 1.5-30, eta ~ 0.05-0.22)
+    # samples sit well inside the grid, so passing "BHBH" gives identical
+    # output to "NSNS" or "BHNS".  Revisit if the FCI pin in environment.yml
+    # changes the function's contract, or if a future sweep pushes M_c above
+    # 300 Msun (IMBH territory).
+    return compute_snr_and_detection_grids(
+        dco_type="BHBH",
+        sensitivity=sensitivity,
+        snr_threshold=snr_threshold,
+        Mc_max=Mc_max,
+        eta_step=eta_step,
+    )
+
+
+def detected_rate(
+    redshifts,
+    times,
+    time_first_SF,
+    n_formed,
+    p_draw,
+    dPdlogZ,
+    metallicities,
+    m1,
+    m2,
+    COMPAS_Z,
+    COMPAS_delay_times,
+    COMPAS_weights,
+    distances,
+    n_redshifts_detection,
+    sensitivity="O3",
+    snr_threshold=8.0,
+    n_chunk=10_000,
+):
+    """Detector-frame detected merger rate density [Gpc^-3 yr^-1] vs redshift.
+
+    Wraps FCI's ``compute_snr_and_detection_grids`` and
+    ``find_detection_probability`` and folds them into the same chunked
+    accumulator that ``compute_merger_rate`` uses.  At each chunk:
+
+        merger_rate[i, j] = find_formation_and_merger_rates(...)
+        det_prob[i, j]    = find_detection_probability(...)
+        contrib[i, j]     = merger_rate[i, j] * det_prob[i, j]
+
+    summed over the binary axis, returning a ``(n_redshifts_detection,)``
+    array.  This is the LVK-detectable subset of the intrinsic merger
+    rate as a function of redshift, given the chosen sensitivity curve.
+
+    The shape ``(n_binaries, n_redshifts_detection)`` of FCI's
+    ``find_detection_probability`` is shorter than the full
+    ``(n_binaries, n_z)`` merger-rate matrix (FCI defaults
+    ``max_redshift_detection = 1.0``, well below ``max_redshift = 10.0``);
+    detection probabilities at z > z_detection_max are not defined and
+    we cap the output at ``n_redshifts_detection`` accordingly.
+
+    Parameters
+    ----------
+    m1, m2 : 1-D array
+        Component masses [Msun] for chirp-mass / symmetric-mass-ratio.
+    distances : 1-D array, shape (n_z,)
+        Luminosity distance at each redshift [Mpc] (from
+        ``calculate_redshift_related_params``).
+    n_redshifts_detection : int
+        Index in ``redshifts`` up to which detection probabilities are
+        evaluated (``int(max_redshift_detection / redshift_step)``).
+    sensitivity : {'O1', 'O3', 'design'}
+        LIGO sensitivity curve.  Default ``'O3'`` matches the post-O3
+        observed rate references in ``OBSERVED_SGRB_RATES``.  ``'O1'``
+        and ``'design'`` are also accepted by FCI.
+    snr_threshold : float
+        Network-SNR detection threshold; default 8.0 (Finn-Chernoff).
+    n_chunk : int
+        Number of binaries per chunk.
+
+    Returns
+    -------
+    R_det : 1-D array, shape (n_redshifts_detection,)
+        Detected merger rate density at the source-frame redshift
+        slice; multiply by ``shell_volumes / (1 + z)`` and sum to
+        recover the absolute detected count per detector-frame year.
+    """
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        find_detection_probability,
+        find_formation_and_merger_rates,
+    )
+
+    from grb_physics import chirp_mass
+
+    n_binaries = len(m1)
+    if n_binaries == 0:
+        return np.zeros(n_redshifts_detection)
+
+    m1 = np.asarray(m1, dtype=float)
+    m2 = np.asarray(m2, dtype=float)
+    Z_arr = np.asarray(COMPAS_Z, dtype=float)
+    delays = np.asarray(COMPAS_delay_times, dtype=float)
+    w = np.asarray(COMPAS_weights, dtype=float)
+
+    Mc = chirp_mass(m1, m2)
+    eta = (m1 * m2) / (m1 + m2) ** 2
+
+    snr_grid_at_1Mpc, det_prob_from_snr = _build_snr_detection_grids(
+        sensitivity=sensitivity, snr_threshold=snr_threshold,
+    )
+
+    total = np.zeros(n_redshifts_detection)
+    for s in range(0, n_binaries, n_chunk):
+        e = min(s + n_chunk, n_binaries)
+        _, mr_chunk = find_formation_and_merger_rates(
+            n_binaries=e - s,
+            redshifts=redshifts,
+            times=times,
+            time_first_SF=time_first_SF,
+            n_formed=n_formed,
+            dPdlogZ=dPdlogZ,
+            metallicities=metallicities,
+            p_draw_metallicity=p_draw,
+            COMPAS_metallicites=Z_arr[s:e],
+            COMPAS_delay_times=delays[s:e],
+            COMPAS_weights=w[s:e],
+        )
+        det_prob_chunk = find_detection_probability(
+            Mc=Mc[s:e],
+            eta=eta[s:e],
+            redshifts=redshifts,
+            distances=distances,
+            n_redshifts_detection=n_redshifts_detection,
+            n_binaries=e - s,
+            snr_grid_at_1Mpc=snr_grid_at_1Mpc,
+            detection_probability_from_snr=det_prob_from_snr,
+        )
+        total += (mr_chunk[:, :n_redshifts_detection] * det_prob_chunk).sum(axis=0)
+
+    return total
 
 
 def per_system_rate_weights(
@@ -380,32 +349,33 @@ def per_system_rate_weights(
     time_first_SF,
     n_formed,
     p_draw,
+    dPdlogZ,
+    metallicities,
     COMPAS_Z,
     COMPAS_delay_times,
     COMPAS_weights,
-    Z_grid=None,
 ):
-    """
-    Per-system contribution to the merger rate at a single z_target.
+    """Per-system rate weights at z_target.
 
-    Same physics as ``compute_merger_rate`` but returns an array of
-    individual rate weights (one per binary) for constructing weighted-
-    Poisson 1 sigma envelopes (sigma_R(z) = sqrt(sum_i w_i(z)^2),
-    CLAUDE.md "Uncertainty is not optional"; see Section 7 / 8 of
-    ``grb_main.ipynb``).
+    Returns ``w_i(z_target) = n_formed(z_form) * dPdlogZ(z_form, Z_i) /
+    p_draw * w_i^STROOPWAFEL`` per binary, where ``z_form`` is the
+    formation redshift required to merge at ``z_target`` given the
+    binary's delay time.  Used for weighted-Poisson 1-sigma envelopes
+    (sigma_R = sqrt(sum_i w_i^2)) and for the per-class rate-weighted Z
+    and chirp-mass histograms in Section 13.
 
-    Vectorized: a single broadcast over the population, no Python loop.
-    Replaces the prior ``_interp_formation_rate`` call which silently
-    expanded an ``(n_z, n_valid)`` slice into an ``(n_valid, n_valid)``
-    intermediate via 1-D fancy indexing.
+    Mirrors the formation-rate column of FCI's
+    ``find_formation_and_merger_rates`` (``np.digitize`` lookup against
+    ``metallicities``), evaluated at the single formation time
+    corresponding to ``z_target``.
 
     Parameters
     ----------
-    p_draw : float
-        COMPAS metallicity sampling density (see ``compute_merger_rate``).
-    Z_grid : 1-D array, optional
-        Full simulation metallicity grid; pass when ``COMPAS_Z`` is a
-        class subset (see ``compute_merger_rate``).
+    dPdlogZ : 2-D array, shape (n_z, n_metallicities)
+        Pointwise metallicity PDF from FCI's
+        ``find_metallicity_distribution``.
+    metallicities : 1-D array
+        Metallicity grid that ``dPdlogZ`` is evaluated on.
     """
     n_z = len(redshifts)
     redshift_step = redshifts[1] - redshifts[0]
@@ -417,31 +387,34 @@ def per_system_rate_weights(
 
     j_target = np.argmin(np.abs(redshifts - z_target))
     t_merge = times[j_target]
-
-    dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(redshifts, COMPAS_Z, Z_grid=Z_grid)
     t_min = max(time_first_SF, times.min())
 
-    out = np.zeros(len(COMPAS_weights))
-    t_form = t_merge - np.asarray(COMPAS_delay_times, dtype=float)
+    delays = np.asarray(COMPAS_delay_times, dtype=float)
+    Z_arr = np.asarray(COMPAS_Z, dtype=float)
+    w_all = np.asarray(COMPAS_weights, dtype=float)
+
+    out = np.zeros(len(w_all))
+    t_form = t_merge - delays
     valid = t_form >= t_min
     if not valid.any():
         return out
 
     idx = np.where(valid)[0]
     z_form = times_to_z(t_form[idx])
-    z_idx = z_form / redshift_step
-    z_lo = np.clip(np.floor(z_idx).astype(np.int64), 0, n_z - 1)
+    z_idx_float = z_form / redshift_step
+    z_lo = np.clip(np.floor(z_idx_float).astype(np.int64), 0, n_z - 1)
     z_hi = np.clip(z_lo + 1, 0, n_z - 1)
-    frac = z_idx - np.floor(z_idx)
+    frac = z_idx_float - np.floor(z_idx_float)
 
-    # Pair (z_lo[i], sys_col[idx][i]) and (z_hi[i], sys_col[idx][i]) so
-    # each system gets the metallicity weight at its own column,
-    # avoiding the (n_valid, n_valid) intermediate produced by 1-D
-    # fancy indexing into a 2-D dPdlogZ_binned slice.
-    cols = np.asarray(sys_col, dtype=np.int64)[idx]
-    dP_lo = dPdlogZ_binned[z_lo, cols]
-    dP_hi = dPdlogZ_binned[z_hi, cols]
-    w = np.asarray(COMPAS_weights, dtype=float)[idx]
+    # FCI uses np.digitize(Z, metallicities) for the column index; mirror that
+    # here so subset rate weights match the per-binary formation-rate row of
+    # find_formation_and_merger_rates exactly.
+    cols = np.digitize(Z_arr[idx], metallicities)
+    cols = np.clip(cols, 0, dPdlogZ.shape[1] - 1)
+
+    dP_lo = dPdlogZ[z_lo, cols]
+    dP_hi = dPdlogZ[z_hi, cols]
+    w = w_all[idx]
 
     inv_p_draw = 1.0 / p_draw
     f_lo = n_formed[z_lo] * dP_lo * inv_p_draw * w
@@ -451,85 +424,97 @@ def per_system_rate_weights(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Per-population normalization
+# Per-population normalization (back-derived from upstream Neijssel anchor)
 # ═══════════════════════════════════════════════════════════════════════════
 def calibrate_mean_mass_evolved(
-    sfr,
     redshifts,
     times,
     time_first_SF,
-    p_draw,
     COMPAS_Z,
     COMPAS_delay_times,
     COMPAS_weights,
     expected_local_rate,
-    Z_grid=None,
+    Z_min_COMPAS=None,
+    Z_max_COMPAS=None,
 ):
-    """Derive the effective MEAN_MASS_EVOLVED for one population.
+    """MSSFR-independent MEAN_MASS_EVOLVED [Msun] back-derived at z = 0.
 
-    Runs ``compute_merger_rate`` with ``n_formed = sfr`` (unit
-    normalization) and scales so the z = 0 rate matches
-    *expected_local_rate* (from pre-computed ``w_000`` weights).
+    The COMPAS Broekgaarden+ 2021 files store ``weights_intrinsic/w_000``,
+    which is the cosmic-integration weight at the z = 0 slice computed by the
+    upstream pipeline with Neijssel+ 2019 MSSFR parameters.  Summed across
+    binaries, ``w_000`` gives the published intrinsic local merger rate
+    density, ``expected_local_rate``.
 
-    The internal ``compute_merger_rate`` call pins ``smooth_sigma=0`` so
-    the calibration is anchored to the sharp pointwise R(z=0):
+    The simulation's total stellar mass evolved is a property of the
+    sampler (IMF, mass cuts, binary fraction, STROOPWAFEL phases) and is
+    therefore MSSFR-independent.  We recover it by running our own
+    ``compute_merger_rate`` with Neijssel+ 2019 MSSFR (the same parameters
+    the upstream pipeline used) and dividing the unsmoothed R(z = 0) by
+    ``expected_local_rate``::
 
-    - ``expected_local_rate`` from ``weights_intrinsic/w_000``
-      (Broekgaarden et al. 2021, arXiv:2103.02608) is the
-      cosmic-integration weight at the z = 0 slice with no boundary
-      kernel applied;
-    - the Neijssel et al. (2019, MNRAS 490, 3740, Eq. 2) MSSFR
-      convolution is pointwise; smoothing is not part of the formal
-      expression;
-    - the upstream COMPAS ``find_formation_and_merger_rates`` in
-      ``FastCosmicIntegration`` is unsmoothed (the apples-to-apples
-      shape comparison in
-      ``tests/unit/test_rates.py::test_compute_merger_rate_matches_compas_shape``
-      explicitly disables smoothing for that reason).
+        MEAN_MASS_EVOLVED = R_unnorm(z = 0; Neijssel) / expected_local_rate
 
-    Anchoring instead to a kernel-smoothed model value would let
-    ``MEAN_MASS_EVOLVED`` drift with ``redshift_step`` via the
-    ``gaussian_filter1d`` ``mode='reflect'`` boundary at z = 0, which
-    mixes a different physical width of the rising R(z) at different
-    ``redshift_step`` (measured ~30 percent drift across
-    ``dz in [0.0025, 0.01]`` before this fix).  Cosmetic smoothing on
-    the *plotted* curve via the production ``compute_merger_rate``
-    default ``smooth_sigma=30`` is independent of this calibration
-    choice.
+    The factor of MEAN_MASS_EVOLVED that comes out is the actual simulation
+    mass and can be plugged into any subsequent ``compute_merger_rate`` call
+    with a different MSSFR (Levina+ 2026 TNG100-1, ...).  The Neijssel
+    parameters are used here only as a calibration tool, not as the
+    science-path MSSFR.
+
+    Note: STROOPWAFEL files do not store the total number of binaries that
+    COMPAS evolved upstream (the file holds only the surviving DCOs, not the
+    full draw count).  An IMF-analytical estimate
+    ``N_drawn * star_forming_mass_per_binary`` therefore cannot be computed
+    from the file alone, which is why this routine back-derives from the
+    Neijssel anchor instead.
 
     Parameters
     ----------
-    p_draw : float
-        COMPAS metallicity sampling density (see ``compute_merger_rate``).
-    Z_grid : 1-D array, optional
-        Full simulation metallicity grid.  When ``COMPAS_Z`` is the full
-        population (the standard calibration use), this is redundant
-        because ``np.unique(COMPAS_Z) == Z_grid`` by construction.  Pass
-        explicitly only if the calibration needs to be performed on a
-        sub-population (rare).
+    expected_local_rate : float
+        Sum of ``weights_intrinsic/w_000`` from the Broekgaarden+ 2021
+        HDF5 file (the published intrinsic local rate, Gpc^-3 yr^-1).
+        Use ``grb_io.read_expected_local_rate``.
+    Z_min_COMPAS, Z_max_COMPAS : float, optional
+        COMPAS metallicity sampling range [linear, not log].  Defaults
+        to ``(min(COMPAS_Z), max(COMPAS_Z))``.  Pass the simulation's
+        full range (``METALLICITY_GRID[0]``, ``METALLICITY_GRID[-1]``)
+        if a class subset has narrower coverage.
 
     Returns
     -------
     mean_mass_evolved : float
-        The total stellar mass [Msun] evolved in the simulation.
-    rate_unnorm : 1-D array
-        Un-normalized merger rate (unsmoothed); divide by
-        *mean_mass_evolved* to get the correctly normalized sharp R(z).
+        Total stellar mass [Msun] formed in the simulation.
     """
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        find_metallicity_distribution,
+        find_sfr,
+    )
+
+    if Z_min_COMPAS is None:
+        Z_min_COMPAS = float(np.min(COMPAS_Z))
+    if Z_max_COMPAS is None:
+        Z_max_COMPAS = float(np.max(COMPAS_Z))
+
+    sfr_nei = find_sfr(redshifts)  # Madau and Dickinson 2014, Neijssel+19 fit
+    dPdlogZ_nei, mets_nei, p_draw_nei = find_metallicity_distribution(
+        redshifts,
+        min_logZ_COMPAS=np.log(Z_min_COMPAS),
+        max_logZ_COMPAS=np.log(Z_max_COMPAS),
+    )  # Neijssel+19 default mu0/muz/sigma_0/sigma_z/alpha; matches w_000 anchor.
+
     rate_unnorm = compute_merger_rate(
         redshifts,
         times,
         time_first_SF,
-        sfr,
-        p_draw,
+        sfr_nei,
+        p_draw_nei,
+        dPdlogZ_nei,
+        mets_nei,
         COMPAS_Z,
         COMPAS_delay_times,
         COMPAS_weights,
-        Z_grid=Z_grid,
         smooth_sigma=0,
     )
-    mean_mass_evolved = rate_unnorm[0] / expected_local_rate
-    return mean_mass_evolved, rate_unnorm
+    return float(rate_unnorm[0] / expected_local_rate)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

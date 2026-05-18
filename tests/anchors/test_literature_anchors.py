@@ -679,7 +679,11 @@ def test_fong_berger_2013_host_model_weights_sum_to_one():
 # ─────────────────────────────────────────────────────────────────────
 @pytest.mark.requires_compas
 def test_neijssel_2019_compas_default_sfr_peak_at_z_2p13():
-    """COMPAS `find_sfr` peaks at z ~ 2.13 +/- 0.10 (Neijssel 2019 Eq. 6 fit).
+    """COMPAS `find_sfr` defaults peak at z ~ 2.13 +/- 0.10 (Neijssel 2019 Eq. 6 fit).
+
+    Sanity-checks the COMPAS `find_sfr` defaults; the project fiducial
+    is the Levina+ 2026 TNG100-1 best-fit (see
+    ``test_levina_2026_tng100_sfr_parameters_match_table_1``).
 
     COMPAS `FastCosmicIntegration.find_sfr` uses the Madau and
     Dickinson (2014) ARA&A 52, 415 functional form
@@ -987,26 +991,140 @@ def test_margalit_metzger_2017_hmns_factor_in_supramassive_band():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Neijssel et al. (2019) MNRAS 490, 3740 [Papers/Neijssel_2019.pdf]
-# Eq. (2) MSSFR log-normal parameters.
+# Levina et al. (2026) arXiv:2601.20202 [Papers/Levina_2026.pdf]
+# Table 1: TNG100-1 best-fit S(Z, z) parameters (project fiducial).
+# Eq. (2) Madau and Dickinson (2014) S(z), Eq. (3-6) Azzalini skew-log-normal
+# dP/dlnZ; the COMPAS ``find_metallicity_distribution`` parametrisation maps
+# Levina's omega_0 / omega_z onto COMPAS sigma_0 / sigma_z with alpha as the
+# skewness parameter.
 # ─────────────────────────────────────────────────────────────────────
-def test_neijssel_2019_mssfr_lognormal_parameters_match_eq2():
-    """MSSFR mu_0, mu_z, sigma_0, sigma_z must match Neijssel (2019) Eq. (2) fit.
+def test_levina_2026_tng100_mssfr_parameters_match_table_1():
+    """MSSFR_PARAMS_LEVINA26_TNG100 must match Levina+ 2026 Table 1, TNG100-1 column."""
+    from grb_rates import MSSFR_PARAMS_LEVINA26_TNG100 as P
 
-    Neijssel et al. (2019) MNRAS 490, 3740, Eq. (2):
+    assert P["mu0"]     == pytest.approx(0.0247,  rel=1e-9), P["mu0"]
+    assert P["muz"]     == pytest.approx(-0.0521, rel=1e-9), P["muz"]
+    assert P["sigma_0"] == pytest.approx(1.1509,  rel=1e-9), P["sigma_0"]
+    assert P["sigma_z"] == pytest.approx(0.0477,  rel=1e-9), P["sigma_z"]
+    assert P["alpha"]   == pytest.approx(-1.8801, rel=1e-9), P["alpha"]
 
-        mu_0 = 0.035, mu_z = -0.23, sigma_0 = 0.39, sigma_z = 0.0
 
-    are the COMPAS-default log-normal MSSFR parameters.  Drift outside
-    this set silently changes per-class rates by ~30 percent at high
-    z.
+def test_levina_2026_tng100_sfr_parameters_match_table_1():
+    """SFR_PARAMS_LEVINA26_TNG100 must match Levina+ 2026 Table 1, TNG100-1 column."""
+    from grb_rates import SFR_PARAMS_LEVINA26_TNG100 as S
+
+    assert S["a"] == pytest.approx(0.0172, rel=1e-9), S["a"]
+    assert S["b"] == pytest.approx(1.4425, rel=1e-9), S["b"]
+    assert S["c"] == pytest.approx(4.5299, rel=1e-9), S["c"]
+    assert S["d"] == pytest.approx(6.2261, rel=1e-9), S["d"]
+
+
+@pytest.mark.requires_compas
+def test_levina_2026_tng100_sfr_peak_around_z_2p7():
+    """Levina+ 2026 TNG100-1 SFR peak sits at z ~ 2.74.
+
+    The TNG-fit d = 6.2261 (vs Neijssel d = 4.7) and c = 4.53 (vs 2.9)
+    together with the shallower low-z slope b = 1.44 push the peak of
+    ``a*(1+z)^b / (1 + ((1+z)/c)^d)`` to z ~ 2.7, later than Madau-Fragos
+    or the Neijssel COMPAS default.  Anchored to the closed-form peak
+    ``z_peak = c * (b/(d-b))**(1/d) - 1`` so a drift in any of the four
+    parameters surfaces here, not deep inside a rate calculation.
     """
-    from grb_rates import _MU0, _MUZ, _SIGMA_0, _SIGMA_Z
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import find_sfr
 
-    assert _MU0 == pytest.approx(0.035, rel=1e-9), _MU0
-    assert _MUZ == pytest.approx(-0.23, rel=1e-9), _MUZ
-    assert _SIGMA_0 == pytest.approx(0.39, rel=1e-9), _SIGMA_0
-    assert _SIGMA_Z == pytest.approx(0.0, abs=1e-12), _SIGMA_Z
+    from grb_rates import SFR_PARAMS_LEVINA26_TNG100
+
+    z = np.linspace(0.0, 8.0, 4001)
+    sfr = find_sfr(z, **SFR_PARAMS_LEVINA26_TNG100)
+    z_peak = float(z[np.argmax(sfr)])
+    a, b, c, d = (  # noqa: F841
+        SFR_PARAMS_LEVINA26_TNG100["a"],
+        SFR_PARAMS_LEVINA26_TNG100["b"],
+        SFR_PARAMS_LEVINA26_TNG100["c"],
+        SFR_PARAMS_LEVINA26_TNG100["d"],
+    )
+    z_peak_analytic = c * (b / (d - b)) ** (1.0 / d) - 1.0
+    assert abs(z_peak - z_peak_analytic) <= 0.10, (z_peak, z_peak_analytic)
+    assert 2.5 <= z_peak <= 3.0, z_peak
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Levina+ 2026 Table 1: TNG50-1 and TNG300-1 columns.
+# Levina+ 2026 Table 2: published BBH local merger rates.
+# ─────────────────────────────────────────────────────────────────────
+def test_levina_2026_tng50_parameters_match_table_1():
+    """SFR_PARAMS_LEVINA26_TNG50 / MSSFR_PARAMS_LEVINA26_TNG50 match Levina+ 2026 Table 1."""
+    from grb_rates import (
+        MSSFR_PARAMS_LEVINA26_TNG50,
+        SFR_PARAMS_LEVINA26_TNG50,
+    )
+
+    assert SFR_PARAMS_LEVINA26_TNG50["a"] == pytest.approx(0.0329, rel=1e-9)
+    assert SFR_PARAMS_LEVINA26_TNG50["b"] == pytest.approx(1.4668, rel=1e-9)
+    assert SFR_PARAMS_LEVINA26_TNG50["c"] == pytest.approx(3.8412, rel=1e-9)
+    assert SFR_PARAMS_LEVINA26_TNG50["d"] == pytest.approx(5.0994, rel=1e-9)
+
+    assert MSSFR_PARAMS_LEVINA26_TNG50["mu0"]     == pytest.approx(0.0282,  rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["muz"]     == pytest.approx(-0.0314, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["sigma_0"] == pytest.approx(1.1136,  rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["sigma_z"] == pytest.approx(0.0592,  rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG50["alpha"]   == pytest.approx(-1.7353, rel=1e-9)
+
+
+def test_levina_2026_tng300_parameters_match_table_1():
+    """SFR_PARAMS_LEVINA26_TNG300 / MSSFR_PARAMS_LEVINA26_TNG300 match Levina+ 2026 Table 1."""
+    from grb_rates import (
+        MSSFR_PARAMS_LEVINA26_TNG300,
+        SFR_PARAMS_LEVINA26_TNG300,
+    )
+
+    assert SFR_PARAMS_LEVINA26_TNG300["a"] == pytest.approx(0.0097, rel=1e-9)
+    assert SFR_PARAMS_LEVINA26_TNG300["b"] == pytest.approx(1.5747, rel=1e-9)
+    assert SFR_PARAMS_LEVINA26_TNG300["c"] == pytest.approx(4.5428, rel=1e-9)
+    assert SFR_PARAMS_LEVINA26_TNG300["d"] == pytest.approx(6.8266, rel=1e-9)
+
+    assert MSSFR_PARAMS_LEVINA26_TNG300["mu0"]     == pytest.approx(0.0237,  rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["muz"]     == pytest.approx(-0.0687, rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["sigma_0"] == pytest.approx(1.1196,  rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["sigma_z"] == pytest.approx(0.0481,  rel=1e-9)
+    assert MSSFR_PARAMS_LEVINA26_TNG300["alpha"]   == pytest.approx(-2.2726, rel=1e-9)
+
+
+def test_levina_2026_bbh_local_rates_match_table_2():
+    """LEVINA26_BBH_LOCAL_RATES match the six numbers in Levina+ 2026 Table 2."""
+    from grb_rates import LEVINA26_BBH_LOCAL_RATES
+
+    expected = {
+        "TNG50-1":  {"R_sim": 58.92, "R_fit": 73.72},
+        "TNG100-1": {"R_sim": 42.91, "R_fit": 45.53},
+        "TNG300-1": {"R_sim": 29.34, "R_fit": 27.81},
+    }
+    for tng, vals in expected.items():
+        assert tng in LEVINA26_BBH_LOCAL_RATES
+        for key, val in vals.items():
+            assert LEVINA26_BBH_LOCAL_RATES[tng][key] == pytest.approx(val, rel=1e-9), (
+                tng, key
+            )
+
+
+def test_levina_tng_resolution_monotonic_R_local_under_analytical_fit():
+    """Levina+ 2026 Sec. 3.2: BBH local rate decreases with simulation
+    box size (TNG50 highest resolution and rate, TNG300 largest box and
+    lowest rate).  Anchored on the constants so the test runs without
+    BBH data; the BNS forward-pass version is in
+    ``tests/sections/test_section_04_mssfr.py``.
+    """
+    from grb_rates import LEVINA26_BBH_LOCAL_RATES
+
+    R_50  = LEVINA26_BBH_LOCAL_RATES["TNG50-1"]["R_fit"]
+    R_100 = LEVINA26_BBH_LOCAL_RATES["TNG100-1"]["R_fit"]
+    R_300 = LEVINA26_BBH_LOCAL_RATES["TNG300-1"]["R_fit"]
+    assert R_50 > R_100 > R_300, (R_50, R_100, R_300)
+
+    R_50_sim  = LEVINA26_BBH_LOCAL_RATES["TNG50-1"]["R_sim"]
+    R_100_sim = LEVINA26_BBH_LOCAL_RATES["TNG100-1"]["R_sim"]
+    R_300_sim = LEVINA26_BBH_LOCAL_RATES["TNG300-1"]["R_sim"]
+    assert R_50_sim > R_100_sim > R_300_sim, (R_50_sim, R_100_sim, R_300_sim)
 
 
 # ─────────────────────────────────────────────────────────────────────

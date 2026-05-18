@@ -701,8 +701,8 @@ or the suppression double-counts."""
 # ---------------------------------------------------------------------------
 # Constants and helpers used by ``comparison.ipynb`` to compare BH-engine
 # and HMNS-engine kilonova ejecta predictions against the Rastinejad+24
-# observational sample.  Single source of truth per CLAUDE.md; previously
-# duplicated in the notebook.
+# observational sample.  Single source of truth; previously duplicated
+# in the notebook.
 #
 # Reference: Gottlieb et al. 2025, arXiv:2411.13657.
 

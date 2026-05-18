@@ -3,9 +3,9 @@
 Fixed colour palette and a canonical
 ``matplotlib.rcParams`` block for every paper-bound figure.  This
 module is the single source of truth: the palette dictionary below
-matches CLAUDE.md "Scientific Plotting Standards" exactly, and
-``apply_apj_rcparams()`` registers the rcParams the figure-generation
-code uses across notebooks.
+is the project's locked palette, and ``apply_apj_rcparams()``
+registers the rcParams the figure-generation code uses across
+notebooks.
 
 Tests in ``tests/unit/test_palette_and_rcparams.py`` lock the hex codes
 and the rcParams settings against drift.

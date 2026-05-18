@@ -80,7 +80,7 @@ def compas_xcheck_pipeline(bns_a_path):
     redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
         max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
     )
-    sfr = fci.find_sfr(redshifts)
+    sfr = fci.find_sfr(redshifts)  # Neijssel default; this fixture exercises FCI defaults
 
     dPdlogZ_compas, metallicities, p_draw = fci.find_metallicity_distribution(
         redshifts,
@@ -90,30 +90,17 @@ def compas_xcheck_pipeline(bns_a_path):
 
     expected_local_rate = read_expected_local_rate(bns_a_path)
     Z_grid = np.unique(Z)
-    mean_mass, _ = calibrate_mean_mass_evolved(
-        sfr,
-        redshifts,
-        times,
-        time_first_SF,
-        p_draw,
-        Z,
-        delays,
-        w,
-        expected_local_rate,
-        Z_grid=Z_grid,
+    mean_mass = calibrate_mean_mass_evolved(
+        redshifts, times, time_first_SF,
+        Z, delays, w, expected_local_rate,
+        Z_min_COMPAS=Z.min(), Z_max_COMPAS=Z.max(),
     )
     n_formed = sfr / mean_mass
 
     R_ours = compute_merger_rate(
-        redshifts,
-        times,
-        time_first_SF,
-        n_formed,
-        p_draw,
-        Z,
-        delays,
-        w,
-        Z_grid=Z_grid,
+        redshifts, times, time_first_SF, n_formed, p_draw,
+        dPdlogZ_compas, metallicities,
+        Z, delays, w,
         smooth_sigma=0,
     )
 
@@ -281,65 +268,12 @@ def test_dPdlogZ_lognormal_parameters_match_neijssel():
     )
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Voronoi (project) vs point-sampled (COMPAS) dP/d(ln Z) integrals.
-# ─────────────────────────────────────────────────────────────────────
-@pytest.mark.requires_data
-@pytest.mark.requires_compas
-def test_dPdlogZ_matches_upstream_at_z0(compas_xcheck_pipeline):
-    """Bin-integrated dP/d(ln Z) over the COMPAS Z window matches upstream at z = 0.
-
-    The project's ``_bin_averaged_dPdlogZ`` evaluates the analytic
-    Voronoi-cell CDF ``Phi((ln Z_hi - mu) / sigma) -
-    Phi((ln Z_lo - mu) / sigma)`` per cell of the 53-element COMPAS Z
-    grid; the COMPAS reference samples ``dPdlogZ`` pointwise on a fine
-    1201-bin uniform log-Z grid then renormalises to unit mass over
-    [ln Z_min, ln Z_max].  These two constructions are not identical
-    cell-by-cell (the Voronoi version captures the exact integrated
-    probability per COMPAS bin; the point version aliases the PDF
-    onto the COMPAS Z values), but the *integral* of dP/d(ln Z) over
-    the COMPAS Z window is the same physical quantity in both
-    pipelines.  Test asserts agreement to 1 percent at z = 0.
-
-    Reference: Neijssel et al. (2019) MNRAS 490, 3740, Eq. (2);
-    Broekgaarden et al. (2021), arXiv:2103.02608 Sec. 2.4.
-    """
-    pipe = compas_xcheck_pipeline
-
-    from grb_rates import _bin_averaged_dPdlogZ
-
-    redshifts = pipe["redshifts"]
-    Z = pipe["Z"]
-    Z_grid = pipe["Z_grid"]
-    metallicities = pipe["metallicities"]
-    dPdlogZ_compas = pipe["dPdlogZ_compas"]
-
-    # Voronoi bin probabilities at z = 0 (already integrated over each
-    # cell).  Sum is the renormalisation norm = Phi((ln Z_max - mu) /
-    # sigma) - Phi((ln Z_lo - mu) / sigma) inside our Z window.
-    dPdlogZ_binned, _ = _bin_averaged_dPdlogZ(redshifts[:1], Z, Z_grid=Z_grid)
-    int_ours = float(dPdlogZ_binned[0].sum())
-
-    # COMPAS pointwise integral over the same window:
-    #   sum_i dPdlogZ[i] * step_logZ , for i in [Z_min, Z_max].
-    log_metallicities = np.log(metallicities)
-    in_window = (log_metallicities >= np.log(Z_grid.min())) & (
-        log_metallicities <= np.log(Z_grid.max())
-    )
-    if in_window.sum() < 2:
-        pytest.skip("COMPAS metallicity grid does not cover the Z window")
-    log_in = log_metallicities[in_window]
-    step_logZ = float(log_in[1] - log_in[0])
-    int_compas = float(dPdlogZ_compas[0, in_window].sum() * step_logZ)
-
-    rtol = 0.01
-    assert abs(int_ours - int_compas) <= rtol * max(int_compas, 1e-12), (
-        f"_bin_averaged_dPdlogZ window-integral at z=0 = {int_ours:.6f} "
-        f"disagrees with COMPAS pointwise window-integral "
-        f"{int_compas:.6f} by more than {rtol * 100:.0f} percent.  "
-        f"Either the Voronoi cell construction or the COMPAS Z-window "
-        f"renormalisation drifted."
-    )
+# Voronoi-vs-pointwise dP/d(ln Z) comparison removed: the project no longer
+# re-implements the metallicity PDF (``_bin_averaged_dPdlogZ`` was deleted
+# when ``compute_merger_rate`` migrated to FCI's
+# ``find_metallicity_distribution``).  See
+# ``tests/sections/test_section_04_mssfr.py`` for the FCI-side normalisation
+# check.
 
 
 # ─────────────────────────────────────────────────────────────────────

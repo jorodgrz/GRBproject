@@ -141,100 +141,10 @@ def test_kruger_foucart_dyn_ejecta_finite():
     assert M_dyn < 0.1
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Neijssel et al. (2019) Eq. (2) MSSFR log-normal normalisation
-# ─────────────────────────────────────────────────────────────────────
-def test_neijssel_dPdlogZ_matches_integrated_window_at_z0():
-    """At z = 0 the binned probabilities sum to the log-normal integral
-    over the COMPAS [Z_min, Z_max] sampling window.
-
-    The convention in ``grb_rates._bin_averaged_dPdlogZ`` is that bin
-    probabilities are renormalised to ``norm(z) = Phi((ln Z_max - mu)/
-    sigma) - Phi((ln Z_min - mu)/sigma)``, the integrated CDF inside
-    the window (Neijssel et al. 2019 Eq. 2, COMPAS convention).  This
-    is *not* unity: the COMPAS Z grid spans only the bulk of the
-    log-normal, so the integrated probability inside the window is
-    less than 1 and approaches 0 at high z.
-
-    At z = 0 with mu_0 = 0.035, sigma_0 = 0.39 and the COMPAS 53-bin
-    grid, ``norm(0) ~ 0.42``.  This test recomputes the analytic value
-    and asserts that ``sum(binned) == norm(0)`` to within float noise.
-    """
-    from scipy.stats import norm as _N
-
-    from grb_io import METALLICITY_GRID
-    from grb_rates import _MU0, _SIGMA_0, _bin_averaged_dPdlogZ
-
-    Z_unique = np.unique(METALLICITY_GRID)
-    binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_unique, Z_grid=Z_unique)
-    sigma = _SIGMA_0
-    mu = np.log(_MU0) - 0.5 * sigma**2
-    ln_Z_min = float(np.log(Z_unique.min()))
-    ln_Z_max = float(np.log(Z_unique.max()))
-    norm_expected = float(_N.cdf((ln_Z_max - mu) / sigma) - _N.cdf((ln_Z_min - mu) / sigma))
-    integral = float(binned.sum())
-    assert integral == pytest.approx(norm_expected, rel=1e-6), (
-        f"dPdlogZ z=0 integral = {integral:.6f}; expected "
-        f"norm(0) = {norm_expected:.6f} from Neijssel log-normal"
-    )
-
-
-def test_neijssel_dPdlogZ_per_d_lnZ_not_d_log10Z():
-    """Confirm the convention is d/d(ln Z) (Neijssel Eq. 2), not d/d(log10 Z).
-
-    Switching to d/d(log10 Z) would multiply every column by ln(10) ~
-    2.30, blowing the integrated window beyond 1.0; assert the integral
-    stays below 1 (it equals the log-normal CDF over the window).
-    """
-    from grb_io import METALLICITY_GRID
-    from grb_rates import _bin_averaged_dPdlogZ
-
-    Z_unique = np.unique(METALLICITY_GRID)
-    binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_unique, Z_grid=Z_unique)
-    integral = float(binned.sum())
-    assert integral < 1.0, (
-        f"dPdlogZ integral = {integral:.4f}; suggests d/d(log10 Z) "
-        f"convention (would multiply by ~2.30) instead of d/d(ln Z)"
-    )
-
-
-@pytest.mark.parametrize("z", [0.0, 0.5, 1.0, 2.0, 4.0])
-def test_neijssel_dPdlogZ_matches_log_normal_across_redshift(z):
-    """Multi-redshift extension of the z = 0 cross-check.
-
-    At each redshift the bin-integrated probabilities returned by
-    ``_bin_averaged_dPdlogZ`` must equal the analytic CDF of the
-    Neijssel et al. (2019) Eq. 7 log-normal across the COMPAS
-    [Z_min, Z_max] window:
-
-        sum_k P_bin(z, k) = Phi((ln Z_max - mu(z)) / sigma(z))
-                          - Phi((ln Z_min - mu(z)) / sigma(z))
-
-    with mu(z) = ln(mu_0 * 10^{mu_z * z}) - 0.5 * sigma(z)^2 and
-    sigma(z) = sigma_0 * 10^{sigma_z * z} (sigma_z is zero in the
-    fiducial ``grb_rates`` parameterisation, so sigma(z) = sigma_0).
-    A Voronoi-cell renormalisation bug at any z would show up as a
-    mismatch in this single equality.
-    """
-    from scipy.stats import norm as _N
-
-    from grb_io import METALLICITY_GRID
-    from grb_rates import _MU0, _MUZ, _SIGMA_0, _SIGMA_Z, _bin_averaged_dPdlogZ
-
-    Z_unique = np.unique(METALLICITY_GRID)
-    binned, _ = _bin_averaged_dPdlogZ(np.array([z]), Z_unique, Z_grid=Z_unique)
-
-    sigma = _SIGMA_0 * 10.0 ** (_SIGMA_Z * z)
-    mean_metal = _MU0 * 10.0 ** (_MUZ * z)
-    mu = float(np.log(mean_metal) - 0.5 * sigma**2)
-    ln_Z_min = float(np.log(Z_unique.min()))
-    ln_Z_max = float(np.log(Z_unique.max()))
-    cdf_expected = float(_N.cdf((ln_Z_max - mu) / sigma) - _N.cdf((ln_Z_min - mu) / sigma))
-
-    integrated = float(binned.sum())
-    assert integrated == pytest.approx(cdf_expected, rel=1e-6), (
-        f"z = {z}: integrated dPdlogZ = {integrated:.6e}, analytic CDF = {cdf_expected:.6e}"
-    )
+# Bin-averaged dPdlogZ tests removed when the rate path migrated to
+# FCI's ``find_metallicity_distribution`` (see
+# ``tests/unit/test_rates.py::test_check_dPdlogZ_normalization_runs_on_compas_output``
+# and the literature anchor ``test_levina_2026_tng100_mssfr_parameters_match_table_1``).
 
 
 # ─────────────────────────────────────────────────────────────────────

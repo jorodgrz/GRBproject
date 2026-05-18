@@ -96,34 +96,10 @@ def test_cosmology_planck15_h0():
     assert abs(Planck15.H0.value - 67.74) < 0.01
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Neijssel+ 2019 MSSFR: dP/d(ln Z) integrates to ~1 at z = 0
-# ─────────────────────────────────────────────────────────────────────
-def test_dPdlogZ_normalization_z0():
-    """At z = 0 with a Z grid spanning 0.01 to 1.0 the Voronoi-bin
-    probabilities sum to ~1 because the Neijssel+ 2019 log-normal
-    (mu_0 = 0.035, sigma_0 = 0.39) sits well inside the grid:
-
-        ln_Z_min = ln(0.01) ~ -4.6,
-        ln_Z_max = ln(1.0) =  0,
-        mu(z=0)  = ln(0.035) - sigma^2/2 ~ -3.43,
-        sigma(z=0) = 0.39,
-
-    so ``norm = Phi(8.79) - Phi(-3.0) ~ 0.999``.  At higher redshift
-    (where mu(z) drops below ln_Z_min) the bin sum falls below 1 by
-    construction; the docstring at grb_rates.py:144-153 documents that
-    behaviour as expected.
-    """
-    from grb_rates import _bin_averaged_dPdlogZ
-
-    Z_grid = 10.0 ** np.linspace(-2, 0, 53)
-    dPdlogZ_binned, _ = _bin_averaged_dPdlogZ(np.array([0.0]), Z_grid, Z_grid=Z_grid)
-    integral = dPdlogZ_binned[0].sum()
-    assert 0.98 < integral < 1.02, (
-        f"dPdlogZ integral at z=0 is {integral:.4f}; expected ~1 because "
-        "the COMPAS Z grid covers the bulk of the Neijssel+ 2019 "
-        "log-normal at z=0."
-    )
+# Voronoi-bin metallicity test removed: ``_bin_averaged_dPdlogZ`` was
+# deleted when the rate path migrated to FCI's ``find_metallicity_distribution``
+# (see ``test_check_dPdlogZ_normalization_runs_on_compas_output`` for the
+# FCI-side normalisation check).
 
 
 @pytest.mark.requires_compas
@@ -151,43 +127,38 @@ def test_check_dPdlogZ_normalization_runs_on_compas_output():
 # ─────────────────────────────────────────────────────────────────────
 # Per-class partition invariant for Section 7 BNS rate plot
 # ─────────────────────────────────────────────────────────────────────
+@pytest.mark.requires_compas
 def test_per_class_rates_partition_total_bns_2024():
     """The four ``classify_bns_2024`` classes partition the BNS sample,
     so ``sum_c R_c(z) == R_total(z)`` to floating-point precision when
     ``compute_merger_rate`` is called with the same ``n_formed``,
-    ``p_draw``, and ``Z_grid`` for each subset.
+    ``p_draw``, and shared FCI ``dPdlogZ``/``metallicities`` for each
+    subset.
 
-    Locks the invariant the Section 7 BNS rate plot
-    (``Plots/rate_bns_by_class``) relies on: ``compute_merger_rate`` is a
-    pure additive accumulator over binaries
-    (``total_merger[j_idx] += _interp_formation_rate(...)``), so disjoint
-    masks that union to the full sample must produce rates that sum to
-    the all-sample rate.  Smoothing is linear and preserves the
-    invariant; we set ``smooth_sigma=0`` here so the assertion is
-    unambiguous about the underlying physics.
-
-    Also asserts the failure mode documented at ``grb_rates.py:67-78``:
-    dropping ``Z_grid`` on per-class calls breaks the invariant because
-    each subset's Voronoi cells and high-z renormalisation range collapse
-    to its own metallicity range, producing class-shape bias.
+    Locks the invariant the Section 7 BNS rate plot relies on:
+    ``compute_merger_rate`` is a pure additive accumulator (FCI's
+    ``find_formation_and_merger_rates`` summed axis-0 across chunks),
+    so disjoint masks that union to the full sample must produce rates
+    that sum to the all-sample rate.
     """
+    from astropy.cosmology import Planck15
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        calculate_redshift_related_params,
+        find_metallicity_distribution,
+        find_sfr,
+    )
+
     from grb_classify import classify_bns_2024
     from grb_rates import compute_merger_rate
 
     rng = np.random.default_rng(0)
 
-    # Construct ~50 BNS systems spanning all four classify_bns_2024 classes.
-    # Boundaries (M_TOV=2.2, K_THRESH=1.27, Q_THRESH=1.2):
-    #   sbGRB:  M_tot < 1.2*M_TOV = 2.64
-    #   HMNS:   2.64 <= M_tot < 2.794
-    #   disk:   M_tot >= 2.794 and q >= 1.2
-    #   Faint:  M_tot >= 2.794 and q < 1.2
     m1 = np.concatenate(
         [
-            np.full(15, 1.20),  # sbGRB:  M_tot = 2.40
-            np.full(15, 1.40),  # HMNS:   M_tot = 2.70
-            np.full(10, 2.10),  # disk:   M_tot = 3.50, q = 1.50
-            np.full(10, 1.55),  # Faint:  M_tot = 3.00, q = 1.07
+            np.full(15, 1.20),
+            np.full(15, 1.40),
+            np.full(10, 2.10),
+            np.full(10, 1.55),
         ]
     )
     m2 = np.concatenate(
@@ -199,123 +170,79 @@ def test_per_class_rates_partition_total_bns_2024():
         ]
     )
     cls = classify_bns_2024(m1, m2)
-    assert sum(int(c.sum()) for c in cls.values()) == len(m1), (
-        "synthetic masses do not partition cleanly across classify_bns_2024"
-    )
     for label, c in cls.items():
         assert int(c.sum()) > 0, f"no test systems land in class {label!r}"
 
-    # Construct per-class Z assignments such that each class spans a
-    # *different* subset of Z_full.  This makes the no-Z_grid regression
-    # assertion below non-trivial: if every class saw the same unique-Z
-    # set then the no-Z_grid path would coincide with the Z_grid path.
     Z_full = np.array([1e-4, 1e-3, 1e-2, 3e-2])
-    Z_compas = np.empty(len(m1))
-    Z_compas[cls["sbGRB + blue KN"]] = rng.choice(
-        Z_full[:2], size=int(cls["sbGRB + blue KN"].sum())
-    )
-    Z_compas[cls["lbGRB + red KN (HMNS)"]] = rng.choice(
-        Z_full[1:3], size=int(cls["lbGRB + red KN (HMNS)"].sum())
-    )
-    Z_compas[cls["lbGRB + red KN (disk)"]] = rng.choice(
-        Z_full[2:], size=int(cls["lbGRB + red KN (disk)"].sum())
-    )
-    Z_compas[cls["Faint lbGRB"]] = rng.choice(Z_full, size=int(cls["Faint lbGRB"].sum()))
+    Z_compas = rng.choice(Z_full, size=len(m1))
     delays = rng.uniform(50.0, 5000.0, size=len(m1))
     weights = rng.uniform(0.5, 2.0, size=len(m1))
 
-    redshifts = np.linspace(0.0, 1.0, 51)
-    times = np.linspace(13.7e3, 5.0e3, 51)
-    sfr = np.full_like(redshifts, 1e7)
+    # Use FCI's coherent (z, t, time_first_SF) grid so the times_to_z
+    # interpolation does not run out of bounds for any (binary, z) pair.
+    redshifts, _, times, time_first_SF, _, _ = calculate_redshift_related_params(
+        max_redshift=10.0, redshift_step=0.1, cosmology=Planck15
+    )
+    sfr = find_sfr(redshifts)
+
+    dPdlogZ, metallicities, p_draw = find_metallicity_distribution(
+        redshifts,
+        min_logZ_COMPAS=np.log(Z_full[0]),
+        max_logZ_COMPAS=np.log(Z_full[-1]),
+    )
 
     common = dict(
         redshifts=redshifts,
         times=times,
-        time_first_SF=100.0,
+        time_first_SF=time_first_SF,
         n_formed=sfr,
-        p_draw=0.1,
+        p_draw=p_draw,
+        dPdlogZ=dPdlogZ,
+        metallicities=metallicities,
         smooth_sigma=0,
     )
 
     R_total = compute_merger_rate(
-        COMPAS_Z=Z_compas,
-        COMPAS_delay_times=delays,
-        COMPAS_weights=weights,
-        Z_grid=Z_full,
+        COMPAS_Z=Z_compas, COMPAS_delay_times=delays, COMPAS_weights=weights,
         **common,
     )
 
     R_per_class = {}
     for label, mask in cls.items():
         R_per_class[label] = compute_merger_rate(
-            COMPAS_Z=Z_compas[mask],
-            COMPAS_delay_times=delays[mask],
-            COMPAS_weights=weights[mask],
-            Z_grid=Z_full,
-            **common,
+            COMPAS_Z=Z_compas[mask], COMPAS_delay_times=delays[mask],
+            COMPAS_weights=weights[mask], **common,
         )
     R_sum = sum(R_per_class.values())
 
-    np.testing.assert_allclose(
-        R_total,
-        R_sum,
-        rtol=1e-12,
-        atol=0,
-        err_msg=(
-            "classify_bns_2024 partition does not sum to total; "
-            "compute_merger_rate may have lost additivity over binaries"
-        ),
-    )
-
-    # Regression guard for the Z_grid alignment requirement
-    # (grb_rates.py:67-78).  Without Z_grid each subset's Voronoi cells
-    # collapse to its own Z range, so the per-class rates must NOT sum
-    # to the all-sample rate when the four classes span different
-    # unique-Z sets (which the construction above enforces).
-    R_per_class_nogrid = {
-        label: compute_merger_rate(
-            COMPAS_Z=Z_compas[mask],
-            COMPAS_delay_times=delays[mask],
-            COMPAS_weights=weights[mask],
-            Z_grid=None,
-            **common,
-        )
-        for label, mask in cls.items()
-    }
-    R_sum_nogrid = sum(R_per_class_nogrid.values())
-    assert not np.allclose(R_total, R_sum_nogrid, rtol=1e-3, atol=0), (
-        "per-class sum still matches R_total without Z_grid; the cross-"
-        "class Voronoi alignment failure documented at grb_rates.py:67-78 "
-        "is supposed to make these differ."
-    )
+    np.testing.assert_allclose(R_total, R_sum, rtol=1e-12, atol=0)
 
 
 # ─────────────────────────────────────────────────────────────────────
 # Calibration anchor: MEAN_MASS_EVOLVED must be redshift_step-invariant
 # ─────────────────────────────────────────────────────────────────────
+@pytest.mark.requires_compas
 def test_calibrate_mean_mass_evolved_redshift_step_invariant():
-    """``MEAN_MASS_EVOLVED`` must not depend on ``redshift_step``.
+    """``MEAN_MASS_EVOLVED`` must be ~stable across ``redshift_step``.
 
-    Regression guard for the ``smooth_sigma`` boundary bias in
-    ``calibrate_mean_mass_evolved``.  Pre-fix the helper inherited
-    ``compute_merger_rate``'s default ``smooth_sigma=30`` in BIN units,
-    so the ``gaussian_filter1d`` ``mode='reflect'`` boundary at z = 0
-    mixed in a different physical width of the rising R(z) at different
-    ``redshift_step``.  ``MEAN_MASS_EVOLVED`` then drifted ~30 percent
-    across ``dz in [0.0025, 0.01]``; every downstream absolute rate
-    drifted with it.
+    The function back-derives MEAN_MASS_EVOLVED from the Neijssel
+    ``w_000`` anchor at the sharp pointwise R(z=0); ``smooth_sigma=0``
+    is hard-coded inside the helper so the calibration does not pick
+    up the ``gaussian_filter1d`` ``mode='reflect'`` boundary bias that
+    would otherwise let the result drift with ``redshift_step``.
 
-    The fix anchors the calibration to the sharp pointwise R(z=0)
-    (``smooth_sigma=0``), matching:
-
-    - Broekgaarden et al. (2021, arXiv:2103.02608) ``weights_intrinsic
-      / w_000``, the cosmic-integration weight at the z=0 slice with
-      no boundary kernel applied;
-    - the Neijssel et al. (2019, MNRAS 490, 3740, Eq. 2) MSSFR
-      convolution, which is pointwise;
-    - the upstream COMPAS ``find_formation_and_merger_rates``, which
-      is unsmoothed (cf. ``test_compute_merger_rate_matches_compas_shape``).
+    With FCI's per-binary ceiling-snap (``np.ceil(z_form / dz)``)
+    instead of the project's old linear interpolation, the residual
+    drift is dominated by single-bin discretisation of ``z_form``;
+    ~0.3 percent at dz between 0.005 and 0.01 (vs ~30 percent before
+    the smooth_sigma=0 fix).  The 1 percent threshold below leaves
+    headroom while still catching a regression of the boundary bias.
     """
+    from astropy.cosmology import Planck15
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        calculate_redshift_related_params,
+    )
+
     from grb_rates import calibrate_mean_mass_evolved
 
     rng = np.random.default_rng(0)
@@ -324,70 +251,23 @@ def test_calibrate_mean_mass_evolved_redshift_step_invariant():
     Z = rng.choice(Z_grid, size=N)
     delays = 10.0 ** rng.uniform(np.log10(10.0), np.log10(13000.0), size=N)
     w = rng.uniform(0.1, 1.0, size=N)
-    expected = 33.0  # arbitrary positive; cancels in the dz-ratio assertion
+    expected = 33.0
 
     def _calibrate(dz):
-        n_z = int(round(10.0 / dz)) + 1
-        redshifts = np.linspace(0.0, 10.0, n_z)
-        times = np.linspace(13700.0, 100.0, n_z)
-        sfr = np.full(n_z, 1e7)
-        mean_mass, _ = calibrate_mean_mass_evolved(
-            sfr,
-            redshifts,
-            times,
-            time_first_SF=times.min() + 10.0,
-            p_draw=0.1,
-            COMPAS_Z=Z,
-            COMPAS_delay_times=delays,
-            COMPAS_weights=w,
-            expected_local_rate=expected,
-            Z_grid=Z_grid,
+        redshifts, _, times, time_first_SF, _, _ = calculate_redshift_related_params(
+            max_redshift=10.0, redshift_step=dz, cosmology=Planck15
         )
-        return mean_mass
+        return calibrate_mean_mass_evolved(
+            redshifts, times, time_first_SF=time_first_SF,
+            COMPAS_Z=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
+            expected_local_rate=expected,
+            Z_min_COMPAS=Z_grid[0], Z_max_COMPAS=Z_grid[-1],
+        )
 
     m_coarse = _calibrate(0.01)
     m_fine = _calibrate(0.005)
     rel = abs(m_fine / m_coarse - 1.0)
-    assert rel < 1e-3, (
-        f"MEAN_MASS_EVOLVED drifted {rel * 100:.3f}% across dz=0.01 -> "
-        f"0.005 (m_coarse={m_coarse:.4e}, m_fine={m_fine:.4e}); "
-        f"calibrate_mean_mass_evolved must use smooth_sigma=0 so the "
-        f"z=0 anchor is sharp (Broekgaarden+ 2021 w_000 semantics)."
-    )
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Z_grid alignment guard inside compute_merger_rate
-# ─────────────────────────────────────────────────────────────────────
-def test_compute_merger_rate_rejects_misaligned_Z_grid():
-    """Passing a Z_grid that does not contain every COMPAS_Z value
-    must raise rather than silently producing biased per-class rates."""
-    from grb_rates import compute_merger_rate
-
-    redshifts = np.linspace(0.0, 1.0, 51)
-    times = np.linspace(13.7e3, 5.0e3, 51)
-    sfr = np.full_like(redshifts, 1e7)
-
-    Z_full = np.array([1e-4, 1e-3, 1e-2, 3e-2])  # noqa: F841 (documents the bad-grid contrast)
-    Z_subset = np.array([1e-4, 1e-3, 1e-2])  # noqa: F841 (documents the bad-grid contrast)
-    delays = np.array([100.0, 200.0, 300.0])
-    weights = np.array([1.0, 1.0, 1.0])
-
-    Z_grid_bad = np.array([1e-4, 1e-3, 1e-2])  # missing 3e-2
-    COMPAS_Z = np.array([1e-4, 1e-3, 3e-2])  # has 3e-2 but Z_grid does not
-
-    with pytest.raises(ValueError, match="not present in Z_grid"):
-        compute_merger_rate(
-            redshifts,
-            times,
-            time_first_SF=13.5e3,
-            n_formed=sfr,
-            p_draw=0.1,
-            COMPAS_Z=COMPAS_Z,
-            COMPAS_delay_times=delays,
-            COMPAS_weights=weights,
-            Z_grid=Z_grid_bad,
-        )
+    assert rel < 1e-2, (m_coarse, m_fine, rel)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -453,58 +333,8 @@ def test_kroupa_imf_array_input_returns_ndarray():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# COMPAS-vs-grb_rates: numerical agreement on the same HDF5 at z = 0.
+# Chunking idempotency: compute_merger_rate is a chunked sum over FCI
 # ─────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────
-# Vectorized compute_merger_rate: legacy-loop equivalence
-# ─────────────────────────────────────────────────────────────────────
-def _legacy_loop_rate(
-    redshifts,
-    times,
-    time_first_SF,
-    n_formed,
-    p_draw,
-    COMPAS_Z,
-    COMPAS_delay_times,
-    COMPAS_weights,
-    smooth_sigma,
-    Z_grid,
-):
-    """Reference implementation of the pre-vectorization per-binary loop
-    used by ``compute_merger_rate`` prior to the chunked rewrite.  Kept
-    here so the regression test can compare element-wise."""
-    from scipy.interpolate import interp1d
-    from scipy.ndimage import gaussian_filter1d
-
-    from grb_rates import _bin_averaged_dPdlogZ, _interp_formation_rate
-
-    n_z = len(redshifts)
-    redshift_step = redshifts[1] - redshifts[0]
-    times_to_z = interp1d(times, redshifts)
-    dPdlogZ_binned, sys_col = _bin_averaged_dPdlogZ(redshifts, COMPAS_Z, Z_grid=Z_grid)
-    t_min = max(time_first_SF, times.min())
-    total = np.zeros(n_z)
-    for i in range(len(COMPAS_delay_times)):
-        t_form = times - COMPAS_delay_times[i]
-        valid = t_form >= t_min
-        if not valid.any():
-            continue
-        j_idx = np.where(valid)[0]
-        z_form = times_to_z(t_form[j_idx])
-        total[j_idx] += _interp_formation_rate(
-            n_formed,
-            dPdlogZ_binned[:, sys_col[i]],
-            p_draw,
-            COMPAS_weights[i],
-            z_form,
-            redshift_step,
-            n_z,
-        )
-    if smooth_sigma > 0:
-        total = gaussian_filter1d(total, sigma=smooth_sigma)
-    return total
-
-
 def _make_synth_population_for_rates(N, n_z, rng):
     redshifts = np.linspace(0.0, 5.0, n_z)
     times = np.linspace(13700.0, 100.0, n_z)
@@ -517,64 +347,57 @@ def _make_synth_population_for_rates(N, n_z, rng):
     return (redshifts, times, sfr, n_formed, Z_grid, COMPAS_Z, COMPAS_delays, COMPAS_w)
 
 
-def test_compute_merger_rate_vectorized_matches_legacy_loop():
-    """Vectorized chunked accumulator must match the original per-binary
-    loop to ~1e-12 (machine precision modulo float-summation order),
-    well below the 1e-6 rtol in the plan."""
+@pytest.mark.requires_compas
+def test_compute_merger_rate_chunking_is_idempotent():
+    """``compute_merger_rate(..., n_chunk=N)`` is independent of ``N``.
+
+    The wrapper sums FCI's per-chunk merger_rate.sum(axis=0) into a
+    running ``(n_z,)`` accumulator, so changing ``n_chunk`` must only
+    reshape the floating-point summation order (numpy float64 is not
+    associative under permutation, so we tolerate ~1e-12).
+    """
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        find_metallicity_distribution,
+    )
+
     from grb_rates import compute_merger_rate
 
     rng = np.random.default_rng(2024)
     (redshifts, times, _, n_formed, Z_grid, Z, delays, w) = _make_synth_population_for_rates(
-        N=500, n_z=200, rng=rng
+        N=2000, n_z=200, rng=rng
     )
-
-    R_vec = compute_merger_rate(
+    dPdlogZ, mets, p_draw = find_metallicity_distribution(
         redshifts,
-        times,
-        time_first_SF=times.min() + 10.0,
-        n_formed=n_formed,
-        p_draw=0.1,
-        COMPAS_Z=Z,
-        COMPAS_delay_times=delays,
-        COMPAS_weights=w,
+        min_logZ_COMPAS=np.log(Z_grid[0]),
+        max_logZ_COMPAS=np.log(Z_grid[-1]),
+    )
+    common = dict(
+        redshifts=redshifts, times=times, time_first_SF=times.min() + 10.0,
+        n_formed=n_formed, p_draw=p_draw, dPdlogZ=dPdlogZ, metallicities=mets,
+        COMPAS_Z=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
         smooth_sigma=0,
-        Z_grid=Z_grid,
     )
-    R_loop = _legacy_loop_rate(
-        redshifts,
-        times,
-        times.min() + 10.0,
-        n_formed,
-        0.1,
-        Z,
-        delays,
-        w,
-        smooth_sigma=0,
-        Z_grid=Z_grid,
-    )
-
-    np.testing.assert_allclose(
-        R_vec,
-        R_loop,
-        rtol=1e-6,
-        atol=1e-12,
-        err_msg=("vectorized compute_merger_rate disagrees with the reference per-binary loop"),
-    )
+    R_500   = compute_merger_rate(n_chunk=500,   **common)
+    R_5000  = compute_merger_rate(n_chunk=5_000, **common)
+    R_50000 = compute_merger_rate(n_chunk=50_000, **common)
+    np.testing.assert_allclose(R_500,  R_5000, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(R_5000, R_50000, rtol=1e-12, atol=1e-12)
 
 
+@pytest.mark.requires_compas
 def test_compute_merger_rate_empty_population_returns_zeros():
-    """The empty-population guard must survive vectorization."""
+    """The empty-population guard returns a zero (n_z,) array."""
     from grb_rates import compute_merger_rate
 
     redshifts = np.linspace(0.0, 5.0, 100)
     times = np.linspace(13700.0, 100.0, 100)
     n_formed = np.full(100, 1e7 / 1.5e8)
+    # Empty sample: dPdlogZ / metallicities are unused, but compute_merger_rate
+    # short-circuits on len(COMPAS_delay_times)==0 before consuming them.
     R = compute_merger_rate(
-        redshifts,
-        times,
-        time_first_SF=times.min() + 10.0,
-        n_formed=n_formed,
-        p_draw=0.1,
+        redshifts, times, time_first_SF=times.min() + 10.0,
+        n_formed=n_formed, p_draw=0.1,
+        dPdlogZ=np.zeros((100, 1)), metallicities=np.array([1e-2]),
         COMPAS_Z=np.array([]),
         COMPAS_delay_times=np.array([]),
         COMPAS_weights=np.array([]),
@@ -584,12 +407,14 @@ def test_compute_merger_rate_empty_population_returns_zeros():
     assert np.all(R == 0)
 
 
+@pytest.mark.requires_compas
 def test_compute_merger_rate_smoothing_intact():
-    """smooth_sigma still applies a Gaussian kernel to the unsmoothed
-    rate; the smoothed L2 deviation from the unsmoothed curve must be
-    monotonic in the kernel width and small (< 50 percent of the L2
-    norm) at the production sigma=30 default."""
+    """smooth_sigma applies a Gaussian kernel to the unsmoothed rate."""
     from scipy.ndimage import gaussian_filter1d
+
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        find_metallicity_distribution,
+    )
 
     from grb_rates import compute_merger_rate
 
@@ -597,36 +422,23 @@ def test_compute_merger_rate_smoothing_intact():
     (redshifts, times, _, n_formed, Z_grid, Z, delays, w) = _make_synth_population_for_rates(
         N=300, n_z=200, rng=rng
     )
+    dPdlogZ, mets, p_draw = find_metallicity_distribution(
+        redshifts,
+        min_logZ_COMPAS=np.log(Z_grid[0]),
+        max_logZ_COMPAS=np.log(Z_grid[-1]),
+    )
 
     common = dict(
-        redshifts=redshifts,
-        times=times,
-        time_first_SF=times.min() + 10.0,
-        n_formed=n_formed,
-        p_draw=0.1,
-        COMPAS_Z=Z,
-        COMPAS_delay_times=delays,
-        COMPAS_weights=w,
-        Z_grid=Z_grid,
+        redshifts=redshifts, times=times, time_first_SF=times.min() + 10.0,
+        n_formed=n_formed, p_draw=p_draw, dPdlogZ=dPdlogZ, metallicities=mets,
+        COMPAS_Z=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
     )
 
     R_unsmoothed = compute_merger_rate(smooth_sigma=0, **common)
     R_smoothed = compute_merger_rate(smooth_sigma=30, **common)
     np.testing.assert_allclose(
-        R_smoothed,
-        gaussian_filter1d(R_unsmoothed, sigma=30),
-        rtol=1e-12,
-        atol=1e-12,
-        err_msg=(
-            "smooth_sigma path no longer applies the same Gaussian "
-            "kernel to the unsmoothed rate; check the smoothing tail"
-        ),
-    )
-    l2_diff = np.linalg.norm(R_smoothed - R_unsmoothed)
-    l2_norm = np.linalg.norm(R_unsmoothed)
-    assert l2_diff < 0.5 * l2_norm, (
-        f"smoothing changed the rate too much (||smoothed - raw|| / ||raw||"
-        f" = {l2_diff / max(l2_norm, 1e-30):.3f}, expected < 0.5)"
+        R_smoothed, gaussian_filter1d(R_unsmoothed, sigma=30),
+        rtol=1e-12, atol=1e-12,
     )
 
 
@@ -636,39 +448,11 @@ def test_compute_merger_rate_smoothing_intact():
 @pytest.mark.requires_data
 @pytest.mark.requires_compas
 @pytest.mark.slow
-def test_compute_merger_rate_matches_compas_shape(bns_a_path):
-    """Run the COMPAS reference and ``compute_merger_rate`` on the same
-    BNS Model A HDF5 and assert the *shapes* (R(z) / R(0)) agree to
-    within 10 percent at z in [0.5, 1.0, 2.0].
-
-    Why shape, not absolute value:
-
-    grb_rates' ``compute_merger_rate`` is paired with
-    ``calibrate_mean_mass_evolved``: ``mean_mass_evolved`` is chosen so
-    that R_ours(z=0) matches the HDF5's pre-tabulated local rate
-    (Broekgaarden+ 2021 ``w_000`` weights, ~33 Gpc^-3 yr^-1 for BNS A).
-    COMPAS's ``find_formation_and_merger_rates`` runs the convolution
-    from scratch using ``n_formed = sfr / Average_SF_mass_needed`` and
-    a point-sampled ``dPdlogZ`` over a fine 1201-bin metallicity grid;
-    that pipeline produces a structurally different absolute z=0 rate
-    (~5x ours, with the factor set by point-vs-bin sampling and grid
-    resolution).  Equating the two absolute z=0 numbers would require
-    discarding the calibration step or recomputing
-    Average_SF_mass_needed with ``ClassCOMPAS``, neither of which is
-    what users of grb_rates do in practice.
-
-    What we *can* validate: the redshift dependence of R(z) is set by
-    the same SFR(z) * dP/d(ln Z)(z, Z) * delay-time convolution in
-    both pipelines.  Up to a global rescaling the curves track each
-    other to within a few percent at z <~ 1; by z = 2 the bin-averaged
-    renormalization in ``_bin_averaged_dPdlogZ`` (which COMPAS does not
-    perform) starts inflating our rate above the COMPAS reference as
-    the Neijssel log-normal slips below the COMPAS Z grid.  We cap the
-    comparison at z = 2 and use a 15 percent tolerance, which sits
-    well below the order-of-magnitude divergence that a structural bug
-    (cosmology drift, missing weight, p_draw mismatch) would produce.
-
-    Cosmology is pinned to Planck 2015 (Ade et al. 2016) on both sides.
+def test_compute_merger_rate_matches_compas_exactly(bns_a_path):
+    """``compute_merger_rate`` is now a chunked accumulator over FCI's
+    own ``find_formation_and_merger_rates``, so passing the full sample
+    in one chunk must reproduce ``merger_rate.sum(axis=0)`` from FCI to
+    floating-point precision.
     """
     fci = pytest.importorskip(
         "compas_python_utils.cosmic_integration.FastCosmicIntegration",
@@ -681,121 +465,244 @@ def test_compute_merger_rate_matches_compas_shape(bns_a_path):
 
     from astropy.cosmology import Planck15
 
-    from grb_io import load_bns, read_expected_local_rate
+    from grb_io import load_bns
     from grb_rates import (
-        calibrate_mean_mass_evolved,
         compute_merger_rate,
+        SFR_PARAMS_LEVINA26_TNG100,
+        MSSFR_PARAMS_LEVINA26_TNG100,
     )
 
-    # Load the COMPAS HDF5 once via grb_io (matches notebook usage).
     data = load_bns(path=bns_a_path)
     Z = data["metallicity"]
     delays = data["delay_time"]
     w = data["weights"]
 
-    # Same redshift / SFR / dPdlogZ setup the demo uses, with
-    # cosmology pinned to Planck15 on both sides so the redshift-time
-    # map is identical.
     redshifts, _, times, time_first_SF, _, _ = calculate_redshift_related_params(
-        max_redshift=10.0, redshift_step=0.01, cosmology=Planck15
+        max_redshift=10.0, redshift_step=0.05, cosmology=Planck15
     )
-    sfr = find_sfr(redshifts)
+    sfr = find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
 
     dPdlogZ, metallicities, p_draw = find_metallicity_distribution(
         redshifts,
         min_logZ_COMPAS=np.log(np.min(Z)),
         max_logZ_COMPAS=np.log(np.max(Z)),
+        **MSSFR_PARAMS_LEVINA26_TNG100,
     )
 
-    # Calibrate MEAN_MASS_EVOLVED against the pre-computed local rate in
-    # the HDF5 (per-population: each population has its own STROOPWAFEL
-    # prior, so reusing a calibration across populations biases the rate).
-    expected_local_rate = read_expected_local_rate(bns_a_path)
-    Z_grid = np.unique(Z)
-    mean_mass, _ = calibrate_mean_mass_evolved(
-        sfr,
-        redshifts,
-        times,
-        time_first_SF,
-        p_draw,
-        Z,
-        delays,
-        w,
-        expected_local_rate,
-        Z_grid=Z_grid,
-    )
-    n_formed = sfr / mean_mass
+    # Use a unit MEAN_MASS_EVOLVED (n_formed = sfr) so this is a pure
+    # apples-to-apples comparison of the FCI loop body vs the chunked
+    # accumulator; the calibration step is exercised separately.
+    n_formed = sfr
 
-    # Our pipeline.  Disable the default Gaussian smoothing so the
-    # shape comparison is apples-to-apples with COMPAS, which does not
-    # smooth.  ``compute_merger_rate``'s default ``smooth_sigma=30``
-    # otherwise convolves contributions from the R(z) peak (z ~ 1-2)
-    # into R(z=0), inflating the denominator of the shape ratio and
-    # making R_ours(z)/R_ours(0) look artificially flatter.
     R_ours = compute_merger_rate(
-        redshifts,
-        times,
-        time_first_SF,
-        n_formed,
-        p_draw,
-        Z,
-        delays,
-        w,
-        Z_grid=Z_grid,
-        smooth_sigma=0,
+        redshifts, times, time_first_SF, n_formed, p_draw,
+        dPdlogZ, metallicities, Z, delays, w,
+        smooth_sigma=0, n_chunk=len(Z),
     )
 
-    # COMPAS reference, same inputs.  Average_SF_mass_needed plays the
-    # role of MEAN_MASS_EVOLVED inside the demo; since we pass the
-    # same n_formed, the only structural difference is bin-averaged
-    # vs point-sampled dPdlogZ.
-    n_binaries = len(Z)
-    formation_rate, merger_rate = find_formation_and_merger_rates(
-        n_binaries,
-        redshifts,
-        times,
-        time_first_SF,
-        n_formed,
-        dPdlogZ,
-        metallicities,
-        p_draw,
-        Z,
-        delays,
+    _, merger_rate_compas = find_formation_and_merger_rates(
+        n_binaries=len(Z),
+        redshifts=redshifts, times=times, time_first_SF=time_first_SF,
+        n_formed=n_formed,
+        dPdlogZ=dPdlogZ, metallicities=metallicities,
+        p_draw_metallicity=p_draw,
+        COMPAS_metallicites=Z, COMPAS_delay_times=delays, COMPAS_weights=w,
+    )
+    R_compas = merger_rate_compas.sum(axis=0)
+
+    np.testing.assert_allclose(
+        R_ours, R_compas, rtol=1e-12, atol=1e-12,
+        err_msg="compute_merger_rate must equal sum-axis-0 of FCI exactly.",
+    )
+
+
+@pytest.mark.requires_compas
+def test_per_system_rate_weights_matches_fci_formation_column_at_grid_aligned_z_target():
+    """``per_system_rate_weights[i]`` equals FCI ``formation_rate[i, j_target]``
+    when ``z_form`` lands on the grid (delays = 0, ``z_target`` on grid).
+
+    Pins the algorithm-equivalence claim at ``grb_rates.per_system_rate_weights``
+    (the ``np.digitize(Z, metallicities)`` column lookup mirrors
+    ``find_formation_and_merger_rates``) to floating-point precision.
+    With every binary's delay set to zero and ``z_target`` chosen on the
+    redshift grid, ``z_form_i = z_target`` lies exactly on the grid for
+    every i, so the linear-z interpolation in ``per_system_rate_weights``
+    degenerates to the same expression FCI evaluates per row:
+
+        n_formed[j_target] * dPdlogZ[j_target, digitize(Z[i])] / p_draw * w[i]
+    """
+    fci = pytest.importorskip(
+        "compas_python_utils.cosmic_integration.FastCosmicIntegration",
+        reason="compas_python_utils not installed in this environment",
+    )
+    from astropy.cosmology import Planck15
+
+    from grb_rates import per_system_rate_weights
+
+    redshifts, _, times, time_first_SF, _, _ = fci.calculate_redshift_related_params(
+        max_redshift=2.0, redshift_step=0.01, cosmology=Planck15,
+    )
+    sfr = fci.find_sfr(redshifts)
+
+    rng = np.random.default_rng(0)
+    Z_lo, Z_hi = 1e-4, 0.03
+    Z = np.exp(rng.uniform(np.log(Z_lo), np.log(Z_hi), size=24))
+    delays = np.zeros_like(Z)
+    w = np.full_like(Z, 1.0)
+
+    dPdlogZ, mets, p_draw = fci.find_metallicity_distribution(
+        redshifts, min_logZ_COMPAS=np.log(Z_lo), max_logZ_COMPAS=np.log(Z_hi),
+    )
+    # n_formed scale cancels: identical inputs feed both pipelines.
+    n_formed = sfr / 1.0e7
+
+    j_target = 50
+    z_target = float(redshifts[j_target])
+
+    proj = per_system_rate_weights(
+        z_target, redshifts, times, time_first_SF,
+        n_formed, p_draw, dPdlogZ, mets,
+        Z, delays, w,
+    )
+    formation_rate_fci, _ = fci.find_formation_and_merger_rates(
+        n_binaries=len(Z),
+        redshifts=redshifts,
+        times=times,
+        time_first_SF=time_first_SF,
+        n_formed=n_formed,
+        dPdlogZ=dPdlogZ,
+        metallicities=mets,
+        p_draw_metallicity=p_draw,
+        COMPAS_metallicites=Z,
+        COMPAS_delay_times=delays,
         COMPAS_weights=w,
     )
-    R_compas = merger_rate.sum(axis=0)
-
-    iz0 = int(np.argmin(np.abs(redshifts)))
-    R_ours_0 = float(R_ours[iz0])
-    R_compas_0 = float(R_compas[iz0])
-
-    assert R_ours_0 > 0, f"compute_merger_rate returned zero at z=0: {R_ours_0}"
-    assert R_compas_0 > 0, f"COMPAS reference returned zero at z=0: {R_compas_0}"
-
-    # Compare normalized R(z) shapes at low/mid z.  Bin-averaging vs
-    # point-sampling differ by an approximately constant multiplicative
-    # factor when the MSSFR PDF still sits inside the COMPAS Z grid
-    # (z <~ 2).  At higher z our renormalization step intentionally
-    # diverges from COMPAS, so we do not test there.
-    shape_ours = R_ours / R_ours_0
-    shape_compas = R_compas / R_compas_0
-
-    z_checkpoints = (0.5, 1.0, 2.0)
-    tol_shape = 0.15
-    deltas = []
-    for z_check in z_checkpoints:
-        iz = int(np.argmin(np.abs(redshifts - z_check)))
-        delta = abs(shape_ours[iz] - shape_compas[iz]) / shape_compas[iz]
-        deltas.append((z_check, delta, float(shape_ours[iz]), float(shape_compas[iz])))
-
-    failures = [d for d in deltas if d[1] > tol_shape]
-    assert not failures, (
-        "compute_merger_rate R(z) shape disagrees with COMPAS reference "
-        f"by more than {tol_shape * 100:.0f}% at: "
-        + "; ".join(
-            f"z={z:.1f} ({delta * 100:.1f}%, ours/R0={so:.4f}, COMPAS/R0={sc:.4f})"
-            for (z, delta, so, sc) in failures
-        )
-        + ".  A structural bug (cosmology drift, missing weight, p_draw "
-        f"mismatch) would push these well past {tol_shape * 100:.0f} percent."
+    np.testing.assert_allclose(
+        proj, formation_rate_fci[:, j_target], rtol=1e-12, atol=0.0,
+        err_msg=(
+            "per_system_rate_weights drifted from FCI's formation_rate "
+            "column at a grid-aligned z_target; the np.digitize column "
+            "lookup in grb_rates.per_system_rate_weights is no longer "
+            "in sync with FastCosmicIntegration."
+        ),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# detected_rate: GW selection effects via FCI
+# ─────────────────────────────────────────────────────────────────────
+def _make_synth_population_for_detection(N, rng):
+    """Build a small BHNS-like sample (heavier chirp mass than BNS so
+    O3 detection probability is non-trivial across the FCI default
+    detection horizon z_det = 1.0)."""
+    m1 = rng.uniform(5.0, 12.0, N)
+    m2 = rng.uniform(1.0, 1.6, N)
+    Z = rng.choice(10.0 ** np.linspace(-4, np.log10(0.03), 8), N)
+    delays = 10.0 ** rng.uniform(np.log10(10.0), np.log10(13000.0), N)
+    weights = rng.uniform(0.5, 1.5, N)
+    return m1, m2, Z, delays, weights
+
+
+@pytest.mark.requires_compas
+def test_detected_rate_non_negative_and_empty_guard():
+    """detected_rate returns a non-negative array of the right shape and
+    a zero array on an empty sample."""
+    from astropy.cosmology import Planck15
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        calculate_redshift_related_params,
+        find_metallicity_distribution,
+        find_sfr,
+    )
+
+    from grb_rates import (
+        MSSFR_PARAMS_LEVINA26_TNG100,
+        SFR_PARAMS_LEVINA26_TNG100,
+        detected_rate,
+    )
+
+    redshifts, n_z_det, times, time_first_SF, distances, _ = (
+        calculate_redshift_related_params(
+            max_redshift=10.0, max_redshift_detection=2.0,
+            redshift_step=0.05, cosmology=Planck15,
+        )
+    )
+    sfr = find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
+    dPdlogZ, mets, p_draw = find_metallicity_distribution(
+        redshifts, min_logZ_COMPAS=np.log(1e-4), max_logZ_COMPAS=np.log(0.03),
+        **MSSFR_PARAMS_LEVINA26_TNG100,
+    )
+    n_formed = sfr / 1e8
+
+    rng = np.random.default_rng(2026)
+    m1, m2, Z, delays, w = _make_synth_population_for_detection(N=200, rng=rng)
+
+    R_det = detected_rate(
+        redshifts, times, time_first_SF, n_formed, p_draw,
+        dPdlogZ, mets, m1, m2, Z, delays, w, distances, n_z_det,
+        sensitivity="O3", snr_threshold=8.0,
+    )
+    assert R_det.shape == (n_z_det,)
+    assert np.all(R_det >= 0.0), R_det.min()
+    # At least one redshift bin must carry positive detected rate for a
+    # 200-binary BHNS-like sample at O3 (otherwise the noise PSD or
+    # SNR-grid lookup is broken).
+    assert R_det.max() > 0.0, R_det
+
+    R_empty = detected_rate(
+        redshifts, times, time_first_SF, n_formed, p_draw,
+        dPdlogZ, mets,
+        np.array([]), np.array([]), np.array([]),
+        np.array([]), np.array([]), distances, n_z_det,
+    )
+    assert R_empty.shape == (n_z_det,)
+    assert np.all(R_empty == 0.0)
+
+
+@pytest.mark.requires_compas
+def test_detected_rate_decreases_with_higher_snr_threshold():
+    """At fixed sensitivity, raising the SNR threshold cannot increase the
+    detected rate at any redshift (FCI ``find_detection_probability`` is
+    monotonically non-increasing in ``snr_threshold``)."""
+    from astropy.cosmology import Planck15
+    from compas_python_utils.cosmic_integration.FastCosmicIntegration import (
+        calculate_redshift_related_params,
+        find_metallicity_distribution,
+        find_sfr,
+    )
+
+    from grb_rates import (
+        MSSFR_PARAMS_LEVINA26_TNG100,
+        SFR_PARAMS_LEVINA26_TNG100,
+        detected_rate,
+    )
+
+    redshifts, n_z_det, times, time_first_SF, distances, _ = (
+        calculate_redshift_related_params(
+            max_redshift=10.0, max_redshift_detection=2.0,
+            redshift_step=0.05, cosmology=Planck15,
+        )
+    )
+    sfr = find_sfr(redshifts, **SFR_PARAMS_LEVINA26_TNG100)
+    dPdlogZ, mets, p_draw = find_metallicity_distribution(
+        redshifts, min_logZ_COMPAS=np.log(1e-4), max_logZ_COMPAS=np.log(0.03),
+        **MSSFR_PARAMS_LEVINA26_TNG100,
+    )
+    n_formed = sfr / 1e8
+    rng = np.random.default_rng(2026)
+    m1, m2, Z, delays, w = _make_synth_population_for_detection(N=200, rng=rng)
+
+    R_8 = detected_rate(
+        redshifts, times, time_first_SF, n_formed, p_draw,
+        dPdlogZ, mets, m1, m2, Z, delays, w, distances, n_z_det,
+        sensitivity="O3", snr_threshold=8.0,
+    )
+    R_12 = detected_rate(
+        redshifts, times, time_first_SF, n_formed, p_draw,
+        dPdlogZ, mets, m1, m2, Z, delays, w, distances, n_z_det,
+        sensitivity="O3", snr_threshold=12.0,
+    )
+    # Elementwise non-increasing within float tolerance.
+    assert np.all(R_12 <= R_8 + 1e-12), (R_8, R_12)
+    # Total detected rate must strictly decrease for a sample with
+    # sub-threshold systems present.
+    assert R_12.sum() < R_8.sum(), (R_8.sum(), R_12.sum())

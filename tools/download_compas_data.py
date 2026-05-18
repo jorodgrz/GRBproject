@@ -11,8 +11,8 @@ time.
 Why a custom downloader instead of a generic Zenodo grabber
 -----------------------------------------------------------
 Both Zenodo records package data using **paper-II letter conventions**
-(arXiv:2112.05763), while the project's filenames, ``CLAUDE.md`` table,
-and ``tools/embed_model_metadata.py`` use **paper-I letters**
+(arXiv:2112.05763), while the project's filenames and
+``tools/embed_model_metadata.py`` use **paper-I letters**
 (arXiv:2103.02608).  The two bundled zips, ``fiducial.zip`` and
 ``unstableCaseBB.zip``, each contain two HDF5 files for two different
 physics variations, and the same paper-II letter (e.g. K) refers to a

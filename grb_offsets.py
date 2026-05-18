@@ -517,8 +517,7 @@ def compute_offsets_population_vectorized(
     M_gal, R_e : float
         Hernquist galaxy mass [g] and effective radius [cm].
     max_systems : int
-        Weight-based subsample cap (CLAUDE.md mandates STROOPWAFEL-aware
-        subsampling).
+        Weight-based subsample cap; subsampling stays STROOPWAFEL-aware.
     n_proj : int, optional
         Number of isotropic projection angles per system; the median of
         these gives the projected offset (matches legacy n_proj = 8).
@@ -787,7 +786,7 @@ def compute_offsets_delay_hosts(
     Each system is assigned a host type via ``assign_host_by_delay``,
     then its offset is computed in the corresponding galaxy potential.
 
-    Vectorization (CLAUDE.md "Vectorize" rule): each unique host appears
+    Vectorization: each unique host appears
     exactly once in ``host_models``, so we gather the indices of systems
     routed to each host and dispatch one batched
     ``_vectorized_orbit_3d`` call per host, then scatter back into the
