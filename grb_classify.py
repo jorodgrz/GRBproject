@@ -305,9 +305,10 @@ def classify_grid(
         Lower mass [Msun] of the NS in BHNS systems.  Cells with
         ``m_light < ns_min`` are excluded from BHNS classification (and
         a warning is emitted reporting the count).  Default 1.1 Msun
-        matches the COMPAS rapid-mechanism NS minimum (Fryer+ 2012);
-        pass ``ns_min=0.8`` to be inclusive of ECSN/USSN NS, which
-        reproduces the pre-patch behaviour.
+        matches the lower truncation of the Alsing+ 2018 NS mass
+        distribution (see ``NS_REMAP_M_MIN`` in ``grb_physics``); pass
+        ``ns_min=0.8`` to be inclusive of ECSN/USSN NS, which reproduces
+        the pre-patch behaviour.
     R_1p4_km : float, optional
         NS radius at 1.4 Msun [km], passed to ``foucart_disk_mass``
         for the BHNS branch.  If ``None`` and the grid contains BHNS
@@ -442,7 +443,7 @@ def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1, fc_mt_p1_K
     Returns
     -------
     dict of boolean arrays:
-        'I  Classic CE', 'II  Stable MT only', 'III Single-core CE',
+        'I  Stable MT + CE', 'II  Stable MT only', 'III Single-core CE',
         'IV  Double-core CE', 'V   Other'
     """
     has_p1 = fc_mt_p1 > 0
@@ -451,15 +452,11 @@ def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1, fc_mt_p1_K
     first_is_secondary = has_s1 & (~has_p1 | (fc_mt_s1 < fc_mt_p1))
     no_stable_mt = ~has_p1 & ~has_s1
 
-    donor_type = np.where(
-        first_is_primary, fc_mt_p1_K1, np.where(first_is_secondary, fc_mt_s1_K2, -1)
-    )
-
-    # Case-A (donor_type 0 or 1) mass transfer routes straight to "Other".
-    # Broekgaarden et al. treat Case-A donors as a separate evolutionary
-    # pathway that does not fit cleanly into the CE/stable-MT hierarchy.
-    # This is a deliberate classification choice, not an omission.
-    is_case_A = (donor_type == 0) | (donor_type == 1)
+    # Case A donors (donor Hurley K = 0 or 1 at first RLOF) are folded into
+    # I or II based on whether a CE follows, matching Broekgaarden+ 2022
+    # Sec. 3.2 convention.  Donor stellar type at first RLOF is preserved on
+    # fc_mt_p1_K1 / fc_mt_s1_K2 if a downstream analysis needs to slice on
+    # it; the unused intermediate is dropped from this routine.
     had_CE = fc_CEE > 0
 
     first_rlof_time = np.where(
@@ -468,14 +465,14 @@ def classify_formation_channels(*, dblCE, fc_CEE, fc_mt_p1, fc_mt_s1, fc_mt_p1_K
     ce_first = had_CE & (no_stable_mt | (fc_CEE < first_rlof_time))
 
     ch_IV = dblCE == 1
-    ch_other = ~ch_IV & (is_case_A | (no_stable_mt & ~had_CE))
+    ch_other = ~ch_IV & no_stable_mt & ~had_CE
     ch_II = ~ch_IV & ~ch_other & ~had_CE
     ch_III = ~ch_IV & ~ch_other & ce_first
     ch_I = ~ch_IV & ~ch_other & had_CE & ~ce_first
     ch_other = ch_other | ~(ch_I | ch_II | ch_III | ch_IV)
 
     return {
-        "I  Classic CE": ch_I,
+        "I  Stable MT + CE": ch_I,
         "II  Stable MT only": ch_II,
         "III Single-core CE": ch_III,
         "IV  Double-core CE": ch_IV,

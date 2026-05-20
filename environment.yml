@@ -20,6 +20,7 @@ dependencies:
   - numpy>=1.23
   - scipy>=1.10
   - matplotlib>=3.7
+  - seaborn>=0.13
   - h5py>=3.7
   - pandas>=2.0
   - astropy>=5.0

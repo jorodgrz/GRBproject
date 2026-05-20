@@ -2,11 +2,12 @@
 
 Smoke-level invariants on the Alsing, Silva and Berti (2018) double-Gaussian
 NS-mass remap that produces the per-class component-mass histograms.  The
-remap closes the Fryer-rapid artificial gap near 1.7 Msun and preserves the
-``m1 >= m2`` invariant.
+remap closes the Fryer 2012 baryonic-to-gravitational artifact near 1.7 Msun
+(Eq. 12-13; present in both delayed and rapid engines, per Broekgaarden+
+2021 footnote 3) and preserves the ``m1 >= m2`` invariant.
 
 Reference: Alsing, Silva and Berti (2018), MNRAS 478, 1377 (Table 3 fit);
-Mandel and Muller (2020), MNRAS 499, 3214 (Fryer-rapid gap motivation).
+Mandel and Muller (2020), MNRAS 499, 3214 (gap motivation).
 """
 
 from __future__ import annotations
@@ -27,9 +28,9 @@ from grb_physics import (
 def synthetic_pre_remap_ns_masses():
     """Two-population sample with an artificial deficit near 1.7 Msun.
 
-    Mimics the Fryer-rapid prescription's known gap on a small N sample
-    so the test is fast in CI; real-data behaviour is verified end-to-end
-    in ``tests/anchors/test_literature_anchors.py``.
+    Mimics the Fryer 2012 Eq. 12-13 baryonic-to-gravitational mass
+    artifact on a small N sample so the test is fast in CI; real-data
+    behaviour is verified end-to-end in ``tests/anchors/test_literature_anchors.py``.
     """
     rng = np.random.default_rng(123)
     n = 5000
@@ -72,7 +73,7 @@ def test_remap_closes_artificial_gap_near_1p7(synthetic_pre_remap_ns_masses):
     pool_post_in_gap = ((pool_post >= 1.65) & (pool_post <= 1.80)).sum()
 
     assert pool_post_in_gap > pool_pre_in_gap, (
-        f"remap did not close the Fryer-rapid gap; pre={pool_pre_in_gap}, post={pool_post_in_gap}"
+        f"remap did not close the Fryer 2012 gap; pre={pool_pre_in_gap}, post={pool_post_in_gap}"
     )
 
 

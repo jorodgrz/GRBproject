@@ -267,21 +267,24 @@ def test_alsing_2018_double_gaussian_constants_match_table3():
 # ─────────────────────────────────────────────────────────────────────
 # Mandel and Muller (2020) MNRAS 499, 3214 [Papers/Mandel_Muller_2020.pdf]
 # Patton and Sukhbold (2020) MNRAS 499, 2803
-# Fryer (2012) rapid SN engine produces a ~1.65-1.80 Msun NS mass gap;
-# the Alsing remap closes it.
+# Fryer (2012) Eq. 12-13 baryonic-to-gravitational mass conversion
+# produces a ~1.65-1.80 Msun NS mass deficit in both delayed and rapid
+# engines (Broekgaarden+ 2021 footnote 3); the Alsing remap closes it.
 # ─────────────────────────────────────────────────────────────────────
-def test_remap_closes_fryer_rapid_gap_in_1p65_to_1p80_msun():
+def test_remap_closes_fryer_gap_in_1p65_to_1p80_msun():
     """`remap_ns_masses_double_gaussian` must populate the [1.65, 1.80] Msun gap.
 
     Mandel and Muller (2020) MNRAS 499, 3214 and Patton and Sukhbold
-    (2020) MNRAS 499, 2803 show that the Fryer et al. (2012) rapid SN
-    engine produces a near-zero NS density in the 1.65 to 1.80 Msun
-    interval (artifact of the piecewise-linear M_CO -> M_remnant
-    mapping).  The Alsing-Silva-Berti (2018) double-Gaussian fits the
-    Galactic distribution which is non-zero in that interval.
+    (2020) MNRAS 499, 2803 show that the Fryer et al. (2012) prescription
+    produces a near-zero NS density in the 1.65 to 1.80 Msun interval,
+    an artifact of the baryonic-to-gravitational mass conversion in
+    Fryer 2012 Eq. 12-13 (Broekgaarden+ 2021 footnote 3; present in
+    both delayed and rapid engines).  The Alsing-Silva-Berti (2018)
+    double-Gaussian fits the Galactic distribution which is non-zero in
+    that interval.
 
     This test constructs a synthetic population that mimics the Fryer
-    rapid gap (zero density in [1.65, 1.80]) and asserts that after
+    gap (zero density in [1.65, 1.80]) and asserts that after
     `remap_ns_masses_double_gaussian` the post-remap density in the
     gap is at least 5x higher than the raw density.
     """
@@ -314,7 +317,7 @@ def test_remap_closes_fryer_rapid_gap_in_1p65_to_1p80_msun():
     new_in_gap = ((m1 >= 1.65) & (m1 <= 1.80)).sum() + ((m2 >= 1.65) & (m2 <= 1.80)).sum()
 
     assert raw_in_gap == 0, (
-        f"Synthetic Fryer-rapid input has {raw_in_gap} NSs in the "
+        f"Synthetic Fryer-gap input has {raw_in_gap} NSs in the "
         f"[1.65, 1.80] gap; test setup is broken."
     )
     assert new_in_gap >= 0.05 * 2 * n_pair, (
@@ -543,6 +546,72 @@ def test_kruger_foucart_bns_dyn_ejecta_gw170817_band():
     assert 1e-4 <= M_ej <= 5e-2, (
         f"GW170817-like KF2020 dyn-ejecta = {M_ej:.4e} Msun is outside "
         f"the [1e-4, 5e-2] band quoted in the paper Sec. III."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Abbott et al. (2019) PRX 9, 011001  -- GW170817 [Papers/Abbott_2019_GW170817.pdf]
+# Abbott et al. (2020) ApJL 892, L3   -- GW190425 [Papers/Abbott_2020_GW190425.pdf]
+# Pin `OBSERVED_GW_EVENTS` to the published low-spin 90% CL ranges and
+# source-frame chirp masses so the plot annotations cannot drift from the
+# discovery papers.
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    "name, M1_range, M2_range, Mtot_range, Mc_central, Mc_tol",
+    [
+        # GW170817 (Abbott+ 2019 PRX 9, 011001 Table I, low-spin |chi| < 0.05):
+        # m1 in [1.36, 1.60], m2 in [1.17, 1.36], Mtot = 2.73 +0.04/-0.01,
+        # Mc (source) = 1.186 +0.001/-0.001 Msun.
+        ("GW170817", (1.36, 1.60), (1.17, 1.36), (2.69, 2.77), 1.186, 0.05),
+        # GW190425 (Abbott+ 2020 ApJL 892, L3 Table 1, low-spin |chi| < 0.05):
+        # m1 in [1.60, 1.87], m2 in [1.46, 1.69], Mtot = 3.3 +0.1/-0.1,
+        # Mc (source) = 1.44 +0.02/-0.02 Msun.
+        ("GW190425", (1.60, 1.87), (1.46, 1.69), (3.20, 3.40), 1.44, 0.05),
+    ],
+)
+def test_observed_gw_events_in_published_bands(
+    name, M1_range, M2_range, Mtot_range, Mc_central, Mc_tol
+):
+    """`OBSERVED_GW_EVENTS[name]` must lie inside the discovery-paper 90% CL bands.
+
+    Each pinned (M1, M2) pair must satisfy three conditions taken from
+    the discovery paper Table I / Table 1 under the low-spin prior:
+
+      (i)   M1 inside the published primary-mass 90% range,
+      (ii)  M2 inside the published secondary-mass 90% range,
+      (iii) M1 + M2 inside the published total-mass 90% range,
+      (iv)  source-frame chirp mass M_c = (M1 M2)^(3/5) / (M1+M2)^(1/5)
+            within ``Mc_tol`` of the published source-frame value.
+
+    The (i)-(iii) bands come straight from the tables; (iv) catches the
+    case where M1 and M2 are individually inside their bands but their
+    combination violates the more tightly measured chirp-mass anchor.
+    """
+    from grb_io import OBSERVED_GW_EVENTS
+
+    ev = OBSERVED_GW_EVENTS[name]
+    M1, M2 = float(ev["M1"]), float(ev["M2"])
+
+    assert M1_range[0] <= M1 <= M1_range[1], (
+        f"OBSERVED_GW_EVENTS[{name!r}]['M1'] = {M1} Msun is outside the "
+        f"published low-spin 90% range {M1_range} Msun."
+    )
+    assert M2_range[0] <= M2 <= M2_range[1], (
+        f"OBSERVED_GW_EVENTS[{name!r}]['M2'] = {M2} Msun is outside the "
+        f"published low-spin 90% range {M2_range} Msun."
+    )
+
+    Mtot = M1 + M2
+    assert Mtot_range[0] <= Mtot <= Mtot_range[1], (
+        f"OBSERVED_GW_EVENTS[{name!r}] total mass = {Mtot:.3f} Msun is "
+        f"outside the published low-spin 90% range {Mtot_range} Msun."
+    )
+
+    Mc = (M1 * M2) ** 0.6 / (M1 + M2) ** 0.2
+    assert abs(Mc - Mc_central) <= Mc_tol, (
+        f"OBSERVED_GW_EVENTS[{name!r}] chirp mass = {Mc:.3f} Msun differs "
+        f"from the published source-frame value {Mc_central} Msun by more "
+        f"than {Mc_tol} Msun."
     )
 
 
@@ -1216,3 +1285,27 @@ def test_broekgaarden_2021_NS_MAX_FIDUCIAL_models_J_A_K():
     from grb_classify import NS_MAX_FIDUCIAL
 
     assert NS_MAX_FIDUCIAL == (2.0, 2.5, 3.0), NS_MAX_FIDUCIAL
+
+
+def test_alpha_CE_per_model_matches_broekgaarden21_sec_5_2():
+    """alpha_CE per model matches Broekgaarden+ 2021 Sec. 5.2 Table 2.
+
+    Pins the CE_PRESCRIPTION_BROEKGAARDEN21 dict so a careless edit to
+    the constants block fails this test rather than silently corrupting
+    Sections 12.1, 12.6, 12.7, 12.8.  Also pins the prose names of the
+    energy formalism, lambda_CE recipe, and stability criterion so a
+    future move to the Hirai+ updated prescription would require an
+    explicit edit to the test, not just to the data.
+    """
+    from grb_rates import CE_PRESCRIPTION_BROEKGAARDEN21
+
+    assert CE_PRESCRIPTION_BROEKGAARDEN21["alpha_CE"] == {
+        "A": 1.0,
+        "F": 0.5,
+        "G": 2.0,
+        "J": 1.0,
+        "K": 1.0,
+    }
+    assert CE_PRESCRIPTION_BROEKGAARDEN21["energy_formalism"] == "Webbink 1984"
+    assert CE_PRESCRIPTION_BROEKGAARDEN21["lambda_CE"] == "Xu and Li 2010"
+    assert "Hurley 2002" in CE_PRESCRIPTION_BROEKGAARDEN21["stability"]

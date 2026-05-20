@@ -20,12 +20,15 @@ at high z.
 
 Supernova engine
 ----------------
-The COMPAS simulations (Broekgaarden et al. 2021, Model A and K) use the
-Fryer et al. (2012) *rapid* supernova explosion mechanism.  This produces
-a narrow NS mass distribution peaked near 1.26-1.28 M_sun with a gap
-around 2-5 M_sun. The delayed mechanism yields broader NS masses and a
-less pronounced mass gap, which would shift GRB class fractions
-(especially the sbGRB + blue KN boundary at 1.2 × M_TOV).
+The COMPAS simulations (Broekgaarden et al. 2021, all five Tier-1 models
+A, F, G, J, K) use the Fryer et al. (2012) *delayed* supernova
+explosion mechanism (Broekgaarden+ 2021 Table 1; the rapid prescription
+is Model I, a variation).  Both delayed and rapid produce a ~1.7 Msun
+NS gravitational-mass deficit inherited from the Fryer 2012 Eq. 12-13
+baryonic-to-gravitational mass conversion (Broekgaarden+ 2021 footnote
+3); :func:`remap_ns_masses_double_gaussian` and
+:func:`remap_ns_marginal` close this gap by quantile-remapping to the
+Alsing+ 2018 Galactic-NS PDF, following Mandel & Muller (2020).
 
 Jet efficiency caveat
 ---------------------
@@ -192,8 +195,9 @@ def ns_radius(M_NS, R_1p4_km=12.0, M_TOV_local=None):
     *decrease* for soft), but the qualitative direction is EOS-
     dependent and small in magnitude.  The plateau biases compactness
     by at most a few percent for low-mass NSs but is consequential for
-    populations dominated by sub-1.4 Msun NSs (Galactic BNS, COMPAS
-    rapid-mechanism distributions).  Use ``ns_radius_from_eos()``
+    populations dominated by sub-1.4 Msun NSs (Galactic BNS, the
+    sub-Chandrasekhar end of the COMPAS NS distribution).  Use
+    ``ns_radius_from_eos()``
     or pass ``R_NS_km`` directly to ``foucart_disk_mass()`` /
     ``bns_disk_mass()`` for EOS-realistic low-mass behaviour.
 
@@ -291,31 +295,95 @@ def _truncated_double_gauss_cdf(x, m_min, m_max):
     return (raw - raw_lo) / (raw_hi - raw_lo)
 
 
+def remap_ns_marginal(m_ns, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_grid=10000, rng=None):
+    """Weighted quantile remap of a 1D NS-mass array to the Alsing+ 2018 PDF.
+
+    Operates on a single NS-mass stream (e.g. the NS component of a BHNS
+    sample) rather than a paired ``(m1, m2)`` BNS sample.  Used for both
+    populations: ``remap_ns_masses_double_gaussian`` calls this on the
+    stacked ``[m1, m2]`` array, while BHNS callers pass ``M_NS`` directly.
+
+    The transform is weighted-rank preserving: each input is mapped to the
+    quantile of the truncated double-Gaussian target with the same
+    weighted CDF position.  Sub-microsolar deterministic jitter from
+    ``rng`` breaks rank ties at the discrete COMPAS mass-bin level.
+    """
+    if rng is None:
+        rng = np.random.default_rng(0)
+    if m_tov is None:
+        m_tov = M_TOV
+
+    m_ns = np.asarray(m_ns, dtype=float)
+    if weights is None:
+        w = np.ones(m_ns.size, dtype=float)
+    else:
+        w = np.asarray(weights, dtype=float)
+        if w.shape != m_ns.shape:
+            raise ValueError("weights must have the same shape as m_ns")
+
+    jitter = rng.uniform(-1e-6, 1e-6, size=m_ns.size)
+    m_jitt = m_ns + jitter
+
+    order = np.argsort(m_jitt)
+    cum_w = np.cumsum(w[order])
+    cum_w_total = cum_w[-1]
+    u_ranked = (cum_w - 0.5 * w[order]) / cum_w_total
+
+    grid = np.linspace(m_min, m_tov, n_grid)
+    cdf_grid = _truncated_double_gauss_cdf(grid, m_min, m_tov)
+    m_target_ranked = np.interp(u_ranked, cdf_grid, grid)
+
+    m_remap = np.empty_like(m_ns)
+    m_remap[order] = m_target_ranked
+    return m_remap
+
+
 def remap_ns_masses_double_gaussian(
     m1, m2, weights=None, m_tov=None, m_min=NS_REMAP_M_MIN, n_grid=10000, rng=None
 ):
-    """Quantile-remap NS gravitational masses to an empirical Galactic-NS PDF.
+    """Quantile-remap paired BNS NS gravitational masses to an empirical Galactic-NS PDF.
 
-    The Fryer (2012) *rapid* SN engine used in the Broekgaarden et al.
-    (2021) COMPAS catalogues produces a known artificial deficit in the
-    NS gravitational-mass distribution near 1.7 Msun (Mandel & Muller
-    2020 MNRAS 499, 3214; Patton & Sukhbold 2020 MNRAS 499, 2803).  This
-    helper performs a weighted, rank-preserving quantile transform from
-    the empirical COMPAS NS-mass distribution to the Alsing, Silva &
-    Berti (2018) MNRAS 478, 1377 double-Gaussian fit to Galactic NSs:
+    The Broekgaarden et al. (2021) COMPAS catalogues use the Fryer
+    (2012) *delayed* SN engine (their Table 1; Model A is the fiducial,
+    Model I is the rapid variation).  Both delayed and rapid produce a
+    NS gravitational-mass deficit near 1.7 Msun, inherited from the
+    Fryer (2012) Eq. 12-13 baryonic-to-gravitational mass conversion
+    (Broekgaarden+ 2021 footnote 3; see also Mandel & Muller 2020 MNRAS
+    499, 3214; Patton & Sukhbold 2020 MNRAS 499, 2803).  This helper
+    performs a weighted, rank-preserving quantile transform from the
+    empirical COMPAS NS-mass distribution to the Alsing, Silva & Berti
+    (2018) MNRAS 478, 1377 double-Gaussian fit to Galactic NSs:
 
         f(m) propto W1 * N(m; mu1, sig1) + W2 * N(m; mu2, sig2),
         truncated to [m_min, m_tov].
 
-    The remap is *marginal*: m1 and m2 are stacked into a single NS
-    stream, ranked by weighted CDF, and each ranked sample is mapped to
-    the corresponding quantile of the target distribution.  This means
-    both component slots are calibrated against the same target PDF
-    (consistent with single-population NS formation), but joint
-    correlations between m1 and m2 (chirp-mass, q, metallicity-mass
-    coupling) are preserved only up to per-rank-bin reordering.  Length,
-    indexing, STROOPWAFEL weights, and the m1 >= m2 invariant are
-    preserved.
+    The remap is *per-component marginal*: m1 and m2 are ranked in
+    their own component streams (not stacked) against the same target
+    PDF.  Both marginals are independently Alsing-conformal; the
+    weighted rank order within each component is preserved exactly.
+    Cross-component rank correlations across the pair are NOT
+    preserved: a system whose original m1, m2 sat in the same input
+    rank bin can land in different target quantiles.  This is the
+    intended behaviour and matches Mandel & Muller (2020) Section 4.
+
+    An earlier variant of this function stacked ``[m1, m2]`` and
+    ranked the combined array.  That implementation forced m1 ranks
+    into the upper half of the stacked CDF and m2 ranks into the
+    lower half, which the inverse Alsing CDF then split at the target
+    median (~1.34 Msun).  The result was a visible "median wall" in
+    the BNS mass-plane figure: m2 squeezed into roughly [1.10, 1.34]
+    and m1 into roughly [1.34, 2.20], with a deficit band at exactly
+    M_NS = 1.34.  The per-component remap implemented below removes
+    that artefact because each component samples the full target PDF
+    independently.
+
+    Length, indexing, STROOPWAFEL weights, and the m1 >= m2 invariant
+    are preserved.  Per-system chirp mass and mass ratio q reflect
+    the Alsing target's joint structure (after re-sort), not the
+    COMPAS binary-evolution joint structure.
+
+    For BHNS samples use :func:`remap_ns_marginal` directly on the
+    single NS-mass column.
 
     Parameters
     ----------
@@ -332,66 +400,42 @@ def remap_ns_masses_double_gaussian(
     n_grid : int, optional
         Grid resolution for the inverse target CDF.
     rng : np.random.Generator, optional
-        Used only for sub-microsolar deterministic jitter to break
-        rank ties.  Default ``np.random.default_rng(0)``.
-
-    Returns
-    -------
-    m1_new, m2_new : ndarray
-        Remapped component masses [Msun], sorted so m1_new >= m2_new
-        and clipped within [m_min, m_tov].
-
-    Notes
-    -----
-    Mandel & Muller (2020) and Patton & Sukhbold (2020) advocate
-    replacing the rapid prescription's piecewise M_CO -> M_remnant
-    mapping with a smooth distribution that matches observed Galactic
-    NS masses (Antoniadis et al. 2016; Alsing+ 2018).  Doing this
-    consistently from M_CO requires re-running COMPAS, which is out of
-    scope here.  This quantile transform is the standard postprocessing
-    workaround: it preserves the population *order* set by the binary
-    evolution while replacing the marginal mass distribution.
+        Used to spawn two independent jitter streams, one per
+        component, to break rank ties at the discrete COMPAS
+        mass-bin level.  Default ``np.random.default_rng(0)``.
     """
     if rng is None:
         rng = np.random.default_rng(0)
-    if m_tov is None:
-        m_tov = M_TOV
 
     m1 = np.asarray(m1, dtype=float)
     m2 = np.asarray(m2, dtype=float)
     if m1.shape != m2.shape:
         raise ValueError("m1 and m2 must have the same shape")
-    n_sys = m1.size
 
     if weights is None:
-        w_sys = np.ones(n_sys, dtype=float)
+        w_sys = np.ones(m1.size, dtype=float)
     else:
         w_sys = np.asarray(weights, dtype=float)
         if w_sys.shape != m1.shape:
             raise ValueError("weights must have the same shape as m1")
 
-    m_stack = np.concatenate([m1, m2])
-    w_stack = np.concatenate([w_sys, w_sys])
+    # Two independent jitter streams: one per component.  Drawing both
+    # seeds from the caller-supplied rng keeps the whole transform
+    # deterministic under a fixed top-level seed.
+    seed1 = int(rng.integers(0, 2**31 - 1))
+    seed2 = int(rng.integers(0, 2**31 - 1))
+    rng1 = np.random.default_rng(seed1)
+    rng2 = np.random.default_rng(seed2)
 
-    jitter = rng.uniform(-1e-6, 1e-6, size=m_stack.size)
-    m_jitt = m_stack + jitter
+    m1_remap = remap_ns_marginal(
+        m1, weights=w_sys, m_tov=m_tov, m_min=m_min, n_grid=n_grid, rng=rng1
+    )
+    m2_remap = remap_ns_marginal(
+        m2, weights=w_sys, m_tov=m_tov, m_min=m_min, n_grid=n_grid, rng=rng2
+    )
 
-    order = np.argsort(m_jitt)
-    cum_w = np.cumsum(w_stack[order])
-    cum_w_total = cum_w[-1]
-    u_ranked = (cum_w - 0.5 * w_stack[order]) / cum_w_total
-
-    grid = np.linspace(m_min, m_tov, n_grid)
-    cdf_grid = _truncated_double_gauss_cdf(grid, m_min, m_tov)
-    m_target_ranked = np.interp(u_ranked, cdf_grid, grid)
-
-    m_remap = np.empty_like(m_stack)
-    m_remap[order] = m_target_ranked
-
-    m1_raw = m_remap[:n_sys]
-    m2_raw = m_remap[n_sys:]
-    m1_new = np.maximum(m1_raw, m2_raw)
-    m2_new = np.minimum(m1_raw, m2_raw)
+    m1_new = np.maximum(m1_remap, m2_remap)
+    m2_new = np.minimum(m1_remap, m2_remap)
     return m1_new, m2_new
 
 

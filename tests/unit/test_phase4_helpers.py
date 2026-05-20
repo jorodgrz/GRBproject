@@ -126,7 +126,7 @@ def test_channel_class_crosstab_raw_and_normalised_modes():
     n = 6
     weights = np.array([1.0, 1.0, 2.0, 2.0, 3.0, 3.0])
     channel_masks = {
-        "I  Classic CE": np.array([True, True, False, False, False, False]),
+        "I  Stable MT + CE": np.array([True, True, False, False, False, False]),
         "II  Stable MT only": np.array([False, False, True, True, False, False]),
         "III Single-core CE": np.array([False, False, False, False, True, True]),
         "IV  Double-core CE": np.zeros(n, dtype=bool),
@@ -143,13 +143,13 @@ def test_channel_class_crosstab_raw_and_normalised_modes():
     assert isinstance(raw, pd.DataFrame)
     assert raw.shape == (5, 4)
     # Row I: (T,T) cells are (True, sb)=1, (False, lb)=1
-    assert raw.loc["I  Classic CE", "sbGRB + blue KN"] == pytest.approx(1.0)
-    assert raw.loc["I  Classic CE", "lbGRB + red KN (HMNS)"] == pytest.approx(1.0)
+    assert raw.loc["I  Stable MT + CE", "sbGRB + blue KN"] == pytest.approx(1.0)
+    assert raw.loc["I  Stable MT + CE", "lbGRB + red KN (HMNS)"] == pytest.approx(1.0)
     assert raw.loc["IV  Double-core CE", "sbGRB + blue KN"] == 0.0
 
     # Channel-normalised: row sums to 1 (or 0 for empty rows).
     by_ch = channel_class_crosstab(channel_masks, class_masks, weights, normalise="channel")
-    assert by_ch.loc["I  Classic CE"].sum() == pytest.approx(1.0)
+    assert by_ch.loc["I  Stable MT + CE"].sum() == pytest.approx(1.0)
     assert by_ch.loc["IV  Double-core CE"].sum() == 0.0
 
 
@@ -418,3 +418,136 @@ def test_offsets_mixed_hosts_regression_within_5_percent():
     # ``test_offsets_vectorized_matches_legacy_ks``.
     assert abs(mean_v - mean_l) / mean_l < 0.25, f"mean drift {mean_v:.2f} vs {mean_l:.2f}"
     assert abs(p90_v - p90_l) / p90_l < 0.25, f"p90 drift {p90_v:.2f} vs {p90_l:.2f}"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# remap_ns_marginal: BHNS-side equivalent of the BNS pair remap.
+# Used in Section 0 and Section 12.0 of grb_main.ipynb to close the
+# ~1.7 Msun Fryer 2012 Eq. 12-13 baryonic-to-gravitational artifact on
+# the BHNS NS-mass column (Broekgaarden+ 2021 footnote 3).
+# ─────────────────────────────────────────────────────────────────────
+def test_remap_ns_marginal_closes_gap_in_1d_input():
+    """1D quantile remap fills the 1.65-1.80 Msun NS-mass deficit."""
+    from grb_physics import remap_ns_marginal
+
+    rng = np.random.default_rng(2027)
+    n_low = 8000
+    n_high = 2400
+    m_low = rng.uniform(1.10, 1.65, size=n_low)
+    m_high = rng.uniform(1.80, 2.20, size=n_high)
+    m_raw = np.concatenate([m_low, m_high])
+    rng.shuffle(m_raw)
+
+    raw_in_gap = ((m_raw >= 1.65) & (m_raw <= 1.80)).sum()
+    assert raw_in_gap == 0, f"test setup broken: raw_in_gap={raw_in_gap}"
+
+    m_new = remap_ns_marginal(m_raw, weights=np.ones_like(m_raw), rng=rng)
+    new_in_gap = ((m_new >= 1.65) & (m_new <= 1.80)).sum()
+
+    # Alsing+ 2018 puts ~12 percent of the truncated mass below 1.80 and
+    # above 1.65, so requiring >=5 percent is conservative and isolates
+    # the regression on the quantile transform itself.
+    assert new_in_gap >= 0.05 * m_raw.size, (
+        f"remap_ns_marginal left only {new_in_gap}/{m_raw.size} NSs in the "
+        f"[1.65, 1.80] gap; expected >= 5 percent."
+    )
+
+
+def test_remap_ns_marginal_respects_truncation_window():
+    """Output stays in ``[NS_REMAP_M_MIN, M_TOV]`` for any input."""
+    from grb_physics import M_TOV, NS_REMAP_M_MIN, remap_ns_marginal
+
+    rng = np.random.default_rng(2028)
+    m = rng.uniform(0.5, 3.5, size=2000)  # input deliberately outside the target window
+    m_new = remap_ns_marginal(m, rng=rng)
+    assert (m_new >= NS_REMAP_M_MIN - 1e-9).all()
+    assert (m_new <= M_TOV + 1e-9).all()
+
+
+def test_remap_ns_marginal_preserves_weighted_rank_order():
+    """High-weight inputs end up at high quantiles of the target."""
+    from grb_physics import remap_ns_marginal
+
+    rng = np.random.default_rng(2029)
+    m = rng.uniform(1.15, 2.15, size=1500)
+    w = np.ones_like(m)
+    m_new_uniform = remap_ns_marginal(m, weights=w, rng=np.random.default_rng(11))
+
+    # The ordering of m_new follows the (jittered) ordering of m.  The
+    # interp + grid mapping is monotonic in the input rank, so the
+    # rank-Spearman correlation must be near 1.
+    rank_in = np.argsort(np.argsort(m))
+    rank_out = np.argsort(np.argsort(m_new_uniform))
+    spearman = np.corrcoef(rank_in, rank_out)[0, 1]
+    assert spearman > 0.999, f"Spearman {spearman:.6f} below 0.999"
+
+
+def test_pair_remap_combined_stack_matches_alsing_target():
+    """The combined ``[m1_new, m2_new]`` stack is Alsing-conformal.
+
+    After the per-component remap and re-sort, neither m1_new nor
+    m2_new is marginal-Alsing on its own (max/min of two Alsing draws
+    biases each tail), but their combined stack IS Alsing: re-sorting
+    is just a per-row relabeling and preserves the union distribution.
+    Pinned with a Kolmogorov-Smirnov distance against the analytic
+    truncated double-Gaussian CDF.
+    """
+    import grb_physics as gp
+
+    rng_a = np.random.default_rng(42)
+    n = 4000
+    m1 = rng_a.uniform(1.10, 2.10, size=n)
+    m2 = rng_a.uniform(1.10, 2.10, size=n)
+    m1, m2 = np.maximum(m1, m2), np.minimum(m1, m2)
+
+    m1_new, m2_new = gp.remap_ns_masses_double_gaussian(m1, m2, rng=np.random.default_rng(7))
+    assert (m1_new >= m2_new - 1e-12).all(), "m1 >= m2 invariant broken"
+
+    combined = np.concatenate([m1_new, m2_new])
+    grid = np.linspace(gp.NS_REMAP_M_MIN, gp.M_TOV, 4096)
+    cdf_target = gp._truncated_double_gauss_cdf(grid, gp.NS_REMAP_M_MIN, gp.M_TOV)
+    s = np.sort(combined)
+    emp = np.searchsorted(s, grid, side="right") / s.size
+    ks = float(np.max(np.abs(emp - cdf_target)))
+    # For n_combined = 8000 the 99.9 percent KS critical value is ~0.022;
+    # 0.03 is a tight but stable ceiling under the deterministic jitter.
+    assert ks < 0.03, f"combined-stack KS {ks:.4f} too far from Alsing target"
+
+
+def test_pair_remap_no_median_wall():
+    """Neither component is squeezed against the target median at 1.34 Msun.
+
+    Regression for the stacked-rank median-wall bug: with the legacy
+    implementation, weighted mass of ``m2_new >= 1.34`` was ~0 and
+    weighted mass of ``m1_new <= 1.34`` was ~0 (the inverse Alsing CDF
+    split the stacked ranks at the median).  With the per-component
+    remap both fractions are sizeable because each component samples
+    the full target PDF.
+    """
+    import grb_physics as gp
+
+    rng_a = np.random.default_rng(202)
+    n = 5000
+    m1 = rng_a.uniform(1.15, 2.10, size=n)
+    m2 = rng_a.uniform(1.15, 2.10, size=n)
+    m1, m2 = np.maximum(m1, m2), np.minimum(m1, m2)
+    w = rng_a.uniform(0.1, 1.0, size=n)
+
+    m1_new, m2_new = gp.remap_ns_masses_double_gaussian(
+        m1, m2, weights=w, rng=np.random.default_rng(13)
+    )
+    w_tot = float(w.sum())
+    frac_m2_above = float(w[m2_new >= gp.NS_REMAP_MU1].sum()) / w_tot
+    frac_m1_below = float(w[m1_new <= gp.NS_REMAP_MU1].sum()) / w_tot
+
+    # Under the Alsing target ~50 percent of weight sits on each side
+    # of mu1 = 1.34; per-component remap puts m2 ~50/50 across mu1.
+    # The pair-sort biases m1 above and m2 below, but neither should
+    # collapse: m2 >= 1.34 keeps >25 percent and m1 <= 1.34 keeps
+    # >15 percent.  Stacked legacy gave both ~0.
+    assert frac_m2_above > 0.25, (
+        f"m2 above mu1 fraction {frac_m2_above:.3f} too small; median-wall artefact has returned."
+    )
+    assert frac_m1_below > 0.15, (
+        f"m1 below mu1 fraction {frac_m1_below:.3f} too small; median-wall artefact has returned."
+    )

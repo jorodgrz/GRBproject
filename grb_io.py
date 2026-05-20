@@ -573,9 +573,9 @@ OBSERVED_GW_EVENTS = {
         "reference": "Abbott+ 2019, PRX 9, 011001 (Table I, low-spin prior)",
     },
     "GW190425": {
-        "M1": 1.61,
-        "M2": 1.50,
-        "reference": "Abbott+ 2020, ApJL 892, L3 (Table 2, low-spin prior)",
+        "M1": 1.73,
+        "M2": 1.58,
+        "reference": "Abbott+ 2020, ApJL 892, L3 (Table 1, low-spin prior)",
     },
 }
 

@@ -93,6 +93,28 @@ LEVINA26_BBH_LOCAL_RATES = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Common envelope prescription pin
+# ═══════════════════════════════════════════════════════════════════════════
+# Common envelope prescription, frozen at the COMPAS commit pinned in
+# environment.yml.  Energy formalism (Webbink 1984, ApJ 277, 355); envelope
+# binding energies from Xu and Li (2010, ApJ 716, 114) lambda_CE fits as
+# used by Broekgaarden+ 2021 (arXiv:2103.02608) Sec. 3.3.  Stability
+# criterion is the Hurley+ 2002 (MNRAS 329, 897) zeta_ad approach with
+# COMPAS modifications from Vinciguerra+ 2020 (MNRAS 498, 4705).  We do
+# NOT adopt the Hirai+ updated stability prescription; switching to that
+# would require a fresh COMPAS run and would trip the regression tests
+# in tests/sections/test_section_06_formation_channels.py.
+# alpha_CE per Broekgaarden+ 2021 Sec. 5.2 Table 2.
+CE_PRESCRIPTION_BROEKGAARDEN21 = {
+    "energy_formalism": "Webbink 1984",
+    "lambda_CE": "Xu and Li 2010",
+    "stability": "Hurley 2002 (Vinciguerra+ 2020 modified)",
+    "double_CE_flag": "both stars in core-He burning at CE onset",
+    "alpha_CE": {"A": 1.0, "F": 0.5, "G": 2.0, "J": 1.0, "K": 1.0},
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Cosmic integration: chunked wrapper around FastCosmicIntegration
 # ═══════════════════════════════════════════════════════════════════════════
 def compute_merger_rate(
